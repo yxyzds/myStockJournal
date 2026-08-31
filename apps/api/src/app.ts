@@ -1,0 +1,34 @@
+import { Hono } from "hono";
+import { cors } from "hono/cors";
+import { env } from "./env";
+
+export type AppEnv = {
+  Variables: {
+    userId: string;
+  };
+};
+
+export const app = new Hono<AppEnv>();
+
+app.use("*", cors());
+
+app.use("*", async (c, next) => {
+  c.set("userId", env.localUserId);
+  await next();
+});
+
+app.get("/health", (c) =>
+  c.json({
+    ok: true,
+    service: "mystockjournal-api",
+    userId: c.get("userId"),
+  }),
+);
+
+app.get("/me", (c) =>
+  c.json({
+    id: env.localUserId,
+    email: env.localUserEmail,
+    name: env.localUserName,
+  }),
+);

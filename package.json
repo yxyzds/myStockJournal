@@ -1,0 +1,19 @@
+{
+  "name": "mystockjournal",
+  "private": true,
+  "scripts": {
+    "dev": "pnpm --parallel --filter @mystockjournal/web --filter @mystockjournal/api dev",
+    "dev:web": "pnpm --filter @mystockjournal/web dev",
+    "dev:api": "pnpm --filter @mystockjournal/api dev",
+    "db:up": "docker compose up -d",
+    "db:down": "docker compose stop",
+    "db:push": "pnpm --filter @mystockjournal/api db:push",
+    "db:migrate": "pnpm --filter @mystockjournal/api db:migrate",
+    "db:studio": "pnpm --filter @mystockjournal/api db:studio",
+    "test": "pnpm --filter @mystockjournal/shared test"
+  },
+  "engines": {
+    "node": ">=20",
+    "pnpm": ">=10"
+  }
+}

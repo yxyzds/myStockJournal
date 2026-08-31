@@ -1,0 +1,10 @@
+{
+  "description": "This web application streamlines transaction management by providing an intuitive layout for users to easily track and align their buy and sell activities.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}
