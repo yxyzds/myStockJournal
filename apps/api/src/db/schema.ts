@@ -148,6 +148,8 @@ export const journalEntries = pgTable(
       .references(() => stocks.id),
     date: date("date").notNull(),
     text: text("text").notNull(),
+    /** Market snapshot at save time: { price, currency, pe }. */
+    snapshot: jsonb("snapshot"),
     archived: boolean("archived").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },

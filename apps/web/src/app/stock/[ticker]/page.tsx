@@ -1,5 +1,4 @@
-import { DecisionDetail } from "@/components/decision-detail";
-import { stockWorkspaceDecision } from "@/lib/mock-journal";
+import { StockDetail } from "@/components/stock-detail";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
@@ -21,5 +20,5 @@ export async function generateMetadata({
 export default async function StockPage({ params }: { params: Promise<{ ticker: string }> }) {
   const ticker = parseTicker((await params).ticker);
   if (!TICKER_RE.test(ticker)) notFound();
-  return <DecisionDetail decision={stockWorkspaceDecision(ticker)} />;
+  return <StockDetail ticker={ticker} />;
 }
