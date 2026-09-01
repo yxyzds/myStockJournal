@@ -6,6 +6,7 @@ import { db } from "../db";
 import { stocks, valuationModels } from "../db/schema";
 import { getQuotes } from "../market/quotes";
 
+/** Regex for a valid stock ticker (e.g. "AAPL", "MSFT"). */
 const TICKER_RE = /^[A-Z0-9][A-Z0-9.\-]{0,15}$/;
 
 function parseTicker(raw: string) {
@@ -66,8 +67,8 @@ watchlistRoutes.get("/", async (c) => {
 
 watchlistRoutes.post("/", async (c) => {
   const userId = c.get("userId");
-  const body = await c.req.json().catch(() => null);
-  const raw = typeof body?.ticker === "string" ? parseTicker(body.ticker) : "";
+  const requestBody = await c.req.json().catch(() => null);
+  const raw = typeof requestBody?.ticker === "string" ? parseTicker(requestBody.ticker) : "";
   if (!TICKER_RE.test(raw)) {
     return c.json({ error: "Invalid ticker" }, 400);
   }

@@ -327,8 +327,8 @@ function PeerSection({
   }, [activePeers]);
 
   return (
-    <div className="bg-white rounded-[14px] border border-slate-100 px-[20px] py-[16px]">
-      <div className="flex items-center justify-between mb-[12px]">
+    <div className="bg-white rounded-[14px] border border-slate-100 px-[16px] md:px-[20px] py-[16px]">
+      <div className="flex items-center justify-between mb-[12px] flex-wrap gap-[8px]">
         <div>
           <p style={{ fontFamily: "'Inter', sans-serif" }} className="text-[13px] font-bold text-slate-900">
             Peers for comparison
@@ -411,8 +411,8 @@ function PeerSection({
             <div className="h-px flex-1 bg-slate-100" />
           </div>
 
-          <div className="rounded-[8px] border border-slate-100 overflow-hidden">
-            <table className="w-full border-collapse text-left">
+          <div className="rounded-[8px] border border-slate-100 overflow-x-auto">
+            <table className="w-full border-collapse text-left min-w-[320px]">
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-100">
                   {["Ticker", "Current P/E", "PEG", ""].map(h => (
@@ -561,8 +561,10 @@ function RightRail({
 
   return (
     <div className="flex flex-col gap-[10px]">
+      {/* Expected P/E + Fair Value — side by side on mobile, stacked on desktop */}
+      <div className="grid grid-cols-2 md:grid-cols-1 gap-[10px]">
       {/* Expected P/E */}
-      <div className="bg-white rounded-[14px] border border-slate-100 px-[18px] py-[16px]">
+      <div className="bg-white rounded-[14px] border border-slate-100 px-[14px] md:px-[18px] py-[14px] md:py-[16px]">
         <div className="flex items-center justify-between mb-[10px]">
           <div>
             <p style={{ fontFamily: "'Inter', sans-serif" }} className="text-[12px] font-bold text-slate-900">Expected P/E</p>
@@ -617,38 +619,39 @@ function RightRail({
       </div>
 
       {/* Fair Value output */}
-      <div className={`rounded-[14px] border px-[18px] py-[16px] ${pos ? "bg-emerald-50 border-emerald-100" : "bg-red-50 border-red-100"}`}>
+      <div className={`rounded-[14px] border px-[14px] md:px-[18px] py-[14px] md:py-[16px] ${pos ? "bg-emerald-50 border-emerald-100" : "bg-red-50 border-red-100"}`}>
         <span style={{ fontFamily: "'Inter', sans-serif" }} className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Fair Value / Share</span>
         <div className="mt-[6px]">
           <span style={{ fontFamily: "'JetBrains Mono', monospace" }}
-            className={`text-[48px] font-bold tabular-nums leading-none block ${pos ? "text-emerald-700" : "text-red-500"}`}>
+            className={`text-[32px] md:text-[48px] font-bold tabular-nums leading-none block ${pos ? "text-emerald-700" : "text-red-500"}`}>
             ${fairValue.toFixed(2)}
           </span>
         </div>
         <div className="mt-[8px] flex flex-col gap-[4px]">
-          <div className="flex items-center justify-between px-[10px] py-[6px] bg-white rounded-[7px]">
-            <span style={{ fontFamily: "'Inter', sans-serif" }} className="text-[11px] text-slate-500">Current price</span>
-            <span style={{ fontFamily: "'JetBrains Mono', monospace" }} className="text-[12px] font-semibold text-slate-700 tabular-nums">${CURRENT_PRICE}</span>
+          <div className="flex items-center justify-between px-[8px] md:px-[10px] py-[5px] md:py-[6px] bg-white rounded-[7px]">
+            <span style={{ fontFamily: "'Inter', sans-serif" }} className="text-[10px] md:text-[11px] text-slate-500">Current price</span>
+            <span style={{ fontFamily: "'JetBrains Mono', monospace" }} className="text-[11px] md:text-[12px] font-semibold text-slate-700 tabular-nums">${CURRENT_PRICE}</span>
           </div>
-          <div className={`flex items-center justify-between px-[10px] py-[7px] rounded-[7px] ${pos ? "bg-emerald-100" : "bg-red-100"}`}>
+          <div className={`flex items-center justify-between px-[8px] md:px-[10px] py-[6px] md:py-[7px] rounded-[7px] ${pos ? "bg-emerald-100" : "bg-red-100"}`}>
             <span style={{ fontFamily: "'Inter', sans-serif" }}
-              className={`text-[11px] font-bold ${pos ? "text-emerald-700" : "text-red-600"}`}>Margin of Safety</span>
+              className={`text-[10px] md:text-[11px] font-bold ${pos ? "text-emerald-700" : "text-red-600"}`}>MOS</span>
             <span style={{ fontFamily: "'JetBrains Mono', monospace" }}
-              className={`text-[14px] font-bold tabular-nums ${pos ? "text-emerald-600" : "text-red-500"}`}>
+              className={`text-[13px] md:text-[14px] font-bold tabular-nums ${pos ? "text-emerald-600" : "text-red-500"}`}>
               {mos >= 0 ? "+" : ""}{mos.toFixed(1)}%
             </span>
           </div>
         </div>
         <p style={{ fontFamily: "'Inter', sans-serif" }}
-          className={`text-[11px] font-semibold mt-[8px] leading-snug ${pos ? "text-emerald-700" : "text-red-600"}`}>
+          className={`text-[10px] md:text-[11px] font-semibold mt-[6px] md:mt-[8px] leading-snug ${pos ? "text-emerald-700" : "text-red-600"}`}>
           {pos
-            ? `Price is ${mos.toFixed(1)}% below your fair value`
-            : `Price is ${Math.abs(mos).toFixed(1)}% above your fair value`}
+            ? `${mos.toFixed(1)}% below fair value`
+            : `${Math.abs(mos).toFixed(1)}% above fair value`}
         </p>
       </div>
+      </div>{/* end 2-col grid */}
 
-      {/* PEG companion */}
-      <div className="bg-white rounded-[14px] border border-slate-100 px-[18px] py-[14px]">
+      {/* PEG companion — hidden on mobile to reduce scroll depth */}
+      <div className="hidden md:block bg-white rounded-[14px] border border-slate-100 px-[18px] py-[14px]">
         <div className="flex items-center justify-between mb-[10px]">
           <p style={{ fontFamily: "'Inter', sans-serif" }} className="text-[12px] font-bold text-slate-900">PEG</p>
           <span style={{ fontFamily: "'Inter', sans-serif" }} className="text-[10px] text-slate-400">growth-adjusted lens</span>
@@ -705,17 +708,17 @@ function RightRail({
       </div>
 
       {/* Actions */}
-      <div className="flex flex-col gap-[6px]">
+      <div className="flex flex-col gap-[6px] md:flex-col grid grid-cols-2 md:grid-cols-1">
         <button onClick={onSetFV}
           style={{ fontFamily: "'Inter', sans-serif" }}
-          className="w-full py-[9px] rounded-[9px] text-[12px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white border-0 cursor-pointer transition-colors">
-          Set as My Fair Value
+          className="py-[9px] rounded-[9px] text-[12px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white border-0 cursor-pointer transition-colors">
+          Set Fair Value
         </button>
         <button onClick={onUseInDecision}
           style={{ fontFamily: "'Inter', sans-serif" }}
-          className={`w-full py-[9px] rounded-[9px] text-[12px] font-bold border-0 cursor-pointer transition-colors ${
+          className={`py-[9px] rounded-[9px] text-[12px] font-bold border-0 cursor-pointer transition-colors ${
             usedInDecision ? "bg-blue-100 text-blue-700" : "bg-blue-600 hover:bg-blue-700 text-white"}`}>
-          {usedInDecision ? "Returning to transaction…" : "Use in decision →"}
+          {usedInDecision ? "Returning…" : "Use in decision"}
         </button>
       </div>
     </div>
@@ -756,11 +759,11 @@ export default function PEView({ myFairValue, onSetFV, onUseInDecision, usedInDe
   const fairValue = expectedPE * eps;
 
   return (
-    <div className="flex gap-[16px] items-start">
-      {/* Left: Chart + Peers */}
-      <div className="flex-1 min-w-0 flex flex-col gap-[12px]">
+    <div className="flex flex-col md:flex-row gap-[12px] md:gap-[16px] items-start">
+      {/* Left: Chart + Peers — below rail on mobile, left column on desktop */}
+      <div className="order-last md:order-first flex-1 min-w-0 flex flex-col gap-[12px]">
         {/* Wisdom quote */}
-        <div className="rounded-[12px] border-l-4 border-blue-200 bg-white px-[20px] py-[14px]">
+        <div className="rounded-[12px] border-l-4 border-blue-200 bg-white px-[16px] md:px-[20px] py-[12px] md:py-[14px]">
           <p style={{ fontFamily: "'Playfair Display', serif" }}
             className="text-[15px] text-slate-700 leading-relaxed italic">
             "市盈率单独看没有意义；只有和自身历史、同业与成长性对比时，才有参考价值。"
@@ -777,7 +780,7 @@ export default function PEView({ myFairValue, onSetFV, onUseInDecision, usedInDe
 
         {/* Chart card */}
         <div className="bg-white rounded-[14px] border border-slate-100 overflow-hidden">
-          <div className="flex items-center justify-between px-[20px] py-[14px] border-b border-slate-100">
+          <div className="flex items-center justify-between px-[16px] md:px-[20px] py-[12px] md:py-[14px] border-b border-slate-100 flex-wrap gap-[8px]">
             <div>
               <p style={{ fontFamily: "'Inter', sans-serif" }} className="text-[13px] font-bold text-slate-900">
                 {chartMode === "pe" ? "10-Year P/E vs references" : "10-Year PEG vs peers & growth"}
@@ -787,7 +790,7 @@ export default function PEView({ myFairValue, onSetFV, onUseInDecision, usedInDe
               </p>
             </div>
             {/* Chart toggle */}
-            <div className="flex items-center bg-slate-100 rounded-[8px] p-[3px]">
+            <div className="flex items-center bg-slate-100 rounded-[8px] p-[3px] shrink-0">
               {(["pe", "peg"] as const).map(m => (
                 <button key={m} onClick={() => setChartMode(m)}
                   style={{ fontFamily: "'Inter', sans-serif" }}
@@ -809,7 +812,7 @@ export default function PEView({ myFairValue, onSetFV, onUseInDecision, usedInDe
           </div>
 
           {/* Chart notes */}
-          <div className="px-[20px] pb-[12px] flex items-center gap-[16px]">
+          <div className="px-[16px] md:px-[20px] pb-[12px] flex items-center gap-[10px] md:gap-[16px] flex-wrap">
             {chartMode === "pe" && (
               <>
                 <div className="flex items-center gap-[5px]">
@@ -860,8 +863,8 @@ export default function PEView({ myFairValue, onSetFV, onUseInDecision, usedInDe
         />
       </div>
 
-      {/* Right rail */}
-      <div className="w-[288px] shrink-0 sticky top-[89px]">
+      {/* Right rail — appears first on mobile so inputs + FV output are immediately visible */}
+      <div className="order-first md:order-last w-full md:w-[288px] md:shrink-0 md:sticky md:top-[120px]">
         <RightRail
           expectedPE={expectedPE}
           onExpectedPE={setExpectedPE}

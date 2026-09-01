@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { useDebounced } from "@/hooks/use-debounced";
 import { api } from "@/lib/api";
 import { formatPercent, formatPrice, formatQuoteAsOf } from "@/lib/format";
-import { DECISIONS, decisionHref } from "@/lib/mock-journal";
+import { stockHref } from "@/lib/mock-journal";
 
 type Row = {
   ticker: string;
@@ -29,11 +29,6 @@ function SearchIcon({ size = 15 }: { size?: number }) {
       <path d="M12.5 12.5L16 16" stroke="#94a3b8" strokeWidth="1.5" strokeLinecap="round" />
     </svg>
   );
-}
-
-function watchHref(ticker: string) {
-  const d = DECISIONS.find((x) => x.ticker === ticker);
-  return d ? decisionHref(d) : null;
 }
 
 function latestFetchedAt(rows: { fetchedAt: string | null }[]) {
@@ -170,20 +165,12 @@ function RemoveConfirmDialog({
   );
 }
 
-function WatchRowCells({ row }: { row: Row }) {
-  const href = watchHref(row.ticker);
+function StockRowDesktop({ row }: { row: Row }) {
   const change = row.changePercent;
   const isUp = (change ?? 0) >= 0;
-  const tickerClass = "font-mono text-[15px] font-bold text-slate-900";
   return (
     <>
-      {href ? (
-        <Link href={href} className={`${tickerClass} hover:underline`}>
-          {row.ticker}
-        </Link>
-      ) : (
-        <span className={tickerClass}>{row.ticker}</span>
-      )}
+      <span className="font-mono text-[15px] font-bold text-slate-900">{row.ticker}</span>
       <span className="font-mono text-[14px] tabular-nums text-slate-700">
         {formatPrice(row.price, row.currency)}
       </span>
@@ -201,7 +188,7 @@ function WatchRowCells({ row }: { row: Row }) {
   );
 }
 
-function WatchCardMobile({
+function StockRowMobile({
   row,
   pending,
   onAdd,
@@ -212,7 +199,7 @@ function WatchCardMobile({
   onAdd: (ticker: string) => void;
   onRemove: (ticker: string) => void;
 }) {
-  const href = row.inWatchlist ? watchHref(row.ticker) : null;
+  const href = stockHref(row.ticker);
   const mos = row.mosPercent ?? row.changePercent;
   const isUp = (mos ?? 0) >= 0;
   const mosLabel = row.mosPercent != null ? "MOS" : "Chg";
@@ -251,14 +238,10 @@ function WatchCardMobile({
   );
 
   return (
-    <div className="flex items-center gap-1 rounded-xl border border-slate-100 bg-white py-3 pr-1.5 pl-3.5">
-      {href ? (
-        <Link href={href} className="min-w-0 flex-1 active:opacity-80">
-          {body}
-        </Link>
-      ) : (
-        <div className="min-w-0 flex-1">{body}</div>
-      )}
+    <div className="flex items-center gap-1 rounded-xl border border-slate-100 bg-white py-3 pr-1.5 pl-3.5 transition-colors hover:bg-slate-50">
+      <Link href={href} className="min-w-0 flex-1 active:opacity-80">
+        {body}
+      </Link>
       <RowAction
         kind={row.inWatchlist ? "remove" : "add"}
         ticker={row.ticker}
@@ -273,7 +256,7 @@ export function WatchList() {
   const queryClient = useQueryClient();
   const [query, setQuery] = useState("");
   const [removeTarget, setRemoveTarget] = useState<{ ticker: string; name: string } | null>(null);
-  const debounced = useDebounced(query.trim(), 300);
+  const debouncedQuery = useDebounced(query.trim(), 300);
   const cols = "grid-cols-[96px_1fr_1fr_100px_44px]";
 
   const watchQuery = useQuery({
@@ -287,15 +270,17 @@ export function WatchList() {
   );
 
   const q = query.trim().toLowerCase();
-  const localMatches = q
+
+  // Tickers already on the watch list that match the search box.
+  const watchlistMatches = q
     ? watchRows.filter((r) => r.ticker.toLowerCase().includes(q) || r.name.toLowerCase().includes(q))
     : watchRows;
-  const useRemote = q.length > 0 && localMatches.length === 0;
+  const showingMarketSearch = q.length > 0 && watchlistMatches.length === 0;
 
   const searchQuery = useQuery({
-    queryKey: ["quote-search", debounced],
-    queryFn: () => api<{ items: Quote[] }>(`/quotes/search?q=${encodeURIComponent(debounced)}`),
-    enabled: useRemote && debounced.length > 0 && debounced === query.trim(),
+    queryKey: ["quote-search", debouncedQuery],
+    queryFn: () => api<{ items: Quote[] }>(`/quotes/search?q=${encodeURIComponent(debouncedQuery)}`),
+    enabled: showingMarketSearch && debouncedQuery === query.trim(),
   });
 
   const addMutation = useMutation({
@@ -315,12 +300,12 @@ export function WatchList() {
     },
   });
 
-  const remoteRows = (searchQuery.data?.items ?? []).map(toSearchRow);
-  const rows = useRemote ? remoteRows : localMatches;
-  const colsHeader = useRemote
+  const marketSearchRows = (searchQuery.data?.items ?? []).map(toSearchRow);
+  const displayedRows = showingMarketSearch ? marketSearchRows : watchlistMatches;
+  const colsHeader = showingMarketSearch
     ? ["Ticker", "Close Price", "Name", "% Change", ""]
     : ["Ticker", "Close Price", "My Fair Value", "% Change", ""];
-  const asOfIso = latestFetchedAt(useRemote ? remoteRows : watchRows);
+  const asOfIso = latestFetchedAt(showingMarketSearch ? marketSearchRows : watchRows);
   const asOfLabel = formatQuoteAsOf(asOfIso);
   const busyTicker = addMutation.isPending
     ? addMutation.variables
@@ -342,7 +327,7 @@ export function WatchList() {
               )}
             </div>
             <p className="mt-1 text-[12px] text-slate-400 md:text-[13px]">
-              {useRemote
+              {showingMarketSearch
                 ? "Not in your list — tap Add to track a ticker."
                 : "Prior close vs your fair value."}
             </p>
@@ -357,7 +342,7 @@ export function WatchList() {
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search ticker…"
-              className="h-[38px] rounded-[9px] bg-white pr-8 pl-[34px] font-mono text-[13px]"
+              className="h-[38px] rounded-[9px] bg-white pr-8 pl-[34px] font-mono text-[13px] [&::-webkit-search-cancel-button]:hidden [&::-webkit-search-decoration]:hidden"
             />
             {query && (
               <button
@@ -384,19 +369,20 @@ export function WatchList() {
           <p className="mb-4 text-[13px] text-red-500">Couldn’t remove that ticker. Try again.</p>
         )}
 
+        {/* Mobile layout */}
         <div className="flex flex-col gap-2 md:hidden">
           {watchQuery.isLoading && <p className="py-6 text-center text-[13px] text-slate-400">Loading quotes…</p>}
-          {useRemote && searchQuery.isFetching && (
+          {showingMarketSearch && searchQuery.isFetching && (
             <p className="py-6 text-center text-[13px] text-slate-400">Searching market…</p>
           )}
-          {!watchQuery.isLoading && !(useRemote && searchQuery.isFetching) && rows.length === 0 && (
+          {!watchQuery.isLoading && !(showingMarketSearch && searchQuery.isFetching) && displayedRows.length === 0 && (
             <p className="py-6 text-center text-[13px] text-slate-400">
               {q ? `No tickers match “${query}”` : "Your watch list is empty."}
             </p>
           )}
-          {!(useRemote && searchQuery.isFetching) &&
-            rows.map((row) => (
-              <WatchCardMobile
+          {!(showingMarketSearch && searchQuery.isFetching) &&
+            displayedRows.map((row) => (
+              <StockRowMobile
                 key={row.ticker}
                 row={row}
                 pending={busyTicker === row.ticker}
@@ -406,6 +392,7 @@ export function WatchList() {
             ))}
         </div>
 
+        {/* Desktop layout */}
         <div className="hidden md:block">
           <div
             className={`grid ${cols} gap-4 border-b border-slate-100 pb-2 text-[11px] font-semibold tracking-[0.07em] text-slate-400 uppercase`}
@@ -418,48 +405,58 @@ export function WatchList() {
           </div>
           <div className="divide-y divide-slate-50">
             {watchQuery.isLoading && <p className="py-6 text-[13px] text-slate-400">Loading quotes…</p>}
-            {useRemote && searchQuery.isFetching && (
+            {showingMarketSearch && searchQuery.isFetching && (
               <p className="py-6 text-[13px] text-slate-400">Searching market…</p>
             )}
-            {!watchQuery.isLoading && !(useRemote && searchQuery.isFetching) && rows.length === 0 && (
+            {!watchQuery.isLoading && !(showingMarketSearch && searchQuery.isFetching) && displayedRows.length === 0 && (
               <p className="py-6 text-[13px] text-slate-400">
                 {q ? `No tickers match “${query}”` : "Your watch list is empty."}
               </p>
             )}
-            {!(useRemote && searchQuery.isFetching) &&
-              rows.map((row) => (
-                <div key={row.ticker} className={`grid ${cols} items-center gap-4 py-4`}>
-                  {useRemote ? (
-                    <>
-                      <span className="font-mono text-[15px] font-bold text-slate-900">{row.ticker}</span>
-                      <span className="font-mono text-[14px] tabular-nums text-slate-700">
-                        {formatPrice(row.price, row.currency)}
-                      </span>
-                      <span className="truncate text-[13px] text-slate-500">{row.name}</span>
-                      <span
-                        className={`text-right font-mono text-[14px] font-semibold tabular-nums ${
-                          (row.changePercent ?? 0) >= 0 ? "text-emerald-600" : "text-red-500"
-                        }`}
-                      >
-                        {row.changePercent == null
-                          ? "—"
-                          : `${row.changePercent >= 0 ? "▲" : "▼"} ${formatPercent(row.changePercent)}`}
-                      </span>
-                    </>
-                  ) : (
-                    <WatchRowCells row={row} />
-                  )}
-                  <div className="flex justify-end">
-                    <RowAction
-                      kind={row.inWatchlist ? "remove" : "add"}
-                      ticker={row.ticker}
-                      pending={busyTicker === row.ticker}
-                      onClick={
-                        row.inWatchlist
-                          ? (t) => setRemoveTarget({ ticker: t, name: row.name })
-                          : (t) => addMutation.mutate(t)
-                      }
-                    />
+            {!(showingMarketSearch && searchQuery.isFetching) &&
+              displayedRows.map((row) => (
+                <div
+                  key={row.ticker}
+                  className="relative -mx-3 rounded-lg transition-colors hover:bg-slate-50"
+                >
+                  <Link
+                    href={stockHref(row.ticker)}
+                    className="absolute inset-0 z-0 rounded-lg"
+                    aria-label={`Open ${row.ticker}`}
+                  />
+                  <div className={`grid ${cols} items-center gap-4 px-3 py-4`}>
+                    {showingMarketSearch ? (
+                      <>
+                        <span className="font-mono text-[15px] font-bold text-slate-900">{row.ticker}</span>
+                        <span className="font-mono text-[14px] tabular-nums text-slate-700">
+                          {formatPrice(row.price, row.currency)}
+                        </span>
+                        <span className="truncate text-[13px] text-slate-500">{row.name}</span>
+                        <span
+                          className={`text-right font-mono text-[14px] font-semibold tabular-nums ${
+                            (row.changePercent ?? 0) >= 0 ? "text-emerald-600" : "text-red-500"
+                          }`}
+                        >
+                          {row.changePercent == null
+                            ? "—"
+                            : `${row.changePercent >= 0 ? "▲" : "▼"} ${formatPercent(row.changePercent)}`}
+                        </span>
+                      </>
+                    ) : (
+                      <StockRowDesktop row={row} />
+                    )}
+                    <div className="relative z-10 flex justify-end">
+                      <RowAction
+                        kind={row.inWatchlist ? "remove" : "add"}
+                        ticker={row.ticker}
+                        pending={busyTicker === row.ticker}
+                        onClick={
+                          row.inWatchlist
+                            ? (t) => setRemoveTarget({ ticker: t, name: row.name })
+                            : (t) => addMutation.mutate(t)
+                        }
+                      />
+                    </div>
                   </div>
                 </div>
               ))}

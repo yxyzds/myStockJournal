@@ -170,10 +170,10 @@ function ResultsSection({
       </div>
 
       {/* Two cards */}
-      <div className="grid grid-cols-2 divide-x divide-slate-100">
+      <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-slate-100">
         {/* Fair Value */}
-        <div className="px-[24px] py-[20px] flex flex-col gap-[12px]">
-          <div className="flex items-center justify-between">
+        <div className="px-[18px] md:px-[24px] py-[18px] md:py-[20px] flex flex-col gap-[10px] md:gap-[12px]">
+          <div className="flex items-center justify-between flex-wrap gap-[6px]">
             <span style={{ fontFamily: "'Inter', sans-serif" }}
               className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">My Model Fair Value</span>
             {myFairValue !== null && (
@@ -185,7 +185,7 @@ function ResultsSection({
           </div>
           <div>
             <span style={{ fontFamily: "'JetBrains Mono', monospace" }}
-              className={`text-[52px] font-bold tabular-nums leading-none block ${pos ? "text-emerald-600" : "text-red-500"}`}>
+              className={`text-[40px] md:text-[52px] font-bold tabular-nums leading-none block ${pos ? "text-emerald-600" : "text-red-500"}`}>
               ${f2(bridge.fv)}
             </span>
             <span style={{ fontFamily: "'Inter', sans-serif" }}
@@ -201,12 +201,12 @@ function ResultsSection({
         </div>
 
         {/* Market Price */}
-        <div className="px-[24px] py-[20px] flex flex-col gap-[12px]">
+        <div className="px-[18px] md:px-[24px] py-[18px] md:py-[20px] flex flex-col gap-[10px] md:gap-[12px]">
           <span style={{ fontFamily: "'Inter', sans-serif" }}
             className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Current Market Price</span>
           <div>
             <span style={{ fontFamily: "'JetBrains Mono', monospace" }}
-              className="text-[52px] font-bold tabular-nums leading-none block text-slate-700">
+              className="text-[40px] md:text-[52px] font-bold tabular-nums leading-none block text-slate-700">
               ${CURRENT_PRICE.toFixed(2)}
             </span>
             <span style={{ fontFamily: "'Inter', sans-serif" }} className="text-[12px] text-slate-400 mt-[4px] block">
@@ -222,17 +222,17 @@ function ResultsSection({
         </div>
       </div>
 
-      {/* TV summary chips */}
-      <div className="flex items-center gap-[8px] px-[22px] py-[10px] border-t border-slate-100 bg-slate-50">
-        <span style={{ fontFamily: "'Inter', sans-serif" }} className="text-[10px] font-semibold text-slate-400 mr-[2px]">Valuation inputs →</span>
+      {/* TV summary chips — horizontally scrollable on mobile */}
+      <div className="flex items-center gap-[8px] px-[18px] md:px-[22px] py-[10px] border-t border-slate-100 bg-slate-50 overflow-x-auto">
+        <span style={{ fontFamily: "'Inter', sans-serif" }} className="text-[10px] font-semibold text-slate-400 shrink-0">Inputs →</span>
         {[
           { label: "TV (undiscounted)", value: n0(bridge.tv) },
           { label: "PV of Terminal Value", value: n0(bridge.pvTv) },
           { label: "TV as % of EV", value: `${f1((bridge.pvTv / bridge.ev) * 100)}%` },
           { label: "Sum PV FCFs", value: n0(bridge.pvFcfs) },
         ].map(chip => (
-          <div key={chip.label} className="flex items-center gap-[5px] bg-white border border-slate-200 rounded-[6px] px-[9px] py-[4px]">
-            <span style={{ fontFamily: "'Inter', sans-serif" }} className="text-[10px] text-slate-400">{chip.label}</span>
+          <div key={chip.label} className="flex items-center gap-[5px] bg-white border border-slate-200 rounded-[6px] px-[9px] py-[4px] shrink-0">
+            <span style={{ fontFamily: "'Inter', sans-serif" }} className="text-[10px] text-slate-400 whitespace-nowrap">{chip.label}</span>
             <span style={{ fontFamily: "'JetBrains Mono', monospace" }} className="text-[11px] font-bold text-slate-700 tabular-nums">{chip.value}</span>
           </div>
         ))}
@@ -257,16 +257,16 @@ function AssumptionsSection({
   return (
     <div className="bg-white rounded-[14px] border border-slate-100 overflow-hidden">
       {/* header */}
-      <div className="flex items-center justify-between px-[22px] py-[14px] border-b border-slate-100">
+      <div className="flex items-center justify-between px-[16px] md:px-[22px] py-[14px] border-b border-slate-100 flex-wrap gap-[8px]">
         <div>
           <p style={{ fontFamily: "'Inter', sans-serif" }} className="text-[14px] font-bold text-slate-900">Assumptions</p>
           <p style={{ fontFamily: "'Inter', sans-serif" }} className="text-[11px] text-slate-400 mt-[1px]">Edit drivers — fair value updates live</p>
         </div>
-        {/* AI scenario chooser — compact */}
-        <div className="flex items-center gap-[4px] bg-slate-100 rounded-[8px] p-[3px]">
+        {/* AI scenario chooser — horizontally scrollable on mobile */}
+        <div className="flex items-center gap-[4px] bg-slate-100 rounded-[8px] p-[3px] overflow-x-auto">
           {(["bear", "base", "bull"] as const).map(s => (
             <button key={s} onClick={() => onScenario(s)}
-              className={`px-[10px] py-[4px] rounded-[6px] border-0 cursor-pointer transition-colors text-center ${
+              className={`px-[10px] py-[4px] rounded-[6px] border-0 cursor-pointer transition-colors text-center shrink-0 ${
                 scenario === s ? "bg-white shadow-sm text-slate-900" : "bg-transparent text-slate-500 hover:text-slate-700"}`}>
               <span style={{ fontFamily: "'Inter', sans-serif" }} className="text-[10px] font-semibold block">
                 {s.charAt(0).toUpperCase() + s.slice(1)}
@@ -276,32 +276,32 @@ function AssumptionsSection({
               </span>
             </button>
           ))}
-          <div className="w-px h-[28px] bg-slate-200 mx-[2px]" />
+          <div className="w-px h-[28px] bg-slate-200 mx-[2px] shrink-0" />
           <button onClick={() => onScenario("base")}
             style={{ fontFamily: "'Inter', sans-serif" }}
-            className="px-[8px] py-[4px] text-[10px] text-slate-400 hover:text-blue-600 border-0 bg-transparent cursor-pointer font-medium">
+            className="px-[8px] py-[4px] text-[10px] text-slate-400 hover:text-blue-600 border-0 bg-transparent cursor-pointer font-medium shrink-0">
             ↺ Reset
           </button>
         </div>
       </div>
 
-      <div className="flex divide-x divide-slate-100">
+      <div className="flex flex-col md:flex-row md:divide-x divide-slate-100">
         {/* ── Panel A: Your drivers ── */}
-        <div className="flex-1 px-[22px] py-[18px] flex flex-col gap-[14px]">
+        <div className="flex-1 px-[16px] md:px-[22px] py-[16px] md:py-[18px] flex flex-col gap-[14px]">
           <div>
-            <div className="flex items-center gap-[6px] mb-[4px]">
-              <div className="size-[7px] rounded-full bg-blue-500" />
+            <div className="flex items-center gap-[6px] mb-[4px] flex-wrap">
+              <div className="size-[7px] rounded-full bg-blue-500 shrink-0" />
               <span style={{ fontFamily: "'Inter', sans-serif" }}
                 className="text-[11px] font-bold text-slate-800">Your drivers</span>
               <span style={{ fontFamily: "'Inter', sans-serif" }}
-                className="text-[10px] text-slate-400">— these judgments drive FCF, TV, and EV</span>
+                className="text-[10px] text-slate-400 hidden md:inline">— these judgments drive FCF, TV, and EV</span>
             </div>
-            <p style={{ fontFamily: "'Inter', sans-serif" }} className="text-[10px] text-slate-400 leading-snug pl-[13px]">
+            <p style={{ fontFamily: "'Inter', sans-serif" }} className="text-[10px] text-slate-400 leading-snug pl-[13px] hidden md:block">
               FCF comes from Revenue × FCF Margin. WACC discounts FCFs and Terminal Value into EV.
             </p>
           </div>
 
-          <div className="grid grid-cols-3 gap-[12px]">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-[10px] md:gap-[12px]">
             <DriverField label="Revenue Growth Y1–5" value={inp.growthY1_5} ai={AI_INPUTS.growthY1_5} suffix="%" step={0.5} min={0} max={60} onChange={set("growthY1_5")} />
             <DriverField label="Revenue Growth Y6–10" value={inp.growthY6_10} ai={AI_INPUTS.growthY6_10} suffix="%" step={0.5} min={0} max={40} onChange={set("growthY6_10")} />
             <DriverField label="Terminal Growth (g)" value={inp.termGrowth} ai={AI_INPUTS.termGrowth} suffix="%" step={0.1} min={0} max={6} onChange={set("termGrowth")} />
@@ -312,7 +312,7 @@ function AssumptionsSection({
         </div>
 
         {/* ── Panel B: Anchors ── */}
-        <div className="w-[240px] shrink-0 bg-slate-50 px-[18px] py-[18px] flex flex-col gap-[10px]">
+        <div className="w-full md:w-[240px] md:shrink-0 bg-slate-50 px-[16px] md:px-[18px] py-[16px] md:py-[18px] flex flex-col gap-[10px] border-t md:border-t-0 border-slate-100">
           <div>
             <div className="flex items-center gap-[6px] mb-[4px]">
               <svg width="11" height="11" viewBox="0 0 11 11" fill="none">
@@ -807,67 +807,71 @@ function TopBar({
 }) {
   return (
     <header className="bg-white border-b border-slate-100 sticky top-0 z-30">
-      <div className="bg-blue-600 px-[24px] py-[7px] flex items-center gap-[10px]">
+      {/* Context banner */}
+      <div className="bg-blue-600 px-[16px] md:px-[24px] py-[6px] flex items-center gap-[8px]">
         <span className="size-[5px] rounded-full bg-blue-300 shrink-0" />
-        <span style={{ fontFamily: "'Inter', sans-serif" }} className="text-[11px] font-semibold text-white flex-1">
+        <span style={{ fontFamily: "'Inter', sans-serif" }} className="text-[11px] font-semibold text-white flex-1 truncate">
           Setting valuation for your AAPL decision
         </span>
-        <span style={{ fontFamily: "'Inter', sans-serif" }} className="text-[10px] text-blue-200">
+        <span style={{ fontFamily: "'Inter', sans-serif" }} className="hidden md:block text-[10px] text-blue-200 shrink-0">
           Save model · then return to select it in Valuation used
         </span>
       </div>
-      <div className="flex items-center gap-[10px] px-[24px] py-[10px]">
+
+      {/* Row 1: back + breadcrumb + action buttons */}
+      <div className="flex items-center gap-[8px] md:gap-[10px] px-[16px] md:px-[24px] pt-[10px] pb-[6px] flex-wrap">
         <button onClick={onBack}
           className="flex items-center gap-[5px] text-slate-500 hover:text-slate-900 transition-colors border-0 bg-transparent cursor-pointer p-0 shrink-0">
           <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
             <path d="M8.5 10.5L4.5 6.5l4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
-          <span style={{ fontFamily: "'Inter', sans-serif" }} className="text-[12px] font-medium">AAPL · Transaction</span>
+          <span style={{ fontFamily: "'Inter', sans-serif" }} className="text-[12px] font-medium">AAPL</span>
         </button>
-        <span className="text-slate-200">/</span>
-        <div className="flex items-center gap-[5px]">
+        <span className="text-slate-200 hidden md:block">/</span>
+        <div className="hidden md:flex items-center gap-[5px]">
           <span style={{ fontFamily: "'Playfair Display', serif" }} className="text-[14px] font-bold text-slate-900">Datadog</span>
           <span className="text-slate-300">·</span>
           <span style={{ fontFamily: "'Inter', sans-serif" }} className="text-[12px] font-semibold text-slate-500">Valuation</span>
-          <span className="text-slate-300">·</span>
-          <span style={{ fontFamily: "'JetBrains Mono', monospace" }}
-            className="text-[11px] font-bold text-blue-600 bg-blue-50 px-[6px] py-[2px] rounded-[5px]">DCF</span>
           {myFairValue !== null && (
             <span style={{ fontFamily: "'Inter', sans-serif" }}
               className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-[7px] py-[2px] rounded-[100px] ml-[2px]">
-              My Fair Value set
+              Fair Value set
             </span>
           )}
-        </div>
-        <div className="flex items-center bg-slate-100 rounded-[7px] p-[3px] ml-[6px]">
-          {METHODS.map(m => (
-            <button key={m.id} onClick={() => onMethod(m.id)}
-              className={`px-[9px] py-[4px] rounded-[5px] text-[11px] font-semibold border-0 cursor-pointer transition-colors ${
-                method === m.id ? "bg-white text-slate-900 shadow-sm" : "bg-transparent text-slate-500 hover:text-slate-700"}`}
-              style={{ fontFamily: "'Inter', sans-serif" }}>
-              {m.label}
-            </button>
-          ))}
         </div>
         <div className="flex-1" />
         <div className="flex items-center gap-[6px]">
           <button onClick={onSave}
             style={{ fontFamily: "'Inter', sans-serif" }}
-            className={`px-[12px] py-[6px] rounded-[7px] text-[11px] font-bold border-0 cursor-pointer transition-colors ${
+            className={`px-[10px] md:px-[12px] py-[6px] rounded-[7px] text-[11px] font-bold border-0 cursor-pointer transition-colors ${
               saved ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-700 hover:bg-slate-200"}`}>
             {saved ? "Saved ✓" : "Save"}
           </button>
           <button onClick={onSetFV}
             style={{ fontFamily: "'Inter', sans-serif" }}
-            className="px-[12px] py-[6px] rounded-[7px] text-[11px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white border-0 cursor-pointer transition-colors">
-            Set as My Fair Value
+            className="hidden md:block px-[12px] py-[6px] rounded-[7px] text-[11px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white border-0 cursor-pointer transition-colors">
+            Set Fair Value
           </button>
           <button onClick={onUseInDecision}
             style={{ fontFamily: "'Inter', sans-serif" }}
-            className={`px-[12px] py-[6px] rounded-[7px] text-[11px] font-bold border-0 cursor-pointer transition-colors ${
+            className={`px-[10px] md:px-[12px] py-[6px] rounded-[7px] text-[11px] font-bold border-0 cursor-pointer transition-colors ${
               usedInDecision ? "bg-blue-100 text-blue-700" : "bg-blue-600 hover:bg-blue-700 text-white"}`}>
-            {usedInDecision ? "Returning…" : "Use in decision →"}
+            {usedInDecision ? "Returning…" : "Use in decision"}
           </button>
+        </div>
+      </div>
+
+      {/* Row 2: method tabs — horizontally scrollable on mobile */}
+      <div className="px-[16px] md:px-[24px] pb-[10px] overflow-x-auto">
+        <div className="flex items-center bg-slate-100 rounded-[7px] p-[3px] w-fit">
+          {METHODS.map(m => (
+            <button key={m.id} onClick={() => onMethod(m.id)}
+              className={`px-[9px] py-[4px] rounded-[5px] text-[11px] font-semibold border-0 cursor-pointer transition-colors whitespace-nowrap ${
+                method === m.id ? "bg-white text-slate-900 shadow-sm" : "bg-transparent text-slate-500 hover:text-slate-700"}`}
+              style={{ fontFamily: "'Inter', sans-serif" }}>
+              {m.label}
+            </button>
+          ))}
         </div>
       </div>
     </header>
@@ -907,7 +911,7 @@ export default function ValuationPage() {
         onSetFV={doSetFV} onUseInDecision={doUseInDecision} usedInDecision={usedInDecision} />
 
       {method === "rdcf" ? (
-        <div className="flex-1 max-w-[1440px] mx-auto w-full px-[28px] py-[22px]">
+        <div className="flex-1 max-w-[1440px] mx-auto w-full px-[16px] md:px-[28px] py-[16px] md:py-[22px]">
           <ReverseDCFView
             onSwitchToDCF={() => setMethod("dcf")}
             onUseInDecision={doUseInDecision}
@@ -915,7 +919,7 @@ export default function ValuationPage() {
           />
         </div>
       ) : method === "pe" ? (
-        <div className="flex-1 max-w-[1440px] mx-auto w-full px-[28px] py-[22px]">
+        <div className="flex-1 max-w-[1440px] mx-auto w-full px-[16px] md:px-[28px] py-[16px] md:py-[22px]">
           <PEView
             myFairValue={myFairValue}
             onSetFV={v => setMyFV(v)}
@@ -938,23 +942,19 @@ export default function ValuationPage() {
           </div>
         </div>
       ) : (
-        <div className="flex-1 max-w-[1440px] mx-auto w-full px-[28px] py-[22px]">
-          <div className="flex gap-[16px] items-start">
-            {/* Main column — B C D E order */}
-            <div className="flex-1 min-w-0 flex flex-col gap-[12px]">
-              {/* B — Results first */}
+        <div className="flex-1 max-w-[1440px] mx-auto w-full px-[16px] md:px-[28px] py-[16px] md:py-[22px]">
+          <div className="flex flex-col md:flex-row gap-[12px] md:gap-[16px] items-start">
+            {/* Main column */}
+            <div className="w-full md:flex-1 min-w-0 flex flex-col gap-[12px]">
               <ResultsSection bridge={bridge} myFairValue={myFairValue}
                 onSetFV={doSetFV} onUseInDecision={doUseInDecision} usedInDecision={usedInDecision} />
-              {/* C — Assumptions */}
               <AssumptionsSection inp={inp} scenario={scenario} onScenario={doScenario} onChange={change} fvs={fvs} />
-              {/* D — Bridge */}
               <BridgeSection bridge={bridge} inp={inp} />
-              {/* E — Forecast (collapsed) */}
               <ForecastSection rows={rows} bridge={bridge} />
             </div>
 
-            {/* Right rail */}
-            <div className="w-[228px] shrink-0 sticky top-[89px]">
+            {/* Right rail — below main on mobile, sticky sidebar on desktop */}
+            <div className="w-full md:w-[228px] md:shrink-0 md:sticky md:top-[120px]">
               <AIRail inp={inp} />
             </div>
           </div>
