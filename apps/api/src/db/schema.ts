@@ -33,7 +33,7 @@ export const users = pgTable("users", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-/** A stock on the user's watch list, plus their investment thesis. */
+/** A stock the user tracks. `watched` is the home Watch List; unwatching keeps journal rows. */
 export const stocks = pgTable(
   "stocks",
   {
@@ -44,6 +44,7 @@ export const stocks = pgTable(
     ticker: text("ticker").notNull(),
     name: text("name").notNull(),
     thesis: text("thesis"),
+    watched: boolean("watched").notNull().default(true),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

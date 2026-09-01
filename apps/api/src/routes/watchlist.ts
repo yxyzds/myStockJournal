@@ -6,6 +6,12 @@ import { db } from "../db";
 import { stocks, valuationModels } from "../db/schema";
 import { getQuotes } from "../market/quotes";
 
+const TICKER_RE = /^[A-Z0-9][A-Z0-9.\-]{0,15}$/;
+
+function parseTicker(raw: string) {
+  return raw.trim().toUpperCase();
+}
+
 function fairValueFromOutputs(outputs: unknown): number | null {
   if (!outputs || typeof outputs !== "object") return null;
   const value = (outputs as { fairValue?: unknown }).fairValue;
@@ -17,7 +23,10 @@ export const watchlistRoutes = new Hono<AppEnv>();
 
 watchlistRoutes.get("/", async (c) => {
   const userId = c.get("userId");
-  const rows = await db.select().from(stocks).where(eq(stocks.userId, userId));
+  const rows = await db
+    .select()
+    .from(stocks)
+    .where(and(eq(stocks.userId, userId), eq(stocks.watched, true)));
   const quotes = await getQuotes(rows.map((r) => r.ticker));
   const quoteByTicker = new Map(quotes.map((q) => [q.ticker, q]));
 
@@ -58,8 +67,8 @@ watchlistRoutes.get("/", async (c) => {
 watchlistRoutes.post("/", async (c) => {
   const userId = c.get("userId");
   const body = await c.req.json().catch(() => null);
-  const raw = typeof body?.ticker === "string" ? body.ticker.trim().toUpperCase() : "";
-  if (!/^[A-Z0-9][A-Z0-9.\-]{0,15}$/.test(raw)) {
+  const raw = typeof body?.ticker === "string" ? parseTicker(body.ticker) : "";
+  if (!TICKER_RE.test(raw)) {
     return c.json({ error: "Invalid ticker" }, 400);
   }
 
@@ -73,7 +82,18 @@ watchlistRoutes.post("/", async (c) => {
     .limit(1);
 
   if (existing[0]) {
-    return c.json({ ok: true, stockId: existing[0].id, ticker: existing[0].ticker, created: false });
+    if (!existing[0].watched) {
+      await db
+        .update(stocks)
+        .set({ watched: true, name: quote.name, updatedAt: new Date() })
+        .where(eq(stocks.id, existing[0].id));
+    }
+    return c.json({
+      ok: true,
+      stockId: existing[0].id,
+      ticker: existing[0].ticker,
+      created: !existing[0].watched,
+    });
   }
 
   const inserted = await db
@@ -82,8 +102,34 @@ watchlistRoutes.post("/", async (c) => {
       userId,
       ticker: quote.ticker,
       name: quote.name,
+      watched: true,
     })
     .returning({ id: stocks.id, ticker: stocks.ticker });
 
   return c.json({ ok: true, stockId: inserted[0].id, ticker: inserted[0].ticker, created: true }, 201);
+});
+
+watchlistRoutes.delete("/:ticker", async (c) => {
+  const userId = c.get("userId");
+  const ticker = parseTicker(c.req.param("ticker") ?? "");
+  if (!TICKER_RE.test(ticker)) {
+    return c.json({ error: "Invalid ticker" }, 400);
+  }
+
+  const existing = await db
+    .select({ id: stocks.id, ticker: stocks.ticker, watched: stocks.watched })
+    .from(stocks)
+    .where(and(eq(stocks.userId, userId), eq(stocks.ticker, ticker)))
+    .limit(1);
+
+  if (!existing[0] || !existing[0].watched) {
+    return c.json({ error: "Ticker not on watch list" }, 404);
+  }
+
+  await db
+    .update(stocks)
+    .set({ watched: false, updatedAt: new Date() })
+    .where(eq(stocks.id, existing[0].id));
+
+  return c.json({ ok: true, stockId: existing[0].id, ticker: existing[0].ticker });
 });
