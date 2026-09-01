@@ -646,12 +646,14 @@ export function DecisionDetail({ decision }: { decision: MockDecision }) {
                 <p className="hidden truncate text-[14px] text-slate-500 md:inline">{decision.name}</p>
               </div>
               <p className="truncate text-[12px] text-slate-500 md:hidden">
-                {decision.name} · {decision.dateLabel}
+                {decision.dateLabel ? `${decision.name} · ${decision.dateLabel}` : decision.name}
               </p>
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-3">
-            <span className="hidden text-[14px] text-slate-500 md:inline">{decision.dateLabel}, 2026</span>
+            {decision.dateLabel ? (
+              <span className="hidden text-[14px] text-slate-500 md:inline">{decision.dateLabel}, 2026</span>
+            ) : null}
             <button
               type="button"
               className="rounded-lg border border-[#ebf0f5] bg-white px-3 py-1.5 text-[13px] font-semibold text-slate-800 md:px-4"

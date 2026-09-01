@@ -738,7 +738,7 @@ function TransactionCard() {
       </button>
       {/* expandable body */}
       {!collapsed && (
-        <div className="content-stretch flex flex-col gap-[16px] items-start px-[24px] pb-[24px] relative shrink-0 w-full">
+        <div className="content-stretch flex flex-col gap-[16px] items-start px-[24px] pb-[0] relative shrink-0 w-full">
           <div aria-hidden className="absolute border-[#ebf0f5] border-solid border-t inset-0 pointer-events-none" />
           <div className="content-stretch flex gap-[8px] items-center relative shrink-0 pt-[16px] flex-wrap">
             <BuySellToggle />
@@ -747,9 +747,116 @@ function TransactionCard() {
           </div>
           <BuyTransactionRecord />
           <SellTransactionRecord />
-          <EditingTransactionRecord />
+          <div className="pb-[24px] w-full">
+            <EditingTransactionRecord />
+          </div>
         </div>
       )}
+      {/* Rate bar — always at bottom of card */}
+      <RateMyTransactionBar />
+    </div>
+  );
+}
+
+// ─── Rate My Transaction ─────────────────────────────────────────────────────
+
+function StarIcon({ filled = false, size = 14 }: { filled?: boolean; size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 20 20" fill="none">
+      <path
+        d="M10 2l2.4 5 5.6.8-4 3.9.9 5.5L10 14.5l-4.9 2.7.9-5.5L2 7.8l5.6-.8L10 2z"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinejoin="round"
+        fill={filled ? "currentColor" : "none"}
+      />
+    </svg>
+  );
+}
+
+function RateMyTransactionBar() {
+  const [rated, setRated] = useState(false);
+
+  const RIPPLE: React.CSSProperties = {
+    animation: "rateRipple 2s ease-out infinite",
+  };
+  const RIPPLE2: React.CSSProperties = {
+    animation: "rateRipple 2s ease-out infinite 0.7s",
+  };
+
+  if (!rated) {
+    return (
+      <div className="w-full border-t border-[#ebf0f5] flex flex-col items-center gap-[12px] pt-[22px] pb-[24px]">
+        {/* Orbital button */}
+        <div className="relative flex items-center justify-center">
+          {/* Ripple rings */}
+          <div className="absolute size-[76px] rounded-full bg-[#2563eb] pointer-events-none" style={RIPPLE} />
+          <div className="absolute size-[76px] rounded-full bg-[#2563eb] pointer-events-none" style={RIPPLE2} />
+
+          {/* Outer glow ring */}
+          <div className="absolute size-[76px] rounded-full"
+            style={{ boxShadow: "0 0 0 8px rgba(37,99,235,0.07), 0 0 0 16px rgba(37,99,235,0.04)" }} />
+
+          {/* Button */}
+          <button
+            onClick={() => setRated(true)}
+            className="relative size-[76px] rounded-full text-white border-0 cursor-pointer transition-all duration-200 hover:scale-[1.07] active:scale-95 flex items-center justify-center"
+            style={{
+              background: "linear-gradient(145deg, #1e40af 0%, #2563eb 55%, #3b82f6 100%)",
+              boxShadow: "0 6px 24px rgba(37,99,235,0.35), 0 2px 8px rgba(15,23,42,0.15), inset 0 1px 0 rgba(255,255,255,0.12)",
+            }}
+          >
+            <StarIcon filled size={26} />
+          </button>
+        </div>
+
+        {/* Label */}
+        <div className="flex flex-col items-center gap-[3px]">
+          <span className="font-['Inter:Semi_Bold',sans-serif] font-semibold text-[#1e293b] text-[13px] tracking-tight">
+            Rate My Transaction
+          </span>
+          <span className="font-['Inter:Regular',sans-serif] font-normal text-[#94a3b8] text-[11px]">
+            Let AI judge this trade
+          </span>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="w-full border-t border-[#ebf0f5] flex flex-col items-center gap-[12px] pt-[22px] pb-[24px]">
+      {/* Score circle */}
+      <div className="relative flex items-center justify-center">
+        {/* Score ring — SVG stroke arc could be used but border is simpler */}
+        <div className="size-[76px] rounded-full flex flex-col items-center justify-center"
+          style={{
+            background: "linear-gradient(145deg, #eff6ff 0%, #dbeafe 100%)",
+            boxShadow: "0 0 0 3px #2563eb, 0 6px 20px rgba(37,99,235,0.22), 0 2px 6px rgba(15,23,42,0.1)",
+          }}>
+          <span className="font-['Inter:Bold',sans-serif] font-bold text-[#1e40af] text-[28px] leading-none">78</span>
+          <span className="font-['Inter:Medium',sans-serif] font-medium text-[#93c5fd] text-[9px] leading-none mt-[2px] tracking-wide">/100</span>
+        </div>
+
+        {/* Re-rate button — star outline at top-right */}
+        <button
+          onClick={() => setRated(false)}
+          title="Re-rate"
+          className="absolute -top-[2px] -right-[2px] size-[22px] rounded-full bg-white border border-[#e2e8f0] flex items-center justify-center cursor-pointer hover:bg-[#eff6ff] hover:border-[#93c5fd] transition-colors text-[#94a3b8] hover:text-[#2563eb]"
+          style={{ boxShadow: "0 1px 3px rgba(15,23,42,0.08)" }}
+        >
+          <StarIcon size={11} />
+        </button>
+      </div>
+
+      {/* Verdict */}
+      <div className="flex flex-col items-center gap-[4px]">
+        <span className="font-['Inter:Bold',sans-serif] font-bold text-[#2563eb] text-[10px] uppercase tracking-widest">
+          Rate My Transaction
+        </span>
+        <p className="font-['Inter:Medium',sans-serif] font-medium text-[#334155] text-[13px] leading-snug text-center px-[32px]">
+          Strong reasoning — but your evidence base is thin for the growth assumption.
+        </p>
+      </div>
     </div>
   );
 }
@@ -764,154 +871,10 @@ function LeftColumn() {
   );
 }
 
-function Award() {
-  return (
-    <div className="relative shrink-0 size-[14px]" data-name="award">
-      <svg className="absolute block inset-0 size-full" fill="none" height="14" preserveAspectRatio="none" viewBox="0 0 14 14" width="14">
-        <g id="award">
-          <path d={svgPaths.p3c35c300} id="Vector" stroke="#2563EB" strokeLinecap="round" strokeWidth="2" />
-        </g>
-      </svg>
-    </div>
-  );
-}
-
-function IconContainer1() {
-  return (
-    <div className="content-stretch flex flex-col items-center justify-center overflow-clip relative shrink-0 size-[14px]" data-name="icon-container">
-      <Award />
-    </div>
-  );
-}
-
-function ScoringTop() {
-  return (
-    <div className="content-stretch flex gap-[6px] items-center relative shrink-0" data-name="scoring-top">
-      <IconContainer1 />
-      <p className="[word-break:break-word] font-['Inter:Bold',sans-serif] font-bold leading-[normal] not-italic relative shrink-0 text-[#2563eb] text-[12px] whitespace-nowrap">Rate My Transaction</p>
-    </div>
-  );
-}
-
-function ScoreDisplay() {
-  return (
-    <div className="[word-break:break-word] content-stretch flex gap-[4px] items-baseline leading-[normal] not-italic relative shrink-0 whitespace-nowrap" data-name="score-display">
-      <p className="font-['Inter:Extra_Bold',sans-serif] font-extrabold relative shrink-0 text-[#1e293b] text-[56px]">78</p>
-      <p className="font-['Inter:Medium',sans-serif] font-medium relative shrink-0 text-[#8a99ad] text-[20px]">/ 100</p>
-    </div>
-  );
-}
-
-function BreakdownRow() {
-  return (
-    <div className="[word-break:break-word] content-stretch flex items-center justify-between leading-[normal] not-italic relative shrink-0 text-[13px] w-full whitespace-nowrap" data-name="breakdown-row">
-      <p className="font-['Inter:Regular',sans-serif] font-normal relative shrink-0 text-[#475569]">Valuation</p>
-      <p className="font-['Inter:Bold',sans-serif] font-bold relative shrink-0 text-[#1e293b]">86</p>
-    </div>
-  );
-}
-
-function BreakdownRow1() {
-  return (
-    <div className="[word-break:break-word] content-stretch flex items-center justify-between leading-[normal] not-italic relative shrink-0 text-[13px] w-full whitespace-nowrap" data-name="breakdown-row">
-      <p className="font-['Inter:Regular',sans-serif] font-normal relative shrink-0 text-[#475569]">Thesis Alignment</p>
-      <p className="font-['Inter:Bold',sans-serif] font-bold relative shrink-0 text-[#1e293b]">81</p>
-    </div>
-  );
-}
-
-function WarningPill() {
-  return (
-    <div className="bg-[#b45309] content-stretch flex items-start px-[8px] py-[2px] relative rounded-[4px] shrink-0" data-name="warning-pill">
-      <p className="[word-break:break-word] font-['Inter:Bold',sans-serif] font-bold leading-[normal] not-italic relative shrink-0 text-[11px] text-white whitespace-nowrap">50</p>
-    </div>
-  );
-}
-
-function BreakdownRow2() {
-  return (
-    <div className="content-stretch flex items-center justify-between relative shrink-0 w-full" data-name="breakdown-row">
-      <p className="[word-break:break-word] font-['Inter:Regular',sans-serif] font-normal leading-[normal] not-italic relative shrink-0 text-[#475569] text-[13px] whitespace-nowrap">Evidence</p>
-      <WarningPill />
-    </div>
-  );
-}
-
-function BreakdownRow3() {
-  return (
-    <div className="[word-break:break-word] content-stretch flex items-center justify-between leading-[normal] not-italic relative shrink-0 text-[13px] w-full whitespace-nowrap" data-name="breakdown-row">
-      <p className="font-['Inter:Regular',sans-serif] font-normal relative shrink-0 text-[#475569]">Risk Management</p>
-      <p className="font-['Inter:Bold',sans-serif] font-bold relative shrink-0 text-[#1e293b]">73</p>
-    </div>
-  );
-}
-
-function BreakdownList() {
-  return (
-    <div className="content-stretch flex flex-col gap-[8px] items-start relative shrink-0 w-full" data-name="breakdown-list">
-      <BreakdownRow />
-      <BreakdownRow1 />
-      <BreakdownRow2 />
-      <BreakdownRow3 />
-    </div>
-  );
-}
-
-function BreakdownContainer() {
-  return (
-    <div className="content-stretch flex flex-col gap-[12px] items-start relative shrink-0 w-full" data-name="breakdown-container">
-      <p className="[word-break:break-word] font-['Inter:Bold',sans-serif] font-bold leading-[normal] not-italic relative shrink-0 text-[#8a99ad] text-[10px] tracking-[0.005px] uppercase whitespace-nowrap">BREAKDOWN</p>
-      <BreakdownList />
-    </div>
-  );
-}
-
-function ChallengeAlertBox() {
-  return (
-    <div className="bg-[#fffbeb] content-stretch flex flex-col gap-[8px] items-start p-[16px] relative rounded-[12px] shrink-0 w-full" data-name="challenge-alert-box">
-      <div aria-hidden className="absolute border border-[#fde68a] border-solid inset-0 pointer-events-none rounded-[12px]" />
-      <p className="[word-break:break-word] font-['Inter:Extra_Bold',sans-serif] font-extrabold leading-[normal] not-italic relative shrink-0 text-[#b45309] text-[10px] tracking-[0.005px] uppercase whitespace-nowrap">AI CHALLENGE</p>
-      <p className="[word-break:break-word] font-['Inter:Regular',sans-serif] font-normal leading-[1.5] min-w-full not-italic relative shrink-0 text-[#b45309] text-[13px] w-[min-content]">Your growth assumption sits above the 5Y average. What evidence would justify it?</p>
-    </div>
-  );
-}
-
-function CtaRateButton() {
-  return (
-    <div className="bg-[#2563eb] content-stretch drop-shadow-[0px_8px_8px_rgba(37,99,235,0.25)] flex flex-col items-center justify-center relative rounded-[100px] shrink-0 size-[100px]" data-name="cta-rate-button">
-      <p className="[word-break:break-word] font-['Inter:Bold',sans-serif] font-bold leading-[normal] not-italic relative shrink-0 text-[15px] text-white whitespace-nowrap">Rate</p>
-    </div>
-  );
-}
-
-function ScoringCard() {
-  return (
-    <div className="bg-white content-stretch flex flex-col gap-[24px] items-center p-[24px] relative rounded-[16px] shrink-0 w-full" data-name="scoring-card">
-      <div aria-hidden className="absolute border border-[#ebf0f5] border-solid inset-0 pointer-events-none rounded-[16px]" />
-      <ScoringTop />
-      <ScoreDisplay />
-      <p className="[word-break:break-word] font-['Inter:Medium',sans-serif] font-medium leading-[normal] min-w-full not-italic relative shrink-0 text-[#475569] text-[13px] text-center w-[min-content]">Strong reasoning, one mild gap in evidence.</p>
-      <BreakdownContainer />
-      <ChallengeAlertBox />
-      <CtaRateButton />
-      <p className="[word-break:break-word] font-['Inter:Semi_Bold',sans-serif] font-semibold leading-[normal] min-w-full not-italic relative shrink-0 text-[#2563eb] text-[12px] text-center w-[min-content]">What would change this score?</p>
-    </div>
-  );
-}
-
-function RightColumn() {
-  return (
-    <div className="content-stretch flex flex-col items-start relative shrink-0 w-[348px]" data-name="right-column">
-      <ScoringCard />
-    </div>
-  );
-}
-
 function ContentContainer() {
   return (
     <div className="content-stretch flex gap-[24px] items-start pt-[24px] px-[24px] relative shrink-0 w-full" data-name="content-container">
       <LeftColumn />
-      <RightColumn />
     </div>
   );
 }

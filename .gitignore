@@ -41,3 +41,6 @@ Thumbs.db
 
 # secrets / local certs
 *.pem
+
+# local Figma mock (not part of the app)
+figmaDesign/

@@ -160,8 +160,38 @@ export function decisionHref(d: MockDecision) {
   return `/stock/${d.ticker}/decision/${d.id}`;
 }
 
+export function stockHref(ticker: string) {
+  return `/stock/${ticker.trim().toUpperCase()}`;
+}
+
 export function findDecision(ticker: string, id: string) {
   return DECISIONS.find(
     (d) => d.id === id && d.ticker.toUpperCase() === ticker.toUpperCase(),
   );
+}
+
+export function findLatestDecision(ticker: string) {
+  const symbol = ticker.trim().toUpperCase();
+  return (
+    DECISIONS.filter((d) => d.ticker === symbol).sort((a, b) => b.date.localeCompare(a.date))[0] ??
+    null
+  );
+}
+
+/** Detail page payload: latest mock decision if one exists, otherwise an empty workspace. */
+export function stockWorkspaceDecision(ticker: string, name?: string): MockDecision {
+  const latest = findLatestDecision(ticker);
+  if (latest) return latest;
+  const symbol = ticker.trim().toUpperCase();
+  return {
+    id: `${symbol.toLowerCase()}-workspace`,
+    ticker: symbol,
+    name: name?.trim() || symbol,
+    date: "",
+    dateLabel: "",
+    action: "THESIS UPDATE",
+    actionColor: "blue",
+    rationale: "",
+    scoreVariant: "none",
+  };
 }
