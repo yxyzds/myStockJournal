@@ -28,12 +28,15 @@ export function parseTencentQuote(line: string): Quote | null {
   if (parts.length < 6) return null;
 
   const ticker = baseTicker(parts[2] ?? "");
-  const price = num(parts[3]);
+  // parts[3] = last trade; parts[4] = prior-session close (the valuation reference).
+  const last = num(parts[3]);
   const previousClose = num(parts[4]);
-  if (!ticker || price == null) return null;
+  if (!ticker || (last == null && previousClose == null)) return null;
 
   const changePercent =
-    previousClose && previousClose !== 0 ? ((price - previousClose) / previousClose) * 100 : null;
+    last != null && previousClose && previousClose !== 0
+      ? ((last - previousClose) / previousClose) * 100
+      : null;
 
   const usdIdx = parts.findIndex((p) => p === "USD" || p === "HKD" || p === "CNY");
   const englishName = parts.find((p, i) => i > (usdIdx === -1 ? 30 : usdIdx) && /[A-Za-z]{3,}/.test(p));
@@ -41,7 +44,7 @@ export function parseTencentQuote(line: string): Quote | null {
   return {
     ticker,
     name: englishName?.trim() || ticker,
-    price,
+    price: last,
     currency: usdIdx >= 0 ? parts[usdIdx] : "USD",
     changePercent,
     previousClose,

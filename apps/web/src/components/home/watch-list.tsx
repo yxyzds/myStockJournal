@@ -196,8 +196,8 @@ export function WatchList() {
             <h2 className="font-heading text-[20px] font-bold text-slate-900 md:text-2xl">Watch List</h2>
             <p className="mt-1 text-[12px] text-slate-400 md:text-[13px]">
               {useRemote
-                ? "Not in your list — showing live market results. Click a row to add."
-                : "Your tracked positions at a glance."}
+                ? "Not in your list — showing prior-close quotes. Click a row to add."
+                : "Prior close vs your fair value."}
             </p>
           </div>
           <div className="relative w-full md:w-[260px]">

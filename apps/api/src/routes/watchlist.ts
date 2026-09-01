@@ -35,6 +35,7 @@ watchlistRoutes.get("/", async (c) => {
     const quote = quoteByTicker.get(row.ticker);
     const fairValue = fvByStock.get(row.id) ?? null;
     const price = quote?.price ?? null;
+    // MOS vs prior close (Quote.price), not a live last trade.
     const mosPercent =
       fairValue != null && price != null && price !== 0 ? ((fairValue - price) / price) * 100 : null;
     return {

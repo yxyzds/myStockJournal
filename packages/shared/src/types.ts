@@ -1,5 +1,4 @@
 export type DecisionType = "buy" | "sell" | "thesis_update";
-export type ThesisHealth = "healthy" | "weakening";
 export type ValuationMethod = "dcf" | "rdcf" | "pe" | "evebitda" | "sotp";
 
 export type Stock = {
@@ -8,8 +7,6 @@ export type Stock = {
   ticker: string;
   name: string;
   thesis: string | null;
-  coreQuestion: string | null;
-  health: ThesisHealth;
 };
 
 export type Decision = {
