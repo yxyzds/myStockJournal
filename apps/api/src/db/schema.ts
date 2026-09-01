@@ -168,6 +168,9 @@ export const quoteCache = pgTable("quote_cache", {
   ticker: text("ticker").primaryKey(),
   price: numeric("price", { precision: 12, scale: 4 }).notNull(),
   currency: text("currency").notNull().default("USD"),
+  changePercent: numeric("change_percent", { precision: 12, scale: 6 }),
+  previousClose: numeric("previous_close", { precision: 12, scale: 4 }),
+  shortName: text("short_name"),
   fetchedAt: timestamp("fetched_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
