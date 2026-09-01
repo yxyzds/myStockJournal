@@ -14,8 +14,9 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
+/** Buy / sell / thesis-update — the three journal decision types. */
 export const decisionTypeEnum = pgEnum("decision_type", ["buy", "sell", "thesis_update"]);
-export const thesisHealthEnum = pgEnum("thesis_health", ["healthy", "weakening"]);
+/** Valuation methods the user can run: DCF, reverse DCF, P/E, EV/EBITDA, sum-of-the-parts. */
 export const valuationMethodEnum = pgEnum("valuation_method", [
   "dcf",
   "rdcf",
@@ -24,6 +25,7 @@ export const valuationMethodEnum = pgEnum("valuation_method", [
   "sotp",
 ]);
 
+/** App accounts. V1 has no login UI; we seed one local Dev user. */
 export const users = pgTable("users", {
   id: uuid("id").primaryKey(),
   email: text("email").notNull().unique(),
@@ -31,6 +33,7 @@ export const users = pgTable("users", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+/** A stock on the user's watch list, plus their investment thesis. */
 export const stocks = pgTable(
   "stocks",
   {
@@ -41,8 +44,6 @@ export const stocks = pgTable(
     ticker: text("ticker").notNull(),
     name: text("name").notNull(),
     thesis: text("thesis"),
-    coreQuestion: text("core_question"),
-    health: thesisHealthEnum("health").notNull().default("healthy"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -52,6 +53,10 @@ export const stocks = pgTable(
   ],
 );
 
+/**
+ * Live valuation worksheets (assumptions + outputs).
+ * Exactly one row per stock can be flagged `isMyFairValue` — that number is "My Fair Value" on the watch list.
+ */
 export const valuationModels = pgTable(
   "valuation_models",
   {
@@ -77,6 +82,7 @@ export const valuationModels = pgTable(
   ],
 );
 
+/** Frozen copy of a valuation at a point in time, so a later decision can still show what FV you used then. */
 export const valuationSnapshots = pgTable(
   "valuation_snapshots",
   {
@@ -97,6 +103,7 @@ export const valuationSnapshots = pgTable(
   (table) => [index("valuation_snapshots_stock_idx").on(table.userId, table.stockId)],
 );
 
+/** One buy, sell, or thesis update — the core journal record, optionally scored and linked to a valuation snapshot. */
 export const decisions = pgTable(
   "decisions",
   {
@@ -127,6 +134,7 @@ export const decisions = pgTable(
   ],
 );
 
+/** Free-text notes on a stock (thesis, observations, what would change your mind). */
 export const journalEntries = pgTable(
   "journal_entries",
   {
@@ -145,6 +153,7 @@ export const journalEntries = pgTable(
   (table) => [index("journal_entries_stock_idx").on(table.userId, table.stockId)],
 );
 
+/** Open loops on the home page ("Needs your judgment") — review a thesis, a filing, or an exit. */
 export const judgmentItems = pgTable(
   "judgment_items",
   {
@@ -164,13 +173,19 @@ export const judgmentItems = pgTable(
   (table) => [index("judgment_items_user_idx").on(table.userId, table.dismissed)],
 );
 
+/** Shared vendor quotes, reused until the next US Eastern calendar day. No user_id. */
 export const quoteCache = pgTable("quote_cache", {
   ticker: text("ticker").primaryKey(),
+  /** Vendor last trade as received. API Quote.price is remapped to prior close. */
   price: numeric("price", { precision: 12, scale: 4 }).notNull(),
   currency: text("currency").notNull().default("USD"),
+  changePercent: numeric("change_percent", { precision: 12, scale: 6 }),
+  previousClose: numeric("previous_close", { precision: 12, scale: 4 }),
+  shortName: text("short_name"),
   fetchedAt: timestamp("fetched_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+/** Shared company fundamentals (e.g. SEC company facts). No user_id — cached by ticker, not per user. */
 export const fundamentalsCache = pgTable("fundamentals_cache", {
   ticker: text("ticker").primaryKey(),
   payload: jsonb("payload").notNull(),

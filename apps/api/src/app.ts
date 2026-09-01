@@ -1,12 +1,9 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { env } from "./env";
-
-export type AppEnv = {
-  Variables: {
-    userId: string;
-  };
-};
+import { quotesRoutes } from "./routes/quotes";
+import { watchlistRoutes } from "./routes/watchlist";
+import type { AppEnv } from "./types";
 
 export const app = new Hono<AppEnv>();
 
@@ -32,3 +29,6 @@ app.get("/me", (c) =>
     name: env.localUserName,
   }),
 );
+
+app.route("/watchlist", watchlistRoutes);
+app.route("/quotes", quotesRoutes);
