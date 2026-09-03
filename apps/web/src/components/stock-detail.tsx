@@ -1,20 +1,21 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import type { JournalEntry, StockDetail, StockTransaction } from "@mystockjournal/shared";
+import {
+  METHOD_LABELS as VALUATION_METHOD_LABELS,
+  fairValueFromOutputs,
+  type JournalEntry,
+  type StockDetail,
+  type StockTransaction,
+  type ValuationMethod,
+  type ValuationWorkbench,
+} from "@mystockjournal/shared";
 import { api } from "@/lib/api";
 import { formatEntryDate, formatPrice, isCalendarDate, todayNyDate } from "@/lib/format";
 import { JUDGMENT_ITEMS } from "@/lib/mock-journal";
-
-const VALUATION_METHODS = [
-  { id: "pe", label: "P/E Band", value: "$225", note: "Preferred" },
-  { id: "dcf", label: "DCF", value: "$235", note: "Base case" },
-  { id: "evebitda", label: "EV/EBITDA", value: "$210", note: "" },
-  { id: "sotp", label: "SOTP", value: "$247", note: "" },
-  { id: "rdcf", label: "Reverse DCF", value: "—", note: "Market-implied" },
-];
 
 function parseMoney(raw: string) {
   const cleaned = raw.replace(/[$,\s]/g, "");
@@ -525,12 +526,12 @@ function BuySellToggle({
   onSelect: (side: "buy" | "sell") => void;
 }) {
   return (
-    <div className="flex items-center gap-3">
+    <div className="flex items-center gap-2">
       <button
         type="button"
         onClick={() => onSelect("buy")}
-        className={`rounded-lg px-4 py-2 text-[13px] font-bold ${
-          side !== "sell" ? "bg-[#def7ec] text-[#03543f]" : "bg-slate-100 text-slate-500 opacity-50"
+        className={`rounded-lg px-3.5 py-1.5 text-[13px] font-bold ${
+          side === "sell" ? "bg-[#def7ec] text-[#03543f] opacity-50" : "bg-[#def7ec] text-[#03543f]"
         }`}
       >
         + Buy
@@ -538,8 +539,8 @@ function BuySellToggle({
       <button
         type="button"
         onClick={() => onSelect("sell")}
-        className={`rounded-lg px-4 py-2 text-[13px] font-semibold ${
-          side === "sell" ? "bg-[#fde8e8] text-[#9b1c1c]" : "bg-[#fde8e8] text-[#9b1c1c] opacity-60"
+        className={`rounded-lg px-3.5 py-1.5 text-[13px] font-semibold ${
+          side === "buy" ? "bg-[#fde8e8] text-[#9b1c1c] opacity-50" : "bg-[#fde8e8] text-[#9b1c1c]"
         }`}
       >
         − Sell
@@ -548,11 +549,32 @@ function BuySellToggle({
   );
 }
 
-function ValuationDropdown() {
+/**
+ * Shows the stock's My Fair Value and lets the user switch which saved model
+ * supplies it. The dropdown only lists models that produce a fair value, so a
+ * reverse DCF never appears here.
+ */
+function FairValueControl({ symbol }: { symbol: string }) {
   const [open, setOpen] = useState(false);
-  const [selectedId, setSelectedId] = useState("pe");
   const ref = useRef<HTMLDivElement>(null);
-  const selected = VALUATION_METHODS.find((m) => m.id === selectedId)!;
+  const queryClient = useQueryClient();
+
+  const valuationQuery = useQuery({
+    queryKey: ["valuation", symbol],
+    queryFn: () => api<ValuationWorkbench>(`/stocks/${symbol}/valuation`),
+  });
+
+  const setFairValue = useMutation({
+    mutationFn: (method: ValuationMethod) =>
+      api(`/stocks/${symbol}/valuation/${method}/my-fair-value`, { method: "POST" }),
+    onSuccess: async () => {
+      setOpen(false);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["valuation", symbol] }),
+        queryClient.invalidateQueries({ queryKey: ["watchlist"] }),
+      ]);
+    },
+  });
 
   useEffect(() => {
     function onDoc(e: MouseEvent) {
@@ -562,36 +584,69 @@ function ValuationDropdown() {
     return () => document.removeEventListener("mousedown", onDoc);
   }, []);
 
+  const models = (valuationQuery.data?.models ?? []).filter(
+    (model) => fairValueFromOutputs(model.outputs) != null,
+  );
+  const active = models.find((model) => model.isMyFairValue) ?? null;
+  const activeValue = active ? fairValueFromOutputs(active.outputs) : null;
+
   return (
     <div ref={ref} className="relative shrink-0">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-2 rounded-lg bg-[#f4f6f9] px-3 py-1.5 hover:bg-[#ebf0f5]"
-      >
-        <span className="text-[10px] font-bold tracking-wide text-slate-600 uppercase">REF:</span>
-        <span className="text-[10px] font-bold text-blue-600 uppercase">
-          {selected.label} ({selected.value})
-        </span>
-      </button>
-      {open && (
-        <div className="absolute top-[calc(100%+6px)] left-0 z-20 min-w-[min(260px,calc(100vw-2rem))] overflow-hidden rounded-xl border border-[#ebf0f5] bg-white shadow-[0_4px_24px_rgba(15,23,42,0.10)]">
-          {VALUATION_METHODS.map((m) => (
+      <div className="flex items-stretch overflow-hidden rounded-lg border border-[#dbe3ec] bg-white">
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          disabled={models.length === 0}
+          className="flex items-center gap-2 px-3 py-1.5 text-left hover:bg-slate-50 disabled:hover:bg-white"
+          aria-expanded={open}
+          aria-haspopup="listbox"
+        >
+          <div className="min-w-0">
+            <p className="text-[9px] leading-none font-semibold tracking-wide text-slate-400">my fair value</p>
+            <div className="mt-1 flex items-baseline gap-1.5">
+              <span className="text-[18px] leading-none font-bold text-blue-700">
+                {activeValue == null ? "—" : formatPrice(activeValue)}
+              </span>
+              <span className="text-[10px] font-bold tracking-wide text-slate-400 uppercase">
+                {active ? VALUATION_METHOD_LABELS[active.method] : "not set"}
+              </span>
+            </div>
+          </div>
+          {models.length > 0 && (
+            <svg width="12" height="12" viewBox="0 0 12 12" className="shrink-0 text-slate-400" aria-hidden>
+              <path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+            </svg>
+          )}
+        </button>
+        <Link
+          href={`/stock/${symbol}/valuation`}
+          className="flex items-center gap-1 bg-slate-900 px-3 text-[12px] font-semibold whitespace-nowrap text-white hover:bg-slate-800"
+        >
+          {models.length === 0 ? "+ Set Valuation" : "Open valuation"}
+        </Link>
+      </div>
+      {open && models.length > 0 && (
+        <div className="absolute top-[calc(100%+6px)] right-0 z-20 min-w-[min(260px,calc(100vw-2rem))] overflow-hidden rounded-xl border border-[#ebf0f5] bg-white shadow-[0_4px_24px_rgba(15,23,42,0.10)]">
+          {models.map((model) => (
             <button
-              key={m.id}
+              key={model.id}
               type="button"
-              onClick={() => {
-                setSelectedId(m.id);
-                setOpen(false);
-              }}
-              className={`flex w-full items-center justify-between gap-3 px-4 py-2.5 text-left ${
-                m.id === selectedId ? "bg-blue-50" : "hover:bg-slate-50"
+              disabled={setFairValue.isPending}
+              onClick={() => setFairValue.mutate(model.method)}
+              className={`flex w-full items-center justify-between gap-3 px-4 py-2.5 text-left disabled:opacity-60 ${
+                model.isMyFairValue ? "bg-blue-50" : "hover:bg-slate-50"
               }`}
             >
-              <span className={`text-[13px] ${m.id === selectedId ? "font-semibold text-blue-600" : "text-slate-600"}`}>
-                {m.label}
+              <span
+                className={`text-[13px] ${
+                  model.isMyFairValue ? "font-semibold text-blue-600" : "text-slate-600"
+                }`}
+              >
+                {VALUATION_METHOD_LABELS[model.method]}
               </span>
-              <span className="text-[13px] font-bold text-slate-800">{m.value}</span>
+              <span className="text-[13px] font-bold text-slate-800">
+                {formatPrice(fairValueFromOutputs(model.outputs))}
+              </span>
             </button>
           ))}
         </div>
@@ -827,64 +882,31 @@ export function StockDetail({ ticker }: { ticker: string }) {
           />
         </section>
 
-        <section className="overflow-hidden rounded-2xl border border-[#ebf0f5] bg-white">
-          <button
-            type="button"
-            onClick={() => setTxnOpen((v) => !v)}
-            className="flex w-full items-center justify-between gap-3 px-4 py-4 text-left md:px-6 md:py-5"
-          >
-            <div className="min-w-0">
-              <p className="text-[16px] font-bold text-slate-800 md:text-lg">Transaction</p>
-              <p className="text-[12px] text-slate-500">Attached to this stock</p>
-            </div>
-            <div className="flex shrink-0 items-center gap-2">
-              {!txnOpen && (
-                <div className="hidden items-center gap-1.5 sm:flex">
-                  {data?.transactions.some((t) => t.type === "buy") && (
-                    <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700 uppercase">
-                      Buy
-                    </span>
-                  )}
-                  {data?.transactions.some((t) => t.type === "sell") && (
-                    <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-bold text-rose-700 uppercase">
-                      Sell
-                    </span>
-                  )}
-                  {txnDraft && (
-                    <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-600 uppercase">
-                      Draft
-                    </span>
-                  )}
-                </div>
-              )}
+        <section className="rounded-2xl border border-[#ebf0f5] bg-white">
+          <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-4 md:px-6 md:py-5">
+            <button
+              type="button"
+              onClick={() => setTxnOpen((v) => !v)}
+              className="flex min-w-0 items-center gap-1.5 text-left"
+            >
+              <p className="text-[18px] font-bold text-slate-800">Transaction</p>
               <svg
                 width="16"
                 height="16"
                 viewBox="0 0 16 16"
-                className={`transition-transform ${txnOpen ? "rotate-180" : ""}`}
+                className={`shrink-0 transition-transform ${txnOpen ? "rotate-180" : ""}`}
               >
                 <path d="M4 6L8 10L12 6" stroke="#8A99AD" strokeWidth="1.5" strokeLinecap="round" />
               </svg>
-            </div>
-          </button>
+            </button>
+            <FairValueControl symbol={symbol} />
+          </div>
           {txnOpen && (
             <div className="flex flex-col gap-4 border-t border-[#ebf0f5] px-4 pt-4 pb-2 md:px-6">
-              <div className="flex flex-wrap items-center gap-2">
-                <BuySellToggle
-                  side={txnDraft?.mode === "create" ? txnDraft.side : null}
-                  onSelect={(side) => setTxnDraft({ mode: "create", side })}
-                />
-                <ValuationDropdown />
-                <button
-                  type="button"
-                  className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-[10px] font-bold tracking-wide text-white uppercase"
-                >
-                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
-                    <path d="M6 2v8M2 6h8" stroke="#fff" strokeWidth="1.75" strokeLinecap="round" />
-                  </svg>
-                  Set Valuation
-                </button>
-              </div>
+              <BuySellToggle
+                side={txnDraft?.mode === "create" ? txnDraft.side : null}
+                onSelect={(side) => setTxnDraft({ mode: "create", side })}
+              />
               {(data?.transactions ?? []).map((txn) =>
                 txnDraft?.mode === "edit" && txnDraft.id === txn.id ? (
                   <EditingTransactionForm

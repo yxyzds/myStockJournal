@@ -1,24 +1,11 @@
 import { Hono } from "hono";
 import { and, eq } from "drizzle-orm";
-import type { WatchlistItem } from "@mystockjournal/shared";
+import { fairValueFromOutputs, type WatchlistItem } from "@mystockjournal/shared";
 import type { AppEnv } from "../types";
 import { db } from "../db";
 import { stocks, valuationModels } from "../db/schema";
+import { TICKER_RE, parseTicker } from "../lib/stocks";
 import { getQuotes } from "../market/quotes";
-
-/** Regex for a valid stock ticker (e.g. "AAPL", "MSFT"). */
-const TICKER_RE = /^[A-Z0-9][A-Z0-9.\-]{0,15}$/;
-
-function parseTicker(raw: string) {
-  return raw.trim().toUpperCase();
-}
-
-function fairValueFromOutputs(outputs: unknown): number | null {
-  if (!outputs || typeof outputs !== "object") return null;
-  const value = (outputs as { fairValue?: unknown }).fairValue;
-  const n = typeof value === "number" ? value : Number(value);
-  return Number.isFinite(n) ? n : null;
-}
 
 export const watchlistRoutes = new Hono<AppEnv>();
 

@@ -3,6 +3,7 @@ import { cors } from "hono/cors";
 import { env } from "./env";
 import { quotesRoutes } from "./routes/quotes";
 import { stockRoutes } from "./routes/stocks";
+import { valuationRoutes } from "./routes/valuation";
 import { watchlistRoutes } from "./routes/watchlist";
 import type { AppEnv } from "./types";
 
@@ -33,4 +34,5 @@ app.get("/me", (c) =>
 
 app.route("/watchlist", watchlistRoutes);
 app.route("/quotes", quotesRoutes);
+app.route("/stocks", valuationRoutes);
 app.route("/stocks", stockRoutes);

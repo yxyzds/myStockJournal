@@ -1,0 +1,333 @@
+import { eq } from "drizzle-orm";
+import type { DcfDrivers, PePoint, ValuationAnchors } from "@mystockjournal/shared";
+import { db } from "../db";
+import { fundamentalsCache } from "../db/schema";
+
+/**
+ * Valuation anchors come from `fundamentals_cache`. No filings vendor is wired
+ * up yet, so a small bundled dataset seeds the cache on first read. Swapping in
+ * a real SEC/vendor fetch means writing to that table — nothing here changes.
+ */
+type BundledAnchors = Omit<ValuationAnchors, "available">;
+
+/** Neutral drivers for a ticker we have no estimate for. The user must review them. */
+const FALLBACK_DRIVERS: DcfDrivers = {
+  growthY1_5: 10,
+  growthY6_10: 6,
+  termGrowth: 3,
+  wacc: 9,
+  fcfMarginY1: 15,
+  fcfMarginTerm: 18,
+};
+
+/** AAPL forward P/E by year. 2023 EPS declined, which is why its PEG breaks. */
+const AAPL_PE_HISTORY: PePoint[] = [
+  { year: 2015, pe: 12.5, growth: 7 },
+  { year: 2016, pe: 13.8, growth: 15 },
+  { year: 2017, pe: 17.4, growth: 12 },
+  { year: 2018, pe: 12.8, growth: 29 },
+  { year: 2019, pe: 21.3, growth: 12 },
+  { year: 2020, pe: 33.4, growth: 10 },
+  { year: 2021, pe: 30.1, growth: 71 },
+  { year: 2022, pe: 21.6, growth: 9 },
+  { year: 2023, pe: 28.8, growth: -3 },
+  { year: 2024, pe: 29.2, growth: 12 },
+  { year: 2025, pe: 26.1, growth: 10 },
+];
+
+const GOOGL_PE_HISTORY: PePoint[] = [
+  { year: 2015, pe: 21.4, growth: 12 },
+  { year: 2016, pe: 21.9, growth: 18 },
+  { year: 2017, pe: 24.6, growth: 26 },
+  { year: 2018, pe: 22.1, growth: 27 },
+  { year: 2019, pe: 24.3, growth: 12 },
+  { year: 2020, pe: 30.2, growth: 19 },
+  { year: 2021, pe: 26.4, growth: 91 },
+  { year: 2022, pe: 17.9, growth: -19 },
+  { year: 2023, pe: 21.6, growth: 27 },
+  { year: 2024, pe: 22.8, growth: 38 },
+  { year: 2025, pe: 20.1, growth: 14 },
+];
+
+const NVDA_PE_HISTORY: PePoint[] = [
+  { year: 2018, pe: 32.4, growth: 35 },
+  { year: 2019, pe: 24.8, growth: -33 },
+  { year: 2020, pe: 46.2, growth: 53 },
+  { year: 2021, pe: 55.1, growth: 123 },
+  { year: 2022, pe: 42.7, growth: -55 },
+  { year: 2023, pe: 61.5, growth: 288 },
+  { year: 2024, pe: 44.3, growth: 145 },
+  { year: 2025, pe: 33.8, growth: 42 },
+];
+
+const DDOG_PE_HISTORY: PePoint[] = [
+  { year: 2021, pe: 148.0, growth: 60 },
+  { year: 2022, pe: 96.4, growth: 48 },
+  { year: 2023, pe: 74.2, growth: 35 },
+  { year: 2024, pe: 68.5, growth: 28 },
+  { year: 2025, pe: 61.3, growth: 22 },
+];
+
+/** Revenue, cash, and debt in $M; share counts in millions, as filings report them. */
+const BUNDLED: Record<string, BundledAnchors> = {
+  AAPL: {
+    period: "TTM FY2025",
+    ttmRevenue: 416_000,
+    cash: 132_000,
+    debt: 98_000,
+    shares: 14_900,
+    past5YCagr: 7.5,
+    ttmEps: 6.43,
+    fwdEps: 9.38,
+    peHistory: AAPL_PE_HISTORY,
+    drivers: {
+      growthY1_5: 7,
+      growthY6_10: 4,
+      termGrowth: 2.5,
+      wacc: 8.5,
+      fcfMarginY1: 27,
+      fcfMarginTerm: 29,
+    },
+  },
+  GOOGL: {
+    period: "TTM FY2025",
+    ttmRevenue: 371_000,
+    cash: 98_000,
+    debt: 28_000,
+    shares: 12_200,
+    past5YCagr: 15.4,
+    ttmEps: 9.1,
+    fwdEps: 10.5,
+    peHistory: GOOGL_PE_HISTORY,
+    drivers: {
+      growthY1_5: 11,
+      growthY6_10: 6,
+      termGrowth: 3,
+      wacc: 8.5,
+      fcfMarginY1: 22,
+      fcfMarginTerm: 26,
+    },
+  },
+  MSFT: {
+    period: "TTM FY2026",
+    ttmRevenue: 300_000,
+    cash: 95_000,
+    debt: 60_000,
+    shares: 7450,
+    past5YCagr: 14.2,
+    ttmEps: 13.6,
+    fwdEps: 15.8,
+    peHistory: [
+      { year: 2018, pe: 24.6, growth: 18 },
+      { year: 2019, pe: 26.4, growth: 21 },
+      { year: 2020, pe: 32.1, growth: 14 },
+      { year: 2021, pe: 34.8, growth: 40 },
+      { year: 2022, pe: 26.2, growth: 16 },
+      { year: 2023, pe: 31.4, growth: -1 },
+      { year: 2024, pe: 34.6, growth: 22 },
+      { year: 2025, pe: 30.9, growth: 15 },
+    ],
+    drivers: {
+      growthY1_5: 12,
+      growthY6_10: 7,
+      termGrowth: 3,
+      wacc: 8.5,
+      fcfMarginY1: 25,
+      fcfMarginTerm: 28,
+    },
+  },
+  META: {
+    period: "TTM FY2025",
+    ttmRevenue: 195_000,
+    cash: 47_000,
+    debt: 30_000,
+    shares: 2540,
+    past5YCagr: 17.8,
+    ttmEps: 25.6,
+    fwdEps: 28.4,
+    peHistory: [
+      { year: 2018, pe: 19.6, growth: 39 },
+      { year: 2019, pe: 22.4, growth: -16 },
+      { year: 2020, pe: 26.1, growth: 58 },
+      { year: 2021, pe: 23.4, growth: 36 },
+      { year: 2022, pe: 12.8, growth: -38 },
+      { year: 2023, pe: 22.6, growth: 73 },
+      { year: 2024, pe: 25.9, growth: 60 },
+      { year: 2025, pe: 23.3, growth: 12 },
+    ],
+    drivers: {
+      growthY1_5: 12,
+      growthY6_10: 6,
+      termGrowth: 3,
+      wacc: 9,
+      fcfMarginY1: 26,
+      fcfMarginTerm: 28,
+    },
+  },
+  NVDA: {
+    period: "TTM FY2026",
+    ttmRevenue: 165_000,
+    cash: 43_000,
+    debt: 10_000,
+    shares: 24_800,
+    past5YCagr: 64.8,
+    ttmEps: 3.1,
+    fwdEps: 4.5,
+    peHistory: NVDA_PE_HISTORY,
+    drivers: {
+      growthY1_5: 28,
+      growthY6_10: 10,
+      termGrowth: 3.5,
+      wacc: 10,
+      fcfMarginY1: 45,
+      fcfMarginTerm: 38,
+    },
+  },
+  // The figures the design spec's DCF walkthrough reconciles against.
+  DDOG: {
+    period: "TTM Q2 FY2026",
+    ttmRevenue: 3966.7,
+    cash: 3200,
+    debt: 800,
+    shares: 325,
+    past5YCagr: 39.2,
+    ttmEps: 1.2,
+    fwdEps: 1.85,
+    peHistory: DDOG_PE_HISTORY,
+    drivers: {
+      growthY1_5: 20,
+      growthY6_10: 12,
+      termGrowth: 4,
+      wacc: 9,
+      fcfMarginY1: 25,
+      fcfMarginTerm: 33,
+    },
+  },
+};
+
+function unavailableAnchors(): ValuationAnchors {
+  return {
+    available: false,
+    period: null,
+    ttmRevenue: 0,
+    cash: 0,
+    debt: 0,
+    shares: 0,
+    past5YCagr: null,
+    ttmEps: null,
+    fwdEps: null,
+    peHistory: [],
+    drivers: FALLBACK_DRIVERS,
+  };
+}
+
+function num(value: unknown): number | null {
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function asPeHistory(value: unknown): PePoint[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((row) => {
+      if (!row || typeof row !== "object") return null;
+      const point = row as { year?: unknown; pe?: unknown; growth?: unknown };
+      const year = num(point.year);
+      const pe = num(point.pe);
+      const growth = num(point.growth);
+      if (year == null || pe == null || growth == null) return null;
+      return { year, pe, growth };
+    })
+    .filter((point): point is PePoint => point != null)
+    .sort((a, b) => a.year - b.year);
+}
+
+function asDrivers(value: unknown): DcfDrivers {
+  const row = (value && typeof value === "object" ? value : {}) as Record<string, unknown>;
+  const pick = (key: keyof DcfDrivers) => num(row[key]) ?? FALLBACK_DRIVERS[key];
+  return {
+    growthY1_5: pick("growthY1_5"),
+    growthY6_10: pick("growthY6_10"),
+    termGrowth: pick("termGrowth"),
+    wacc: pick("wacc"),
+    fcfMarginY1: pick("fcfMarginY1"),
+    fcfMarginTerm: pick("fcfMarginTerm"),
+  };
+}
+
+/** A cached payload is only usable if the figures the EV bridge divides by are present. */
+function asAnchors(payload: unknown, period: string | null): ValuationAnchors | null {
+  if (!payload || typeof payload !== "object") return null;
+  const row = payload as Record<string, unknown>;
+  const ttmRevenue = num(row.ttmRevenue);
+  const shares = num(row.shares);
+  if (ttmRevenue == null || ttmRevenue <= 0 || shares == null || shares <= 0) return null;
+
+  return {
+    available: true,
+    period,
+    ttmRevenue,
+    cash: num(row.cash) ?? 0,
+    debt: num(row.debt) ?? 0,
+    shares,
+    past5YCagr: num(row.past5YCagr),
+    ttmEps: num(row.ttmEps),
+    fwdEps: num(row.fwdEps),
+    peHistory: asPeHistory(row.peHistory),
+    drivers: asDrivers(row.drivers),
+  };
+}
+
+async function readCache(ticker: string): Promise<ValuationAnchors | null> {
+  try {
+    const rows = await db
+      .select()
+      .from(fundamentalsCache)
+      .where(eq(fundamentalsCache.ticker, ticker))
+      .limit(1);
+    if (!rows[0]) return null;
+    return asAnchors(rows[0].payload, rows[0].period);
+  } catch (error) {
+    console.warn("fundamentals cache read failed", error);
+    return null;
+  }
+}
+
+async function writeCache(ticker: string, anchors: BundledAnchors) {
+  try {
+    const { period, ...payload } = anchors;
+    await db
+      .insert(fundamentalsCache)
+      .values({ ticker, payload, period, fetchedAt: new Date() })
+      .onConflictDoUpdate({
+        target: fundamentalsCache.ticker,
+        set: { payload, period, fetchedAt: new Date() },
+      });
+  } catch (error) {
+    console.warn("fundamentals cache write failed", error);
+  }
+}
+
+/**
+ * Anchors for a ticker. Returns `available: false` when nothing is known, which
+ * tells the valuation page to unlock the anchor fields for manual entry.
+ */
+export async function getAnchors(rawTicker: string): Promise<ValuationAnchors> {
+  const ticker = rawTicker.trim().toUpperCase();
+
+  const cached = await readCache(ticker);
+  if (cached) return cached;
+
+  const bundled = BUNDLED[ticker];
+  if (!bundled) return unavailableAnchors();
+
+  await writeCache(ticker, bundled);
+  return { available: true, ...bundled };
+}
+
+/** Overwrite the anchors for a ticker, e.g. when the user corrects a figure. */
+export async function saveAnchors(rawTicker: string, anchors: ValuationAnchors) {
+  const ticker = rawTicker.trim().toUpperCase();
+  const { available: _available, ...rest } = anchors;
+  await writeCache(ticker, rest);
+}

@@ -3,20 +3,8 @@ import { and, asc, eq, inArray } from "drizzle-orm";
 import type { JournalEntry, JournalSnapshot, Quote, StockDetail, StockTransaction } from "@mystockjournal/shared";
 import type { AppEnv } from "../types";
 import { db } from "../db";
-import { decisions, journalEntries, stocks } from "../db/schema";
-import { getQuotes } from "../market/quotes";
-
-const TICKER_RE = /^[A-Z0-9][A-Z0-9.\-]{0,15}$/;
-
-function parseTicker(raw: string) {
-  return raw.trim().toUpperCase();
-}
-
-function num(value: unknown): number | null {
-  if (value == null) return null;
-  const n = typeof value === "number" ? value : Number(value);
-  return Number.isFinite(n) ? n : null;
-}
+import { decisions, journalEntries } from "../db/schema";
+import { getOrCreateStock, num } from "../lib/stocks";
 
 function todayNyDate() {
   return new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
@@ -43,34 +31,6 @@ function asSnapshot(value: unknown): JournalSnapshot | null {
 function snapshotFromQuote(quote: Quote | null): JournalSnapshot | null {
   if (!quote) return null;
   return { price: quote.price, currency: quote.currency, pe: null };
-}
-
-async function getOrCreateStock(userId: string, rawTicker: string) {
-  const ticker = parseTicker(rawTicker);
-  if (!TICKER_RE.test(ticker)) return { error: "Invalid ticker" as const, status: 400 as const };
-
-  const [quote] = await getQuotes([ticker]);
-  if (!quote) return { error: "Ticker not found" as const, status: 404 as const };
-
-  const existing = await db
-    .select()
-    .from(stocks)
-    .where(and(eq(stocks.userId, userId), eq(stocks.ticker, ticker)))
-    .limit(1);
-
-  if (existing[0]) return { stock: existing[0], quote };
-
-  const inserted = await db
-    .insert(stocks)
-    .values({
-      userId,
-      ticker,
-      name: quote.name,
-      watched: false,
-    })
-    .returning();
-
-  return { stock: inserted[0], quote };
 }
 
 function toJournal(row: typeof journalEntries.$inferSelect): JournalEntry {
