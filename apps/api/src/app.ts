@@ -2,6 +2,8 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { env } from "./env";
 import { quotesRoutes } from "./routes/quotes";
+import { stockRoutes } from "./routes/stocks";
+import { valuationRoutes } from "./routes/valuation";
 import { watchlistRoutes } from "./routes/watchlist";
 import type { AppEnv } from "./types";
 
@@ -32,3 +34,7 @@ app.get("/me", (c) =>
 
 app.route("/watchlist", watchlistRoutes);
 app.route("/quotes", quotesRoutes);
+// Two routers share the /stocks prefix so valuation can live in its own file.
+// Their paths do not overlap; the more specific one is mounted first anyway.
+app.route("/stocks", valuationRoutes);
+app.route("/stocks", stockRoutes);
