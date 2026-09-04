@@ -4,6 +4,11 @@ import { searchQuotes } from "../market/quotes";
 
 export const quotesRoutes = new Hono<AppEnv>();
 
+/**
+ * GET /quotes/search?q= — ticker and company-name lookup for the add-stock box.
+ * An empty query is an empty result, not an error, so the field can call this on
+ * every keystroke. Vendor failures surface as 502 rather than crashing the page.
+ */
 quotesRoutes.get("/search", async (c) => {
   const q = (c.req.query("q") ?? "").trim();
   if (q.length < 1) return c.json({ items: [] });

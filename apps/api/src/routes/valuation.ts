@@ -97,7 +97,10 @@ async function loadWorkbenchContext(userId: string, rawTicker: string) {
   return { ...found, anchors, ctx };
 }
 
-/** Everything the valuation page renders: anchors, the live price, and saved worksheets. */
+/**
+ * GET /stocks/:ticker/valuation — everything the valuation page renders in one
+ * call: anchors, the live price, and saved worksheets.
+ */
 valuationRoutes.get("/:ticker/valuation", async (c) => {
   const loaded = await loadWorkbenchContext(c.get("userId"), c.req.param("ticker"));
   if ("error" in loaded) return c.json({ error: loaded.error }, loaded.status);
@@ -118,9 +121,10 @@ valuationRoutes.get("/:ticker/valuation", async (c) => {
 });
 
 /**
- * Save the live worksheet for one method. There is at most one per stock and
- * method; history lives in snapshots instead. Outputs are always recomputed
- * server-side so a stored fair value can never disagree with its assumptions.
+ * PUT /stocks/:ticker/valuation/:method — save the live worksheet for one
+ * method. There is at most one per stock and method; history lives in snapshots
+ * instead. Outputs are always recomputed server-side so a stored fair value can
+ * never disagree with its assumptions.
  */
 valuationRoutes.put("/:ticker/valuation/:method", async (c) => {
   const method = parseMethod(c.req.param("method"));
@@ -199,7 +203,11 @@ valuationRoutes.put("/:ticker/valuation/:method", async (c) => {
   return c.json({ model: toModel(saved) });
 });
 
-/** Promote a saved worksheet to My Fair Value — the number the watch list shows. */
+/**
+ * POST /stocks/:ticker/valuation/:method/my-fair-value — promote an already
+ * saved worksheet to My Fair Value, the number the watch list shows. Methods
+ * without a fair value (reverse DCF) are rejected.
+ */
 valuationRoutes.post("/:ticker/valuation/:method/my-fair-value", async (c) => {
   const method = parseMethod(c.req.param("method"));
   if (!method) return c.json({ error: "Unknown valuation method" }, 404);
@@ -236,6 +244,11 @@ valuationRoutes.post("/:ticker/valuation/:method/my-fair-value", async (c) => {
   return c.json({ model: toModel(updated) });
 });
 
+/**
+ * DELETE /stocks/:ticker/valuation/:method/my-fair-value — stop using this
+ * method as My Fair Value. The worksheet is kept; only the flag is cleared, so
+ * the watch list falls back to showing no fair value.
+ */
 valuationRoutes.delete("/:ticker/valuation/:method/my-fair-value", async (c) => {
   const method = parseMethod(c.req.param("method"));
   if (!method) return c.json({ error: "Unknown valuation method" }, 404);
@@ -260,8 +273,9 @@ valuationRoutes.delete("/:ticker/valuation/:method/my-fair-value", async (c) => 
 });
 
 /**
- * Freeze the saved worksheet so a decision can keep showing the fair value that
- * informed it, even after the live model is edited.
+ * POST /stocks/:ticker/valuation/:method/snapshot — freeze the saved worksheet
+ * so a decision can keep showing the fair value that informed it, even after
+ * the live model is edited.
  */
 valuationRoutes.post("/:ticker/valuation/:method/snapshot", async (c) => {
   const method = parseMethod(c.req.param("method"));
@@ -296,8 +310,9 @@ valuationRoutes.post("/:ticker/valuation/:method/snapshot", async (c) => {
 });
 
 /**
- * Current multiples for the peers a user picked, so the P/E chart can plot them.
- * A peer we have no EPS for comes back with nulls rather than being dropped.
+ * GET /stocks/:ticker/valuation/pe/peers?tickers= — current multiples for the
+ * peers a user picked, so the P/E chart can plot them. Capped at MAX_PEERS. A
+ * peer we have no EPS for comes back with nulls rather than being dropped.
  */
 valuationRoutes.get("/:ticker/valuation/pe/peers", async (c) => {
   const requested = (c.req.query("tickers") ?? "")
@@ -334,6 +349,11 @@ valuationRoutes.get("/:ticker/valuation/pe/peers", async (c) => {
   return c.json({ peers });
 });
 
+/**
+ * DELETE /stocks/:ticker/valuation/:method — discard a worksheet. Registered
+ * after the more specific `/pe/peers` and `/my-fair-value` paths so it cannot
+ * shadow them.
+ */
 valuationRoutes.delete("/:ticker/valuation/:method", async (c) => {
   const method = parseMethod(c.req.param("method"));
   if (!method) return c.json({ error: "Unknown valuation method" }, 404);

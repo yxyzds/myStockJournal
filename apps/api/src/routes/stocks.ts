@@ -58,6 +58,10 @@ function toTransaction(row: typeof decisions.$inferSelect): StockTransaction | n
   };
 }
 
+/**
+ * Validate a buy/sell request body, shared by the create and edit routes.
+ * Returns `price`/`qty` as strings because the columns are Postgres numerics.
+ */
 function parseTxnBody(body: unknown):
   | { error: string }
   | { type: "buy" | "sell"; date: string; price: string; qty: string; rationale: string } {
@@ -90,6 +94,11 @@ function parseTxnBody(body: unknown):
 
 export const stockRoutes = new Hono<AppEnv>();
 
+/**
+ * GET /stocks/:ticker — everything the stock detail page renders in one call:
+ * the quote, unarchived notes, and buy/sell history. Opening a stock the user
+ * has never tracked creates an unwatched row rather than 404ing.
+ */
 stockRoutes.get("/:ticker", async (c) => {
   const found = await getOrCreateStock(c.get("userId"), c.req.param("ticker"));
   if ("error" in found) return c.json({ error: found.error }, found.status);
@@ -129,6 +138,11 @@ stockRoutes.get("/:ticker", async (c) => {
   return c.json(payload);
 });
 
+/**
+ * POST /stocks/:ticker/journal — add a note. Dated by the US Eastern calendar
+ * day and stamped with the quote at save time, so the note keeps the price the
+ * user was looking at when they wrote it.
+ */
 stockRoutes.post("/:ticker/journal", async (c) => {
   const found = await getOrCreateStock(c.get("userId"), c.req.param("ticker"));
   if ("error" in found) return c.json({ error: found.error }, found.status);
@@ -151,6 +165,10 @@ stockRoutes.post("/:ticker/journal", async (c) => {
   return c.json({ entry: toJournal(inserted[0]) }, 201);
 });
 
+/**
+ * PATCH /stocks/:ticker/journal/:entryId — rewrite a note's text. The original
+ * date and market snapshot are left alone. Archived notes are not editable.
+ */
 stockRoutes.patch("/:ticker/journal/:entryId", async (c) => {
   const found = await getOrCreateStock(c.get("userId"), c.req.param("ticker"));
   if ("error" in found) return c.json({ error: found.error }, found.status);
@@ -176,6 +194,7 @@ stockRoutes.patch("/:ticker/journal/:entryId", async (c) => {
   return c.json({ entry: toJournal(updated[0]) });
 });
 
+/** DELETE /stocks/:ticker/journal/:entryId — permanently remove a note. */
 stockRoutes.delete("/:ticker/journal/:entryId", async (c) => {
   const found = await getOrCreateStock(c.get("userId"), c.req.param("ticker"));
   if ("error" in found) return c.json({ error: found.error }, found.status);
@@ -195,6 +214,10 @@ stockRoutes.delete("/:ticker/journal/:entryId", async (c) => {
   return c.json({ ok: true });
 });
 
+/**
+ * POST /stocks/:ticker/transactions — record a buy or sell. Stored in
+ * `decisions` alongside thesis updates, which this route cannot create.
+ */
 stockRoutes.post("/:ticker/transactions", async (c) => {
   const found = await getOrCreateStock(c.get("userId"), c.req.param("ticker"));
   if ("error" in found) return c.json({ error: found.error }, found.status);
@@ -219,6 +242,10 @@ stockRoutes.post("/:ticker/transactions", async (c) => {
   return c.json({ transaction: txn }, 201);
 });
 
+/**
+ * PATCH /stocks/:ticker/transactions/:id — edit a buy or sell. The type filter
+ * keeps this route from reaching a thesis update, which has no price or qty.
+ */
 stockRoutes.patch("/:ticker/transactions/:id", async (c) => {
   const found = await getOrCreateStock(c.get("userId"), c.req.param("ticker"));
   if ("error" in found) return c.json({ error: found.error }, found.status);
@@ -251,6 +278,7 @@ stockRoutes.patch("/:ticker/transactions/:id", async (c) => {
   return c.json({ transaction: txn });
 });
 
+/** DELETE /stocks/:ticker/transactions/:id — remove a buy or sell, thesis updates excluded. */
 stockRoutes.delete("/:ticker/transactions/:id", async (c) => {
   const found = await getOrCreateStock(c.get("userId"), c.req.param("ticker"));
   if ("error" in found) return c.json({ error: found.error }, found.status);
