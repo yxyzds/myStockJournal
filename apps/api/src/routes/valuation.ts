@@ -5,7 +5,9 @@ import {
   buildValuation,
   fairValueFromOutputs,
   isImplementedMethod,
+  type ImplementedMethod,
   type PeerMultiple,
+  type ValuationAnchors,
   type ValuationAssumptions,
   type ValuationContext,
   type ValuationMethod,
@@ -84,6 +86,41 @@ function findModel(userId: string, stockId: string, method: ValuationMethod) {
     .limit(1);
 }
 
+/**
+ * Filed figures belong to the server, not the request body. The valuation page
+ * renders them read-only, so a body that disagrees is stale or tampered with.
+ * The exception is a ticker no filing covered, where typing the numbers in is
+ * the only way to value it at all.
+ */
+function withServerAnchors(
+  method: ImplementedMethod,
+  rawAssumptions: unknown,
+  anchors: ValuationAnchors,
+): unknown {
+  if (!anchors.available) return rawAssumptions;
+
+  const body = (
+    rawAssumptions && typeof rawAssumptions === "object" ? rawAssumptions : {}
+  ) as Record<string, unknown>;
+
+  if (method === "pe") {
+    // Mirrors peInputsFromAnchors, so a saved model matches what the page showed.
+    return {
+      ...body,
+      ttmEps: anchors.ttmEps ?? 0,
+      fwdEps: anchors.fwdEps ?? anchors.ttmEps ?? 0,
+    };
+  }
+
+  return {
+    ...body,
+    ttmRevenue: anchors.ttmRevenue,
+    cash: anchors.cash,
+    debt: anchors.debt,
+    shares: anchors.shares,
+  };
+}
+
 /** Resolve the ticker, then load the anchors and price the models are computed against. */
 async function loadWorkbenchContext(userId: string, rawTicker: string) {
   const found = await getOrCreateStock(userId, rawTicker);
@@ -135,14 +172,15 @@ valuationRoutes.put("/:ticker/valuation/:method", async (c) => {
 
   const loaded = await loadWorkbenchContext(c.get("userId"), c.req.param("ticker"));
   if ("error" in loaded) return c.json({ error: loaded.error }, loaded.status);
-  const { stock, ctx } = loaded;
+  const { stock, ctx, anchors } = loaded;
 
   const body = (await c.req.json().catch(() => null)) as {
     assumptions?: unknown;
     setAsMyFairValue?: unknown;
   } | null;
 
-  const built = buildValuation(method, body?.assumptions, ctx);
+  const assumptions = withServerAnchors(method, body?.assumptions, anchors);
+  const built = buildValuation(method, assumptions, ctx);
   if ("error" in built) return c.json({ error: built.error }, 400);
 
   const setAsMyFairValue = body?.setAsMyFairValue === true;

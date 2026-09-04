@@ -1,5 +1,6 @@
 "use client";
 
+import type { FilingRef } from "@mystockjournal/shared";
 import { useState, type ReactNode } from "react";
 
 export const fmtMoneyM = (v: number) => `$${Math.round(v).toLocaleString()}M`;
@@ -149,12 +150,16 @@ export function DriverField({
   );
 }
 
-/** A prefetched figure. Read-only until the user unlocks the anchor panel. */
+/**
+ * A figure read out of a filing. Read-only by design — these are reported facts,
+ * not judgments. `editable` is only set when no filing covered the ticker, which
+ * is the one case where the user has to supply the numbers.
+ */
 export function AnchorRow({
   label,
   display,
   note,
-  unlocked,
+  editable: allowEdit,
   value,
   limits,
   onChange,
@@ -162,12 +167,12 @@ export function AnchorRow({
   label: string;
   display: string;
   note?: string;
-  unlocked?: boolean;
+  editable?: boolean;
   value?: number;
   limits?: NumberLimits;
   onChange?: (value: number) => void;
 }) {
-  const editable = unlocked && value != null && limits && onChange;
+  const editable = allowEdit && value != null && limits && onChange;
 
   return (
     <div className="flex items-center justify-between gap-3 border-b border-slate-200 py-[7px] last:border-0">
@@ -187,6 +192,59 @@ export function AnchorRow({
         <span className="font-mono text-[11px] font-semibold text-slate-500 tabular-nums">{display}</span>
       )}
     </div>
+  );
+}
+
+/**
+ * Where the anchor figures came from, with links to the filings themselves so
+ * the user can check any number against the source. Degrades to a plain note
+ * when the anchors came from the bundled dataset and have no filing behind them.
+ */
+export function FilingSourceNote({
+  period,
+  filings,
+}: {
+  period: string | null;
+  filings: FilingRef[];
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <p className="text-[10px] leading-snug text-slate-400">
+        Read from SEC filings — not editable{period ? ` · ${period}` : ""}
+      </p>
+      {filings.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {filings.map((filing) => (
+            <a
+              key={filing.url}
+              href={filing.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              title={`${filing.form} for the period ending ${filing.reportDate || "unknown"}`}
+              className="flex items-center gap-1 rounded-[5px] border border-slate-200 bg-white px-1.5 py-[3px] text-[9px] font-semibold text-slate-500 hover:border-blue-300 hover:text-blue-600"
+            >
+              <span>{filing.form}</span>
+              <span className="font-mono text-slate-400">{filing.filingDate}</span>
+              <ExternalLinkIcon />
+            </a>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ExternalLinkIcon() {
+  return (
+    <svg width="8" height="8" viewBox="0 0 10 10" fill="none" aria-hidden className="shrink-0">
+      <path
+        d="M3.5 1.5h5v5M8.5 1.5L4 6M6.5 8.5h-5v-5"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
   );
 }
 
