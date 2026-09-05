@@ -17,4 +17,7 @@ export const env = {
   localUserName: process.env.DEV_USER_NAME ?? "Dev",
   /** SEC rejects requests without a contact address. See https://www.sec.gov/os/webmaster-faq. */
   secUserAgent: process.env.SEC_USER_AGENT ?? "",
+  /** Optional — Trade review returns 503 without it. */
+  openaiApiKey: process.env.OPENAI_API_KEY ?? "",
+  openaiModel: process.env.OPENAI_MODEL ?? "gpt-4o-mini",
 };
