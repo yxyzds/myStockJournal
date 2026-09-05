@@ -45,6 +45,8 @@ export const stocks = pgTable(
     name: text("name").notNull(),
     thesis: text("thesis"),
     watched: boolean("watched").notNull().default(true),
+    /** Latest stock-level Analyze result; overwritten on Re-run. */
+    tradeReview: jsonb("trade_review"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

@@ -1,11 +1,19 @@
 import { Hono } from "hono";
 import { and, asc, eq, inArray } from "drizzle-orm";
-import type { JournalEntry, JournalSnapshot, Quote, StockDetail, StockTransaction } from "@mystockjournal/shared";
+import {
+  isTradeReviewGrade,
+  type JournalEntry,
+  type JournalSnapshot,
+  type Quote,
+  type StockDetail,
+  type StockTransaction,
+  type TradeReview,
+} from "@mystockjournal/shared";
 import { reviewTradeJournal } from "../ai/trade-review";
 import { env } from "../env";
 import type { AppEnv } from "../types";
 import { db } from "../db";
-import { decisions, journalEntries } from "../db/schema";
+import { decisions, journalEntries, stocks } from "../db/schema";
 import { getOrCreateStock, num } from "../lib/stocks";
 
 function todayNyDate() {
@@ -28,6 +36,15 @@ function asSnapshot(value: unknown): JournalSnapshot | null {
     currency: typeof row.currency === "string" ? row.currency : "USD",
     pe: typeof row.pe === "string" ? row.pe : null,
   };
+}
+
+function asTradeReview(value: unknown): TradeReview | null {
+  if (!value || typeof value !== "object") return null;
+  const row = value as { grade?: unknown; blurb?: unknown; reviewedAt?: unknown };
+  if (!isTradeReviewGrade(row.grade)) return null;
+  if (typeof row.blurb !== "string" || !row.blurb.trim()) return null;
+  if (typeof row.reviewedAt !== "string" || !row.reviewedAt) return null;
+  return { grade: row.grade, blurb: row.blurb, reviewedAt: row.reviewedAt };
 }
 
 function snapshotFromQuote(quote: Quote | null): JournalSnapshot | null {
@@ -135,6 +152,7 @@ stockRoutes.get("/:ticker", async (c) => {
     quote,
     journal: journalRows.map(toJournal),
     transactions: decisionRows.map(toTransaction).filter((row): row is StockTransaction => row != null),
+    tradeReview: asTradeReview(stock.tradeReview),
   };
 
   return c.json(payload);
@@ -352,6 +370,10 @@ stockRoutes.post("/:ticker/ai/trade-review", async (c) => {
       journal,
       transactions,
     });
+    await db
+      .update(stocks)
+      .set({ tradeReview: review, updatedAt: new Date() })
+      .where(and(eq(stocks.id, stock.id), eq(stocks.userId, stock.userId)));
     return c.json({ review });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Trade review failed";

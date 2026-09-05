@@ -1,3 +1,4 @@
+import type { TradeReview } from "./ai/trade-review";
 import type { Quote } from "./market";
 
 export type DecisionType = "buy" | "sell" | "thesis_update";
@@ -63,4 +64,5 @@ export type StockDetail = {
   quote: Quote | null;
   journal: JournalEntry[];
   transactions: StockTransaction[];
+  tradeReview: TradeReview | null;
 };

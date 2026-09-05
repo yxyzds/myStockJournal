@@ -11,7 +11,6 @@ import {
   type StockDetail,
   type StockTransaction,
   type TradeReview,
-  type TradeReviewGrade,
   type ValuationMethod,
   type ValuationWorkbench,
 } from "@mystockjournal/shared";
@@ -88,6 +87,21 @@ function PencilIcon() {
         strokeWidth="1.3"
         strokeLinejoin="round"
       />
+    </svg>
+  );
+}
+
+function RobotIcon({ size = 17 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden>
+      <line x1="12" y1="2" x2="12" y2="5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      <circle cx="12" cy="2" r="1" fill="currentColor" />
+      <rect x="4" y="5" width="16" height="11" rx="3" stroke="currentColor" strokeWidth="1.5" />
+      <circle cx="9" cy="10.5" r="1.5" fill="currentColor" />
+      <circle cx="15" cy="10.5" r="1.5" fill="currentColor" />
+      <path d="M9 13.5h6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+      <path d="M8 16v2M16 16v2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      <path d="M6 18h12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
     </svg>
   );
 }
@@ -656,55 +670,21 @@ function FairValueControl({ symbol }: { symbol: string }) {
   );
 }
 
-const GRADE_STYLE: Record<
-  TradeReviewGrade,
-  { ring: string; fill: string; text: string; label: string }
-> = {
-  Clownery: {
-    ring: "#ef4444",
-    fill: "linear-gradient(145deg, #fef2f2 0%, #fee2e2 100%)",
-    text: "text-red-700",
-    label: "text-red-600",
-  },
-  Copeium: {
-    ring: "#f97316",
-    fill: "linear-gradient(145deg, #fff7ed 0%, #ffedd5 100%)",
-    text: "text-orange-700",
-    label: "text-orange-600",
-  },
-  Midtake: {
-    ring: "#64748b",
-    fill: "linear-gradient(145deg, #f8fafc 0%, #e2e8f0 100%)",
-    text: "text-slate-700",
-    label: "text-slate-500",
-  },
-  Based: {
-    ring: "#2563eb",
-    fill: "linear-gradient(145deg, #eff6ff 0%, #dbeafe 100%)",
-    text: "text-blue-800",
-    label: "text-blue-600",
-  },
-  Oracle: {
-    ring: "#059669",
-    fill: "linear-gradient(145deg, #ecfdf5 0%, #d1fae5 100%)",
-    text: "text-emerald-800",
-    label: "text-emerald-600",
-  },
-};
-
 function RateMyTransactionBar({
   ticker,
   journalCount,
+  review,
+  onReview,
 }: {
   ticker: string;
   journalCount: number;
+  review: TradeReview | null;
+  onReview: (review: TradeReview) => void;
 }) {
-  const [review, setReview] = useState<TradeReview | null>(null);
-
   const rateMutation = useMutation({
     mutationFn: () =>
       api<{ review: TradeReview }>(`/stocks/${ticker}/ai/trade-review`, { method: "POST" }),
-    onSuccess: (data) => setReview(data.review),
+    onSuccess: (data) => onReview(data.review),
   });
 
   const errorMessage =
@@ -714,101 +694,67 @@ function RateMyTransactionBar({
         ? rateMutation.error.message
         : null;
 
+  const analyzing = rateMutation.isPending;
+
   if (!review) {
     return (
-      <div className="flex w-full flex-col items-center gap-3 border-t border-[#ebf0f5] pt-[22px] pb-6">
-        <div className="relative flex items-center justify-center">
-          {!rateMutation.isPending && (
-            <>
-              <div
-                className="pointer-events-none absolute size-[76px] rounded-full bg-blue-600"
-                style={{ animation: "rateRipple 2s ease-out infinite" }}
-              />
-              <div
-                className="pointer-events-none absolute size-[76px] rounded-full bg-blue-600"
-                style={{ animation: "rateRipple 2s ease-out infinite 0.7s" }}
-              />
-            </>
-          )}
-          <button
-            type="button"
-            disabled={rateMutation.isPending || journalCount === 0}
-            onClick={() => rateMutation.mutate()}
-            className="relative flex size-[76px] items-center justify-center rounded-full text-white shadow-[0_6px_24px_rgba(37,99,235,0.35)] transition-transform hover:scale-[1.07] active:scale-95 disabled:opacity-60 disabled:hover:scale-100"
-            style={{ background: "linear-gradient(145deg, #1e40af 0%, #2563eb 55%, #3b82f6 100%)" }}
-            aria-label="Rate my journal"
-          >
-            {rateMutation.isPending ? (
-              <span className="text-[11px] font-bold tracking-wide">…</span>
-            ) : (
-              <svg width="26" height="26" viewBox="0 0 20 20" fill="currentColor" aria-hidden>
-                <path d="M10 2l2.4 5 5.6.8-4 3.9.9 5.5L10 14.5l-4.9 2.7.9-5.5L2 7.8l5.6-.8L10 2z" />
-              </svg>
-            )}
-          </button>
+      <div className="flex w-full items-center justify-between gap-3 border-t border-[#ebf0f5] px-4 py-[18px] md:px-6">
+        <div className="flex min-w-0 flex-col gap-0.5">
+          <span className="text-[13px] font-semibold text-[#1e293b]">Rate My Transaction</span>
+          <span className="text-[11px] text-[#94a3b8]">AI analysis of this trade</span>
+          {errorMessage && <p className="text-[11px] font-medium text-red-500">{errorMessage}</p>}
         </div>
-        <div className="flex flex-col items-center gap-0.5 px-6">
-          <span className="text-[13px] font-semibold tracking-tight text-slate-800">
-            {rateMutation.isPending ? "Judging your notes…" : "Rate My Journal"}
+        <button
+          type="button"
+          disabled={analyzing || journalCount === 0}
+          onClick={() => rateMutation.mutate()}
+          className="flex shrink-0 items-center gap-2 rounded-[10px] px-4 py-[9px] text-white disabled:opacity-60"
+          style={{
+            background: analyzing ? "#3b5fc0" : "linear-gradient(135deg, #1e40af 0%, #2563eb 100%)",
+            boxShadow: "0 2px 10px rgba(37,99,235,0.28), 0 1px 3px rgba(15,23,42,0.1)",
+          }}
+        >
+          <RobotIcon size={17} />
+          <span className="text-[12px] font-semibold whitespace-nowrap">
+            {analyzing ? "Analyzing…" : "Analyze"}
           </span>
-          <span className="text-center text-[11px] text-slate-400">
-            {journalCount === 0
-              ? "Write a journal entry first — AI needs something to roast"
-              : "AI grades your journal · Clownery → Oracle"}
-          </span>
-          {errorMessage && (
-            <p className="mt-1 text-center text-[11px] font-medium text-red-500">{errorMessage}</p>
-          )}
-        </div>
+        </button>
       </div>
     );
   }
 
-  const style = GRADE_STYLE[review.grade];
-
   return (
-    <div className="flex w-full flex-col items-center gap-3 border-t border-[#ebf0f5] pt-[22px] pb-6">
-      <div className="relative flex items-center justify-center">
+    <div className="w-full border-t border-[#ebf0f5] px-4 py-[18px] md:px-6">
+      <div className="flex items-center gap-3.5">
         <div
-          className="flex size-[76px] flex-col items-center justify-center rounded-full px-1"
+          className="flex h-[54px] min-w-[54px] shrink-0 items-center justify-center rounded-xl px-2"
           style={{
-            background: style.fill,
-            boxShadow: `0 0 0 3px ${style.ring}, 0 6px 20px rgba(15,23,42,0.12)`,
+            background: "linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)",
+            boxShadow: "0 0 0 1.5px #93c5fd",
           }}
         >
-          <span className={`text-center text-[11px] leading-tight font-bold ${style.text}`}>
+          <span className="text-center text-[11px] leading-tight font-bold text-[#1e40af]">
             {review.grade}
           </span>
         </div>
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
+          <div className="flex items-center gap-1.5 text-[#94a3b8]">
+            <RobotIcon size={12} />
+            <span className="text-[9px] font-bold tracking-widest uppercase">AI Verdict</span>
+          </div>
+          <p className="text-[12px] leading-[1.5] font-medium text-[#334155]">{review.blurb}</p>
+          {errorMessage && <p className="text-[11px] font-medium text-red-500">{errorMessage}</p>}
+        </div>
         <button
           type="button"
-          title="Re-rate"
-          disabled={rateMutation.isPending}
-          onClick={() => {
-            setReview(null);
-            rateMutation.mutate();
-          }}
-          className="absolute -top-0.5 -right-0.5 flex size-[22px] items-center justify-center rounded-full border border-slate-200 bg-white text-slate-400 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-600 disabled:opacity-50"
+          title="Re-analyze"
+          disabled={analyzing}
+          onClick={() => rateMutation.mutate()}
+          className="flex shrink-0 items-center gap-1.5 rounded-[7px] border border-[#e2e8f0] px-2.5 py-1.5 text-[#94a3b8] hover:border-[#93c5fd] hover:bg-[#eff6ff] hover:text-[#2563eb] disabled:opacity-50"
         >
-          <svg width="11" height="11" viewBox="0 0 20 20" fill="none" aria-hidden>
-            <path
-              d="M10 2l2.4 5 5.6.8-4 3.9.9 5.5L10 14.5l-4.9 2.7.9-5.5L2 7.8l5.6-.8L10 2z"
-              stroke="currentColor"
-              strokeWidth="1.4"
-            />
-          </svg>
+          <RobotIcon size={12} />
+          <span className="text-[11px] font-medium">{analyzing ? "Analyzing…" : "Re-run"}</span>
         </button>
-      </div>
-      <div className="flex flex-col items-center gap-1">
-        <span className={`text-[10px] font-bold tracking-widest uppercase ${style.label}`}>
-          {review.grade}
-        </span>
-        <p className="max-w-[320px] px-6 text-center text-[13px] font-medium text-slate-700">
-          {review.blurb}
-        </p>
-        {errorMessage && (
-          <p className="mt-1 text-center text-[11px] font-medium text-red-500">{errorMessage}</p>
-        )}
       </div>
     </div>
   );
@@ -901,6 +847,7 @@ export function StockDetail({ ticker }: { ticker: string }) {
   });
 
   const data = detailQuery.data;
+  const tradeReview = data?.tradeReview ?? null;
   const headerDate =
     data?.journal.at(-1)?.date ?? data?.transactions.at(-1)?.date ?? null;
 
@@ -953,15 +900,15 @@ export function StockDetail({ ticker }: { ticker: string }) {
               {data?.journal.length ?? 0} {(data?.journal.length ?? 0) === 1 ? "entry" : "entries"}
             </span>
           </div>
-          {data?.journal.map((entry, i) => (
-            <JournalCard
-              key={entry.id}
-              entry={entry}
-              index={i}
-              onDelete={() => deleteJournal.mutate(entry.id)}
-              onSave={(text) => updateJournal.mutateAsync({ id: entry.id, text })}
-            />
-          ))}
+            {data?.journal.map((entry, i) => (
+              <JournalCard
+                key={entry.id}
+                entry={entry}
+                index={i}
+                onDelete={() => deleteJournal.mutate(entry.id)}
+                onSave={(text) => updateJournal.mutateAsync({ id: entry.id, text })}
+              />
+            ))}
           <NewEntryComposer
             ticker={symbol}
             priceLabel={formatPrice(data?.quote?.price ?? null, data?.quote?.currency)}
@@ -1029,7 +976,16 @@ export function StockDetail({ ticker }: { ticker: string }) {
               )}
             </div>
           )}
-          <RateMyTransactionBar ticker={symbol} journalCount={data?.journal.length ?? 0} />
+          <RateMyTransactionBar
+            ticker={symbol}
+            journalCount={data?.journal.length ?? 0}
+            review={tradeReview}
+            onReview={(review) => {
+              queryClient.setQueryData<StockDetail>(["stock", symbol], (prev) =>
+                prev ? { ...prev, tradeReview: review } : prev,
+              );
+            }}
+          />
         </section>
 
         <EventsCard ticker={symbol} />
