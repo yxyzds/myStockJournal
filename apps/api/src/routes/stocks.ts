@@ -306,8 +306,11 @@ stockRoutes.delete("/:ticker/transactions/:id", async (c) => {
  * five-tier slang label + short English blurb.
  */
 stockRoutes.post("/:ticker/ai/trade-review", async (c) => {
-  if (!env.openaiApiKey) {
-    return c.json({ error: "Set OPENAI_API_KEY in .env to enable Trade review" }, 503);
+  if (!env.aiApiKey || !env.aiBaseUrl) {
+    return c.json(
+      { error: "Set AI_BASE_URL and AI_API_KEY in .env to enable Trade review" },
+      503,
+    );
   }
 
   const found = await getOrCreateStock(c.get("userId"), c.req.param("ticker"));

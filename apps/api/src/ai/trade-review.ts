@@ -5,7 +5,7 @@ import {
   type StockTransaction,
   type TradeReview,
 } from "@mystockjournal/shared";
-import { chatJson } from "./openai";
+import { chatJson } from "./chat";
 
 const SYSTEM = `You are a witty, slightly roasting trading coach for a personal stock journal app.
 Read the investor's journal notes (and any recorded buys/sells). Grade the overall quality of their thinking.
