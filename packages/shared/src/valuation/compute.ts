@@ -3,13 +3,14 @@ import {
   DRIVER_LIMITS,
   EXPECTED_GROWTH_LIMITS,
   EXPECTED_PE_LIMITS,
+  MOS_PERCENT_LIMITS,
   dcfInputsFromAnchors,
   peInputsFromAnchors,
   rdcfInputsFromAnchors,
   type ValuationAnchors,
 } from "./anchors";
 import { valueDcf, type DcfInputs } from "./dcf";
-import { currentPeFromHistory, trailingAveragePe, valuePe, type PeInputs } from "./pe";
+import { valuePe, type PeInputs } from "./pe";
 import { valueRdcf, type RdcfInputs } from "./rdcf";
 import {
   isImplementedMethod,
@@ -90,7 +91,19 @@ function parseAnchorFields(read: Reader) {
 }
 
 export function parseDcfInputs(raw: unknown): { value: DcfInputs } | { error: string } {
-  const read = reader(raw);
+  // Older saved models predate mosPercent — treat missing as 0.
+  const normalized =
+    raw && typeof raw === "object"
+      ? {
+          ...(raw as Record<string, unknown>),
+          mosPercent:
+            (raw as Record<string, unknown>).mosPercent == null ||
+            (raw as Record<string, unknown>).mosPercent === ""
+              ? 0
+              : (raw as Record<string, unknown>).mosPercent,
+        }
+      : { mosPercent: 0 };
+  const read = reader(normalized);
   const value: DcfInputs = {
     ...parseAnchorFields(read),
     growthY1_5: read.num("growthY1_5", "Revenue growth Y1–5", DRIVER_LIMITS.growthY1_5),
@@ -99,6 +112,7 @@ export function parseDcfInputs(raw: unknown): { value: DcfInputs } | { error: st
     wacc: read.num("wacc", "WACC", DRIVER_LIMITS.wacc),
     fcfMarginY1: read.num("fcfMarginY1", "FCF margin Y1", DRIVER_LIMITS.fcfMarginY1),
     fcfMarginTerm: read.num("fcfMarginTerm", "FCF margin terminal", DRIVER_LIMITS.fcfMarginTerm),
+    mosPercent: read.num("mosPercent", "Margin of safety", MOS_PERCENT_LIMITS),
   };
   const error = read.error();
   return error ? { error } : { value };
@@ -220,10 +234,8 @@ export function defaultAssumptions(
 ): ValuationAssumptions {
   if (method === "dcf") return dcfInputsFromAnchors(anchors);
   if (method === "rdcf") return rdcfInputsFromAnchors(anchors);
-  // Anchor the multiple to the 5-year average, falling back to the current one.
-  const expectedPe =
-    trailingAveragePe(anchors.peHistory, 5) ?? currentPeFromHistory(anchors.peHistory) ?? 20;
-  return peInputsFromAnchors(anchors, Math.round(expectedPe * 10) / 10);
+  // Start blank — user picks a multiple (history avg / peers / judgment) before the chart plots.
+  return peInputsFromAnchors(anchors, 0);
 }
 
 /**

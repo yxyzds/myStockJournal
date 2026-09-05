@@ -10,10 +10,15 @@ import { fetchEdgarFundamentals } from "./edgar";
  * and P/E history cannot (they need analyst estimates and price history), so
  * those stay bundled and are simply absent for tickers we have not curated.
  */
-type BundledAnchors = Omit<ValuationAnchors, "available" | "sourceFilings">;
+type BundledAnchors = Omit<ValuationAnchors, "available" | "sourceFilings" | "fcfMarginY1FromFilings">;
 
 /** Refetch weekly. Filings land quarterly, but a 10-Q can arrive any day. */
 const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+/**
+ * Bump when the cached payload shape or merge rules change so stale rows are
+ * refetched instead of serving week-old driver prefills.
+ */
+const CACHE_VERSION = 3;
 
 /** Neutral drivers for a ticker we have no estimate for. The user must review them. */
 const FALLBACK_DRIVERS: DcfDrivers = {
@@ -225,6 +230,7 @@ function unavailableAnchors(): ValuationAnchors {
     fwdEps: null,
     peHistory: [],
     drivers: FALLBACK_DRIVERS,
+    fcfMarginY1FromFilings: false,
   };
 }
 
@@ -302,6 +308,7 @@ function asAnchors(payload: unknown, period: string | null): ValuationAnchors | 
     fwdEps: num(row.fwdEps),
     peHistory: asPeHistory(row.peHistory),
     drivers: asDrivers(row.drivers),
+    fcfMarginY1FromFilings: row.fcfMarginY1FromFilings === true,
   };
 }
 
@@ -317,7 +324,10 @@ async function readCache(ticker: string): Promise<{ anchors: ValuationAnchors; f
 
     const anchors = asAnchors(rows[0].payload, rows[0].period);
     if (!anchors) return null;
-    return { anchors, fresh: Date.now() - rows[0].fetchedAt.getTime() < CACHE_TTL_MS };
+    const payload = rows[0].payload as Record<string, unknown>;
+    const versionOk = num(payload.cacheVersion) === CACHE_VERSION;
+    const fresh = versionOk && Date.now() - rows[0].fetchedAt.getTime() < CACHE_TTL_MS;
+    return { anchors, fresh };
   } catch (error) {
     console.warn("fundamentals cache read failed", error);
     return null;
@@ -326,7 +336,8 @@ async function readCache(ticker: string): Promise<{ anchors: ValuationAnchors; f
 
 async function writeCache(ticker: string, anchors: Omit<ValuationAnchors, "available">) {
   try {
-    const { period, ...payload } = anchors;
+    const { period, ...rest } = anchors;
+    const payload = { ...rest, cacheVersion: CACHE_VERSION };
     await db
       .insert(fundamentalsCache)
       .values({ ticker, payload, period, fetchedAt: new Date() })
@@ -342,8 +353,11 @@ async function writeCache(ticker: string, anchors: Omit<ValuationAnchors, "avail
 /**
  * Merge filing figures with the parts EDGAR cannot supply. Forward EPS needs an
  * analyst estimate and P/E history needs price history, so both come from the
- * bundled set when we have curated one. Drivers prefer the curated judgment,
- * then what history implies, then a neutral default.
+ * bundled set when we have curated one.
+ *
+ * Driver merge order: neutral default → curated judgment → filing-observed.
+ * Observed keys today are only `fcfMarginY1` and `growthY1_5`; when present they
+ * must win so Assumptions prefill from the statements, not the curated guess.
  */
 function anchorsFromEdgar(
   edgar: NonNullable<Awaited<ReturnType<typeof fetchEdgarFundamentals>>>,
@@ -363,9 +377,10 @@ function anchorsFromEdgar(
     peHistory: bundled?.peHistory ?? [],
     drivers: {
       ...FALLBACK_DRIVERS,
-      ...edgar.observedDrivers,
       ...bundled?.drivers,
+      ...edgar.observedDrivers,
     },
+    fcfMarginY1FromFilings: edgar.observedDrivers.fcfMarginY1 != null,
   };
 }
 
@@ -391,7 +406,12 @@ export async function getAnchors(rawTicker: string): Promise<ValuationAnchors> {
   if (cached) return cached.anchors;
   if (!bundled) return unavailableAnchors();
 
-  const anchors: ValuationAnchors = { available: true, sourceFilings: [], ...bundled };
+  const anchors: ValuationAnchors = {
+    available: true,
+    sourceFilings: [],
+    fcfMarginY1FromFilings: false,
+    ...bundled,
+  };
   await writeCache(ticker, anchors);
   return anchors;
 }

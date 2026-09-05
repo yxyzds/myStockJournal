@@ -2,6 +2,20 @@ import type { Quote } from "@mystockjournal/shared";
 
 const QUOTE_URL = "https://qt.gtimg.cn/q=";
 const SEARCH_URL = "https://smartbox.gtimg.cn/s3/";
+/** Forward-adjusted K-line (day / week / month). US symbols usually need an exchange suffix. */
+const KLINE_URL = "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get";
+
+export type KlinePeriod = "day" | "week" | "month";
+
+export type KlineBar = {
+  /** Period end date YYYY-MM-DD. */
+  date: string;
+  open: number;
+  close: number;
+  high: number;
+  low: number;
+  volume: number;
+};
 
 function num(value: string | undefined): number | null {
   if (value == null || value === "") return null;
@@ -77,6 +91,18 @@ async function getText(url: string) {
   return buf.toString("latin1");
 }
 
+async function getJson<T>(url: string): Promise<T> {
+  const res = await fetch(url, {
+    headers: {
+      "User-Agent": "Mozilla/5.0",
+      Accept: "application/json",
+      Referer: "https://finance.qq.com/",
+    },
+  });
+  if (!res.ok) throw new Error(`Tencent HTTP ${res.status}`);
+  return (await res.json()) as T;
+}
+
 export async function fetchTencentQuotes(tickers: string[]): Promise<Quote[]> {
   const unique = [...new Set(tickers.map((t) => t.trim().toUpperCase()).filter(Boolean))];
   if (unique.length === 0) return [];
@@ -104,4 +130,58 @@ export async function searchTencent(query: string): Promise<{ ticker: string; na
     seen.add(h.ticker);
     return true;
   });
+}
+
+type TencentKlineResponse = {
+  code?: number;
+  data?: Record<string, Record<string, unknown>>;
+};
+
+function parseKlineBars(rows: unknown): KlineBar[] {
+  if (!Array.isArray(rows)) return [];
+  const bars: KlineBar[] = [];
+  for (const row of rows) {
+    if (!Array.isArray(row) || row.length < 5) continue;
+    const date = String(row[0] ?? "");
+    const open = num(String(row[1] ?? ""));
+    const close = num(String(row[2] ?? ""));
+    const high = num(String(row[3] ?? ""));
+    const low = num(String(row[4] ?? ""));
+    const volume = num(String(row[5] ?? "")) ?? 0;
+    if (!date || open == null || close == null || high == null || low == null) continue;
+    bars.push({ date, open, close, high, low, volume });
+  }
+  return bars;
+}
+
+/**
+ * Historical OHLCV for a US ticker. Tries common exchange suffixes because the
+ * K-line endpoint often returns a single stub bar without one (e.g. `.OQ`).
+ */
+export async function fetchTencentKline(
+  ticker: string,
+  period: KlinePeriod,
+  count: number,
+): Promise<KlineBar[]> {
+  const symbol = ticker.trim().toUpperCase();
+  if (!symbol) return [];
+  const capped = Math.min(Math.max(Math.floor(count), 1), 640);
+  const candidates = [`us${symbol}.OQ`, `us${symbol}.N`, `us${symbol}`];
+
+  let best: KlineBar[] = [];
+  for (const code of candidates) {
+    const url = `${KLINE_URL}?param=${encodeURIComponent(`${code},${period},,,${capped},qfq`)}`;
+    try {
+      const json = await getJson<TencentKlineResponse>(url);
+      const block = json.data?.[code];
+      if (!block || typeof block !== "object") continue;
+      const rows = block[period] ?? block[`qfq${period}`];
+      const bars = parseKlineBars(rows);
+      if (bars.length > best.length) best = bars;
+      if (bars.length >= Math.min(capped, 8)) return bars;
+    } catch (error) {
+      console.warn(`Tencent kline failed for ${code}`, error);
+    }
+  }
+  return best;
 }

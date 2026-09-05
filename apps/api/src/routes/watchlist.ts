@@ -30,12 +30,13 @@ watchlistRoutes.get("/", async (c) => {
         .where(and(eq(valuationModels.userId, userId), eq(valuationModels.isMyFairValue, true)))
     : [];
   const fvByStock = new Map(
-    models.map((m) => [m.stockId, fairValueFromOutputs(m.outputs)]),
+    models.map((m) => [m.stockId, { fairValue: fairValueFromOutputs(m.outputs), method: m.method }]),
   );
 
   const items: WatchlistItem[] = rows.map((row) => {
     const quote = quoteByTicker.get(row.ticker);
-    const fairValue = fvByStock.get(row.id) ?? null;
+    const fv = fvByStock.get(row.id);
+    const fairValue = fv?.fairValue ?? null;
     const price = quote?.price ?? null;
     // MOS vs prior close (Quote.price), not a live last trade.
     const mosPercent =
@@ -50,6 +51,7 @@ watchlistRoutes.get("/", async (c) => {
       previousClose: quote?.previousClose ?? null,
       fetchedAt: quote?.fetchedAt ?? null,
       fairValue,
+      fairValueMethod: fairValue != null ? fv?.method ?? null : null,
       mosPercent,
     };
   });

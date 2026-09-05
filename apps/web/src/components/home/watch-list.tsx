@@ -3,7 +3,12 @@
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
-import type { Quote, WatchlistItem } from "@mystockjournal/shared";
+import {
+  METHOD_LABELS,
+  type Quote,
+  type ValuationMethod,
+  type WatchlistItem,
+} from "@mystockjournal/shared";
 import { Input } from "@/components/ui/input";
 import { useDebounced } from "@/hooks/use-debounced";
 import { api } from "@/lib/api";
@@ -17,10 +22,15 @@ type Row = {
   currency: string;
   changePercent: number | null;
   fairValue: number | null;
+  fairValueMethod: ValuationMethod | null;
   mosPercent: number | null;
   fetchedAt: string | null;
   inWatchlist: boolean;
 };
+
+function valuationHref(ticker: string) {
+  return `/stock/${ticker.trim().toUpperCase()}/valuation`;
+}
 
 function SearchIcon({ size = 15 }: { size?: number }) {
   return (
@@ -47,6 +57,7 @@ function toWatchRow(item: WatchlistItem): Row {
     currency: item.currency,
     changePercent: item.changePercent,
     fairValue: item.fairValue,
+    fairValueMethod: item.fairValueMethod,
     mosPercent: item.mosPercent,
     fetchedAt: item.fetchedAt,
     inWatchlist: true,
@@ -61,10 +72,76 @@ function toSearchRow(item: Quote): Row {
     currency: item.currency,
     changePercent: item.changePercent,
     fairValue: null,
+    fairValueMethod: null,
     mosPercent: null,
     fetchedAt: item.fetchedAt,
     inWatchlist: false,
   };
+}
+
+/** Fair-value cell: +Valuation CTA, or price + method — both open the valuation page. */
+function FairValueLink({
+  row,
+  layout,
+}: {
+  row: Row;
+  layout: "desktop" | "mobile";
+}) {
+  const href = valuationHref(row.ticker);
+  const methodLabel =
+    row.fairValueMethod != null ? METHOD_LABELS[row.fairValueMethod] : null;
+
+  if (row.fairValue == null) {
+    return (
+      <Link
+        href={href}
+        onClick={(e) => e.stopPropagation()}
+        className={
+          layout === "desktop"
+            ? "relative z-10 inline-flex w-fit items-center rounded-md border border-dashed border-slate-300 px-2 py-1 text-[11px] font-semibold text-slate-500 hover:border-blue-400 hover:bg-blue-50 hover:text-blue-700"
+            : "relative z-10 inline-flex items-center rounded-md border border-dashed border-slate-300 px-2 py-0.5 text-[11px] font-semibold text-slate-500 hover:border-blue-400 hover:text-blue-700"
+        }
+      >
+        +Valuation
+      </Link>
+    );
+  }
+
+  if (layout === "mobile") {
+    return (
+      <Link
+        href={href}
+        onClick={(e) => e.stopPropagation()}
+        className="relative z-10 flex flex-col items-center gap-0.5 rounded-md px-1 hover:bg-slate-50"
+      >
+        <span className="font-mono text-[13px] font-semibold tabular-nums text-slate-700">
+          {formatPrice(row.fairValue, row.currency)}
+        </span>
+        {methodLabel && (
+          <span className="text-[9px] font-bold tracking-wide text-blue-600 uppercase">
+            {methodLabel}
+          </span>
+        )}
+      </Link>
+    );
+  }
+
+  return (
+    <Link
+      href={href}
+      onClick={(e) => e.stopPropagation()}
+      className="relative z-10 inline-flex w-fit flex-col items-start gap-0.5 rounded-md hover:bg-slate-50"
+    >
+      <span className="font-mono text-[14px] tabular-nums text-slate-700">
+        {formatPrice(row.fairValue, row.currency)}
+      </span>
+      {methodLabel && (
+        <span className="text-[10px] font-semibold tracking-wide text-blue-600 uppercase">
+          {methodLabel}
+        </span>
+      )}
+    </Link>
+  );
 }
 
 function RowAction({
@@ -166,23 +243,21 @@ function RemoveConfirmDialog({
 }
 
 function StockRowDesktop({ row }: { row: Row }) {
-  const change = row.changePercent;
-  const isUp = (change ?? 0) >= 0;
+  const gap = row.mosPercent;
+  const undervalued = (gap ?? 0) >= 0;
   return (
     <>
       <span className="font-mono text-[15px] font-bold text-slate-900">{row.ticker}</span>
       <span className="font-mono text-[14px] tabular-nums text-slate-700">
         {formatPrice(row.price, row.currency)}
       </span>
-      <span className="font-mono text-[14px] tabular-nums text-slate-500">
-        {formatPrice(row.fairValue, row.currency)}
-      </span>
+      <FairValueLink row={row} layout="desktop" />
       <span
         className={`text-right font-mono text-[14px] font-semibold tabular-nums ${
-          change == null ? "text-slate-400" : isUp ? "text-emerald-600" : "text-red-500"
+          gap == null ? "text-slate-400" : undervalued ? "text-emerald-600" : "text-red-500"
         }`}
       >
-        {change == null ? "—" : `${isUp ? "▲" : "▼"} ${formatPercent(change)}`}
+        {gap == null ? "—" : `${undervalued ? "▲" : "▼"} ${formatPercent(gap)}`}
       </span>
     </>
   );
@@ -200,54 +275,53 @@ function StockRowMobile({
   onRemove: (ticker: string) => void;
 }) {
   const href = stockHref(row.ticker);
-  const mos = row.mosPercent ?? row.changePercent;
-  const isUp = (mos ?? 0) >= 0;
-  const mosLabel = row.mosPercent != null ? "MOS" : "Chg";
-  const body = (
-    <div className="flex min-w-0 flex-1 items-center justify-between gap-2">
-      <div className="flex min-w-0 flex-col gap-1">
-        <span className="font-mono text-[15px] leading-none font-bold text-slate-900">{row.ticker}</span>
-        <div className="flex items-baseline gap-1.5">
-          <span className="font-mono text-[13px] tabular-nums text-slate-600">
-            {formatPrice(row.price, row.currency)}
-          </span>
-          <span className="text-[10px] text-slate-400">close</span>
-        </div>
-      </div>
-      <div className="flex flex-col items-center gap-1">
-        <span className="text-[9px] font-bold tracking-wide text-slate-400 uppercase">Fair Value</span>
-        <span className="font-mono text-[13px] font-semibold tabular-nums text-slate-700">
-          {formatPrice(row.fairValue, row.currency)}
-        </span>
-      </div>
-      <div className="flex flex-col items-end gap-1">
-        {row.inWatchlist ? (
-          <>
-            <span className="text-[9px] font-bold tracking-wide text-slate-400 uppercase">{mosLabel}</span>
-            <span
-              className={`font-mono text-[16px] font-bold tabular-nums ${
-                mos == null ? "text-slate-400" : isUp ? "text-emerald-600" : "text-red-500"
-              }`}
-            >
-              {mos == null ? "—" : `${isUp ? "▲" : "▼"}${formatPercent(mos, 1)}`}
-            </span>
-          </>
-        ) : null}
-      </div>
-    </div>
-  );
+  const gap = row.mosPercent;
+  const undervalued = (gap ?? 0) >= 0;
 
   return (
-    <div className="flex items-center gap-1 rounded-xl border border-slate-100 bg-white py-3 pr-1.5 pl-3.5 transition-colors hover:bg-slate-50">
-      <Link href={href} className="min-w-0 flex-1 active:opacity-80">
-        {body}
-      </Link>
-      <RowAction
-        kind={row.inWatchlist ? "remove" : "add"}
-        ticker={row.ticker}
-        pending={pending}
-        onClick={row.inWatchlist ? onRemove : onAdd}
+    <div className="relative flex items-center gap-1 rounded-xl border border-slate-100 bg-white py-3 pr-1.5 pl-3.5 transition-colors hover:bg-slate-50">
+      <Link
+        href={href}
+        className="absolute inset-0 z-0 rounded-xl"
+        aria-label={`Open ${row.ticker}`}
       />
+      <div className="relative z-10 flex min-w-0 flex-1 items-center justify-between gap-2 pointer-events-none">
+        <div className="flex min-w-0 flex-col gap-1">
+          <span className="font-mono text-[15px] leading-none font-bold text-slate-900">{row.ticker}</span>
+          <div className="flex items-baseline gap-1.5">
+            <span className="font-mono text-[13px] tabular-nums text-slate-600">
+              {formatPrice(row.price, row.currency)}
+            </span>
+            <span className="text-[10px] text-slate-400">close</span>
+          </div>
+        </div>
+        <div className="pointer-events-auto flex flex-col items-center gap-1">
+          <span className="text-[9px] font-bold tracking-wide text-slate-400 uppercase">Fair Value</span>
+          <FairValueLink row={row} layout="mobile" />
+        </div>
+        <div className="flex flex-col items-end gap-1">
+          {row.inWatchlist ? (
+            <>
+              <span className="text-[9px] font-bold tracking-wide text-slate-400 uppercase">vs FV</span>
+              <span
+                className={`font-mono text-[16px] font-bold tabular-nums ${
+                  gap == null ? "text-slate-400" : undervalued ? "text-emerald-600" : "text-red-500"
+                }`}
+              >
+                {gap == null ? "—" : `${undervalued ? "▲" : "▼"}${formatPercent(gap, 1)}`}
+              </span>
+            </>
+          ) : null}
+        </div>
+      </div>
+      <div className="relative z-10">
+        <RowAction
+          kind={row.inWatchlist ? "remove" : "add"}
+          ticker={row.ticker}
+          pending={pending}
+          onClick={row.inWatchlist ? onRemove : onAdd}
+        />
+      </div>
     </div>
   );
 }
@@ -257,7 +331,7 @@ export function WatchList() {
   const [query, setQuery] = useState("");
   const [removeTarget, setRemoveTarget] = useState<{ ticker: string; name: string } | null>(null);
   const debouncedQuery = useDebounced(query.trim(), 300);
-  const cols = "grid-cols-[96px_1fr_1fr_100px_44px]";
+  const cols = "grid-cols-[96px_1fr_1fr_120px_44px]";
 
   const watchQuery = useQuery({
     queryKey: ["watchlist"],
@@ -304,7 +378,7 @@ export function WatchList() {
   const displayedRows = showingMarketSearch ? marketSearchRows : watchlistMatches;
   const colsHeader = showingMarketSearch
     ? ["Ticker", "Close Price", "Name", "% Change", ""]
-    : ["Ticker", "Close Price", "My Fair Value", "% Change", ""];
+    : ["Ticker", "Close Price", "My Fair Value", "vs Fair Value", ""];
   const asOfIso = latestFetchedAt(showingMarketSearch ? marketSearchRows : watchRows);
   const asOfLabel = formatQuoteAsOf(asOfIso);
   const busyTicker = addMutation.isPending
@@ -329,7 +403,7 @@ export function WatchList() {
             <p className="mt-1 text-[12px] text-slate-400 md:text-[13px]">
               {showingMarketSearch
                 ? "Not in your list — tap Add to track a ticker."
-                : "Prior close vs your fair value."}
+                : "vs Fair Value = (fair value − close) ÷ close."}
             </p>
           </div>
           <div className="relative w-full md:w-[260px]">
@@ -398,7 +472,12 @@ export function WatchList() {
             className={`grid ${cols} gap-4 border-b border-slate-100 pb-2 text-[11px] font-semibold tracking-[0.07em] text-slate-400 uppercase`}
           >
             {colsHeader.map((label, i) => (
-              <span key={`${label}-${i}`} className={label === "% Change" || !label ? "text-right" : undefined}>
+              <span
+                key={`${label}-${i}`}
+                className={
+                  label === "% Change" || label === "vs Fair Value" || !label ? "text-right" : undefined
+                }
+              >
                 {label}
               </span>
             ))}

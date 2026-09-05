@@ -41,6 +41,12 @@ export type ValuationAnchors = {
   peHistory: PePoint[];
   /** Starting point for the editable drivers, from the vendor or an AI estimate. */
   drivers: DcfDrivers;
+  /**
+   * True when `drivers.fcfMarginY1` was computed from filings
+   * ((TTM OCF − CapEx) / TTM revenue). The UI locks that field and the server
+   * overwrites it on save.
+   */
+  fcfMarginY1FromFilings: boolean;
 };
 
 export type DcfScenario = "bear" | "base" | "bull";
@@ -86,8 +92,10 @@ export const DRIVER_LIMITS: Record<keyof DcfDrivers, { min: number; max: number;
   fcfMarginTerm: { min: 0, max: 80, step: 0.5 },
 };
 
-export const EXPECTED_PE_LIMITS = { min: 1, max: 200, step: 0.5 };
+export const EXPECTED_PE_LIMITS = { min: 0, max: 200, step: 0.5 };
 export const EXPECTED_GROWTH_LIMITS = { min: 0.1, max: 100, step: 0.5 };
+/** Haircut applied to DCF intrinsic value to produce fair value. */
+export const MOS_PERCENT_LIMITS = { min: 0, max: 90, step: 1 };
 
 function clampDriver(key: keyof DcfDrivers, value: number) {
   const { min, max } = DRIVER_LIMITS[key];
@@ -107,6 +115,7 @@ export function dcfInputsFromAnchors(anchors: ValuationAnchors, drivers?: DcfDri
     wacc: d.wacc,
     fcfMarginY1: d.fcfMarginY1,
     fcfMarginTerm: d.fcfMarginTerm,
+    mosPercent: 0,
   };
 }
 

@@ -1,7 +1,7 @@
 import type { Quote } from "../market";
 import type { ValuationMethod } from "../types";
 import type { DcfInputs, DcfYearRow } from "./dcf";
-import type { PeInputs } from "./pe";
+import type { PeInputs, PePoint } from "./pe";
 import type { RdcfInputs } from "./rdcf";
 import type { ValuationAnchors } from "./anchors";
 
@@ -90,6 +90,10 @@ export type PeerMultiple = {
   /** Null when we have no EPS for this peer. */
   pe: number | null;
   peg: number | null;
+  /** Yearly P/E history when curated — plotted as a second series on the chart. */
+  history: PePoint[];
+  /** Set when `pe` is null — shown when the user taps a greyed-out peer. */
+  peUnavailableReason: string | null;
 };
 
 /** Frozen valuation attached to a decision, so history survives later edits. */
