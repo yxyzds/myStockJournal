@@ -21,6 +21,7 @@ import { db } from "../db";
 import { valuationModels, valuationSnapshots } from "../db/schema";
 import { TICKER_RE, getOrCreateStock, parseTicker } from "../lib/stocks";
 import { getAnchors } from "../market/fundamentals";
+import { buildPeChart, peUnavailableReason } from "../market/pe-series";
 import { getQuotes } from "../market/quotes";
 
 export const valuationRoutes = new Hono<AppEnv>();
@@ -29,6 +30,11 @@ const METHODS = Object.keys(METHOD_LABELS) as ValuationMethod[];
 
 /** Enough peers to read a median from without turning the chart into noise. */
 const MAX_PEERS = 8;
+
+function parseChartPeriod(raw: string | undefined): "week" | "month" | "year" | null {
+  if (raw === "week" || raw === "month" || raw === "year") return raw;
+  return null;
+}
 
 function parseMethod(raw: string | undefined): ValuationMethod | null {
   const method = (raw ?? "").trim().toLowerCase();
@@ -118,6 +124,9 @@ function withServerAnchors(
     cash: anchors.cash,
     debt: anchors.debt,
     shares: anchors.shares,
+    ...(anchors.fcfMarginY1FromFilings
+      ? { fcfMarginY1: anchors.drivers.fcfMarginY1 }
+      : {}),
   };
 }
 
@@ -348,6 +357,26 @@ valuationRoutes.post("/:ticker/valuation/:method/snapshot", async (c) => {
 });
 
 /**
+ * GET /stocks/:ticker/valuation/pe/chart?period=&peers= — P/E series for the
+ * chart. `year` uses curated annual multiples; `week` / `month` rebuild P/E from
+ * Tencent K-line closes ÷ latest EPS.
+ */
+valuationRoutes.get("/:ticker/valuation/pe/chart", async (c) => {
+  const period = parseChartPeriod(c.req.query("period") ?? "year") ?? "year";
+  const ticker = parseTicker(c.req.param("ticker"));
+  if (!TICKER_RE.test(ticker)) return c.json({ error: "Invalid ticker" }, 400);
+
+  const peerTickers = (c.req.query("peers") ?? "")
+    .split(",")
+    .map((raw) => parseTicker(raw))
+    .filter((peer) => TICKER_RE.test(peer) && peer !== ticker)
+    .slice(0, MAX_PEERS);
+
+  const payload = await buildPeChart(ticker, period, peerTickers);
+  return c.json(payload);
+});
+
+/**
  * GET /stocks/:ticker/valuation/pe/peers?tickers= — current multiples for the
  * peers a user picked, so the P/E chart can plot them. Capped at MAX_PEERS. A
  * peer we have no EPS for comes back with nulls rather than being dropped.
@@ -367,20 +396,23 @@ valuationRoutes.get("/:ticker/valuation/pe/peers", async (c) => {
   const peers: PeerMultiple[] = [];
   for (const ticker of unique) {
     const quote = quoteByTicker.get(ticker);
-    if (!quote) continue;
-
-    const anchors = await getAnchors(ticker);
-    const eps = anchors.fwdEps ?? anchors.ttmEps;
-    const price = quote.price;
+    const anchors = quote ? await getAnchors(ticker) : null;
+    const fwd = anchors?.fwdEps ?? null;
+    const ttm = anchors?.ttmEps ?? null;
+    const eps =
+      fwd != null && fwd > 0 ? fwd : ttm != null ? ttm : fwd != null ? fwd : null;
+    const price = quote?.price ?? null;
     const pe = eps != null && eps > 0 && price != null ? price / eps : null;
-    const latestGrowth = anchors.peHistory.at(-1)?.growth ?? null;
+    const latestGrowth = anchors?.peHistory.at(-1)?.growth ?? null;
 
     peers.push({
       ticker,
-      name: quote.name,
+      name: quote?.name ?? ticker,
       price,
       pe,
       peg: pe != null && latestGrowth != null && latestGrowth > 0 ? pe / latestGrowth : null,
+      history: anchors?.peHistory ?? [],
+      peUnavailableReason: pe == null ? peUnavailableReason(price, eps) : null,
     });
   }
 

@@ -1,49 +1,83 @@
 "use client";
 
 import { useCallback, useMemo, useRef, useState } from "react";
-import { pegSeries, type PeerMultiple, type PePoint } from "@mystockjournal/shared";
+import type { PeSeriesPoint } from "@mystockjournal/shared";
 
 const VIEW_W = 600;
 const VIEW_H = 220;
-/** Right padding leaves room for the peer labels that sit past the last year. */
-const PAD = { top: 14, right: 78, bottom: 36, left: 44 };
+const PAD = { top: 14, right: 44, bottom: 36, left: 44 };
 const PLOT_W = VIEW_W - PAD.left - PAD.right;
 const PLOT_H = VIEW_H - PAD.top - PAD.bottom;
 
 export const PEER_COLORS = ["#6366f1", "#f59e0b", "#ec4899", "#10b981", "#8b5cf6", "#0ea5e9", "#f43f5e", "#14b8a6"];
 
 export type PeChartMode = "pe" | "peg";
+export type PeChartPeriod = "week" | "month" | "year";
+
+function metric(point: PeSeriesPoint, mode: PeChartMode): number | null {
+  if (mode === "pe") return point.pe;
+  if (point.growth == null || point.growth <= 0) return null;
+  return point.pe / point.growth;
+}
+
+function alignPeer(
+  subject: PeSeriesPoint[],
+  peer: PeSeriesPoint[],
+  mode: PeChartMode,
+): (number | null)[] {
+  const byLabel = new Map(peer.map((point) => [point.label, point]));
+  return subject.map((point) => {
+    const match = byLabel.get(point.label);
+    return match ? metric(match, mode) : null;
+  });
+}
 
 export function PeChart({
   mode,
   history,
+  peerSeries,
   expectedPe,
   expectedGrowth,
   avg5Y,
   avg10Y,
-  peers,
   label,
 }: {
   mode: PeChartMode;
-  history: PePoint[];
+  history: PeSeriesPoint[];
+  /** Peer series already aligned conceptually; matched onto subject labels. */
+  peerSeries: { ticker: string; series: PeSeriesPoint[]; color?: string }[];
   expectedPe: number;
   expectedGrowth: number;
   avg5Y: number | null;
   avg10Y: number | null;
-  peers: PeerMultiple[];
   label: string;
 }) {
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
 
   const chart = useMemo(() => {
-    const values: (number | null)[] = mode === "pe" ? history.map((p) => p.pe) : pegSeries(history);
+    const values = history.map((point) => metric(point, mode));
     const valid = values.filter((v): v is number => v != null);
+    const expected =
+      expectedPe > 0
+        ? mode === "pe"
+          ? expectedPe
+          : expectedPe / Math.max(expectedGrowth, 0.1)
+        : null;
 
-    const expected = mode === "pe" ? expectedPe : expectedPe / Math.max(expectedGrowth, 0.1);
-    const peerValues = peers
-      .map((peer) => (mode === "pe" ? peer.pe : peer.peg))
-      .filter((v): v is number => v != null);
+    const peersPlotted = peerSeries.map((peer, index) => {
+      const plotted = alignPeer(history, peer.series, mode);
+      return {
+        ticker: peer.ticker,
+        plotted,
+        path: "" as string,
+        color: peer.color ?? PEER_COLORS[index % PEER_COLORS.length],
+      };
+    });
+
+    const peerValues = peersPlotted.flatMap((peer) =>
+      peer.plotted.filter((value): value is number => value != null),
+    );
     const references =
       mode === "pe"
         ? [avg5Y, avg10Y, expected, ...peerValues]
@@ -59,22 +93,35 @@ export function PeChart({
       history.length < 2 ? PAD.left + PLOT_W / 2 : PAD.left + (index / (history.length - 1)) * PLOT_W;
     const yPos = (value: number) => PAD.top + PLOT_H - (value / ceiling) * PLOT_H;
 
-    // Break the path wherever the metric is undefined, rather than interpolating across it.
-    let path = "";
-    let segment = "";
-    values.forEach((value, index) => {
-      if (value == null) {
-        if (segment) path += `${segment} `;
-        segment = "";
-        return;
-      }
-      const point = `${xPos(index)} ${yPos(value)}`;
-      segment += segment === "" ? `M ${point}` : ` L ${point}`;
-    });
-    path += segment;
+    function buildPath(seriesValues: (number | null)[]) {
+      let path = "";
+      let segment = "";
+      seriesValues.forEach((value, index) => {
+        if (value == null) {
+          if (segment) path += `${segment} `;
+          segment = "";
+          return;
+        }
+        const point = `${xPos(index)} ${yPos(value)}`;
+        segment += segment === "" ? `M ${point}` : ` L ${point}`;
+      });
+      return path + segment;
+    }
 
-    return { values, expected, ceiling, gridLines, xPos, yPos, path };
-  }, [mode, history, expectedPe, expectedGrowth, avg5Y, avg10Y, peers]);
+    return {
+      values,
+      expected,
+      ceiling,
+      gridLines,
+      xPos,
+      yPos,
+      path: buildPath(values),
+      peersPlotted: peersPlotted.map((peer) => ({
+        ...peer,
+        path: buildPath(peer.plotted),
+      })),
+    };
+  }, [mode, history, peerSeries, expectedPe, expectedGrowth, avg5Y, avg10Y]);
 
   const handleMouseMove = useCallback(
     (event: React.MouseEvent<SVGSVGElement>) => {
@@ -101,9 +148,11 @@ export function PeChart({
   }
 
   const mainColor = mode === "pe" ? "#3b82f6" : "#8b5cf6";
-  const expectedY = chart.yPos(chart.expected);
-  const expectedInRange = expectedY > PAD.top && expectedY < VIEW_H - PAD.bottom;
+  const expectedY = chart.expected != null ? chart.yPos(chart.expected) : null;
+  const expectedInRange =
+    expectedY != null && expectedY > PAD.top && expectedY < VIEW_H - PAD.bottom;
   const suffix = mode === "pe" ? "x" : "";
+  const labelStep = history.length > 24 ? 4 : history.length > 12 ? 2 : 1;
 
   return (
     <svg
@@ -143,57 +192,55 @@ export function PeChart({
       })}
 
       {history.map((point, index) => {
-        if (index % 2 !== 0 && index !== history.length - 1) return null;
+        if (index % labelStep !== 0 && index !== history.length - 1) return null;
         return (
           <text
-            key={point.year}
+            key={`${point.label}-${index}`}
             x={chart.xPos(index)}
-            y={VIEW_H - PAD.bottom + 14}
-            fontSize={9}
+            y={VIEW_H - 12}
+            fontSize={8}
             fill="#94a3b8"
             textAnchor="middle"
-            fontFamily="var(--font-jetbrains), monospace"
+            fontFamily="var(--font-sans), sans-serif"
           >
-            {point.year}
+            {point.label}
           </text>
         );
       })}
 
-      {mode === "pe" ? (
-        <>
-          {avg10Y != null && (
-            <line
-              x1={PAD.left}
-              y1={chart.yPos(avg10Y)}
-              x2={VIEW_W - PAD.right}
-              y2={chart.yPos(avg10Y)}
-              stroke="#cbd5e1"
-              strokeWidth={1}
-              strokeDasharray="3 4"
-            />
-          )}
-          {avg5Y != null && (
-            <line
-              x1={PAD.left}
-              y1={chart.yPos(avg5Y)}
-              x2={VIEW_W - PAD.right}
-              y2={chart.yPos(avg5Y)}
-              stroke="#94a3b8"
-              strokeWidth={1}
-              strokeDasharray="6 3"
-            />
-          )}
-        </>
-      ) : (
+      {mode === "pe" && avg10Y != null && (
+        <line
+          x1={PAD.left}
+          y1={chart.yPos(avg10Y)}
+          x2={VIEW_W - PAD.right}
+          y2={chart.yPos(avg10Y)}
+          stroke="#cbd5e1"
+          strokeWidth={1}
+          strokeDasharray="4 3"
+        />
+      )}
+      {mode === "pe" && avg5Y != null && (
+        <line
+          x1={PAD.left}
+          y1={chart.yPos(avg5Y)}
+          x2={VIEW_W - PAD.right}
+          y2={chart.yPos(avg5Y)}
+          stroke="#94a3b8"
+          strokeWidth={1}
+          strokeDasharray="4 3"
+        />
+      )}
+
+      {mode === "peg" && (
         <>
           <line
             x1={PAD.left}
             y1={chart.yPos(1)}
             x2={VIEW_W - PAD.right}
             y2={chart.yPos(1)}
-            stroke="#f59e0b"
-            strokeWidth={1.5}
-            strokeDasharray="4 3"
+            stroke="#fbbf24"
+            strokeWidth={1.25}
+            strokeDasharray="3 4"
           />
           <line
             x1={PAD.left}
@@ -218,29 +265,18 @@ export function PeChart({
         />
       )}
 
-      {peers.map((peer, index) => {
-        const value = mode === "pe" ? peer.pe : peer.peg;
-        if (value == null) return null;
-        const y = chart.yPos(value);
-        if (y < PAD.top || y > VIEW_H - PAD.bottom) return null;
-        const x = chart.xPos(history.length - 1) + 14;
-        const color = PEER_COLORS[index % PEER_COLORS.length];
-        return (
-          <g key={peer.ticker}>
-            <circle cx={x} cy={y} r={4} fill={color} />
-            <text
-              x={x + 7}
-              y={y + 3.5}
-              fontSize={8}
-              fill={color}
-              fontWeight="700"
-              fontFamily="var(--font-sans), sans-serif"
-            >
-              {peer.ticker}
-            </text>
-          </g>
-        );
-      })}
+      {chart.peersPlotted.map((peer) => (
+        <path
+          key={peer.ticker}
+          d={peer.path}
+          fill="none"
+          stroke={peer.color}
+          strokeWidth={1.75}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          opacity={0.9}
+        />
+      ))}
 
       <path
         d={chart.path}
@@ -251,75 +287,80 @@ export function PeChart({
         strokeLinejoin="round"
       />
 
-      {chart.values.map((value, index) => {
-        if (value == null) return null;
-        const isLatest = index === history.length - 1;
-        return (
-          <circle
-            key={history[index].year}
-            cx={chart.xPos(index)}
-            cy={chart.yPos(value)}
-            r={isLatest ? 5 : 3}
-            fill={isLatest ? mainColor : "white"}
-            stroke={mainColor}
-            strokeWidth={isLatest ? 0 : 1.5}
-          />
-        );
-      })}
-
       {hoverIndex !== null &&
         (() => {
           const point = history[hoverIndex];
-          const value = chart.values[hoverIndex];
           const x = chart.xPos(hoverIndex);
-          const boxX = Math.min(x + 6, VIEW_W - PAD.right - 80);
+          const rows: { name: string; value: number | null; color: string }[] = [
+            { name: label, value: chart.values[hoverIndex], color: mainColor },
+            ...chart.peersPlotted.map((peer) => ({
+              name: peer.ticker,
+              value: peer.plotted[hoverIndex],
+              color: peer.color,
+            })),
+          ];
+          const rowHeight = 14;
+          const boxHeight = 18 + rows.length * rowHeight;
+          const boxWidth = 108;
+          const boxX = Math.min(x + 8, VIEW_W - PAD.right - boxWidth);
+          const boxY = Math.min(PAD.top + 4, VIEW_H - PAD.bottom - boxHeight);
+
           return (
             <g>
               <line x1={x} y1={PAD.top} x2={x} y2={VIEW_H - PAD.bottom} stroke="#e2e8f0" strokeWidth={1} />
-              {value == null ? (
-                <text
-                  x={x}
-                  y={PAD.top + 10}
-                  fontSize={8}
-                  fill="#94a3b8"
-                  textAnchor="middle"
-                  fontFamily="var(--font-sans), sans-serif"
-                >
-                  {point.year}: n/a
-                </text>
-              ) : (
-                <g>
+              {rows.map((row) =>
+                row.value == null ? null : (
                   <circle
+                    key={`dot-${row.name}`}
                     cx={x}
-                    cy={chart.yPos(value)}
-                    r={5}
+                    cy={chart.yPos(row.value)}
+                    r={4}
                     fill="white"
-                    stroke={mainColor}
+                    stroke={row.color}
                     strokeWidth={2}
                   />
-                  <rect
-                    x={boxX}
-                    y={chart.yPos(value) - 22}
-                    width={78}
-                    height={20}
-                    rx={4}
-                    fill="white"
-                    stroke="#e2e8f0"
-                    strokeWidth={1}
+                ),
+              )}
+              <rect
+                x={boxX}
+                y={boxY}
+                width={boxWidth}
+                height={boxHeight}
+                rx={4}
+                fill="white"
+                stroke="#e2e8f0"
+                strokeWidth={1}
+              />
+              <text
+                x={boxX + 8}
+                y={boxY + 12}
+                fontSize={8}
+                fill="#94a3b8"
+                fontFamily="var(--font-sans), sans-serif"
+              >
+                {point.label}
+              </text>
+              {rows.map((row, index) => (
+                <g key={row.name}>
+                  <circle
+                    cx={boxX + 12}
+                    cy={boxY + 22 + index * rowHeight}
+                    r={3}
+                    fill={row.color}
                   />
                   <text
-                    x={boxX + 8}
-                    y={chart.yPos(value) - 8}
+                    x={boxX + 20}
+                    y={boxY + 25 + index * rowHeight}
                     fontSize={9}
                     fill="#334155"
-                    fontWeight="700"
+                    fontWeight="600"
                     fontFamily="var(--font-jetbrains), monospace"
                   >
-                    {point.year}: {value.toFixed(1)}
-                    {suffix}
+                    {row.name}{" "}
+                    {row.value == null ? "—" : `${row.value.toFixed(1)}${suffix}`}
                   </text>
                 </g>
-              )}
+              ))}
             </g>
           );
         })()}

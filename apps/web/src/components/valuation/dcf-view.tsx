@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import {
   DRIVER_LIMITS,
+  MOS_PERCENT_LIMITS,
   scenarioDrivers,
   valueDcf,
   type DcfBridge,
@@ -21,6 +22,7 @@ import {
   Chevron,
   DriverField,
   FilingSourceNote,
+  NumberInput,
   fmt1,
   fmt2,
   fmtMoneyM,
@@ -66,19 +68,29 @@ export function DcfView({
   const scenarioFairValues = useMemo(() => {
     const entries = SCENARIOS.map((name) => {
       const drivers = scenarioDrivers(anchors.drivers, name);
+      // Filing-derived Y1 margin stays fixed across bear/base/bull.
+      if (anchors.fcfMarginY1FromFilings) {
+        drivers.fcfMarginY1 = anchors.drivers.fcfMarginY1;
+      }
       const { bridge: scenarioBridge } = valueDcf({ ...assumptions, ...drivers }, currentPrice);
       return [name, scenarioBridge.fv] as const;
     });
     return Object.fromEntries(entries) as Record<DcfScenario, number>;
-  }, [anchors.drivers, assumptions, currentPrice]);
+  }, [anchors.drivers, anchors.fcfMarginY1FromFilings, assumptions, currentPrice]);
 
   function setField<K extends keyof DcfInputs>(key: K, value: DcfInputs[K]) {
+    if (key === "fcfMarginY1" && anchors.fcfMarginY1FromFilings) return;
     onChange({ ...assumptions, [key]: value });
-    setScenario("custom");
+    // MOS is a judgment haircut, not a driver scenario change.
+    if (key !== "mosPercent") setScenario("custom");
   }
 
   function applyScenario(name: DcfScenario) {
-    onChange({ ...assumptions, ...scenarioDrivers(anchors.drivers, name) });
+    const drivers = scenarioDrivers(anchors.drivers, name);
+    if (anchors.fcfMarginY1FromFilings) {
+      drivers.fcfMarginY1 = anchors.drivers.fcfMarginY1;
+    }
+    onChange({ ...assumptions, ...drivers });
     setScenario(name);
   }
 
@@ -87,16 +99,19 @@ export function DcfView({
       <div className="flex w-full min-w-0 flex-col gap-3 md:flex-1">
         <ResultsSection
           bridge={bridge}
+          assumptions={assumptions}
           currentPrice={currentPrice}
           priceAsOf={priceAsOf}
           ticker={ticker}
           myFairValue={myFairValue}
           actions={actions}
+          onField={setField}
         />
         <AssumptionsSection
           assumptions={assumptions}
           anchorDrivers={anchors.drivers}
           anchorsAvailable={anchors.available}
+          fcfMarginY1FromFilings={anchors.fcfMarginY1FromFilings}
           anchorPeriod={anchors.period}
           sourceFilings={anchors.sourceFilings}
           past5YCagr={anchors.past5YCagr}
@@ -105,7 +120,12 @@ export function DcfView({
           onScenario={applyScenario}
           onField={setField}
         />
-        <BridgeSection bridge={bridge} assumptions={assumptions} currentPrice={currentPrice} />
+        <BridgeSection
+          bridge={bridge}
+          assumptions={assumptions}
+          currentPrice={currentPrice}
+          onField={setField}
+        />
         <ForecastSection rows={rows} bridge={bridge} />
       </div>
 
@@ -186,20 +206,26 @@ function useDcfChallenges(assumptions: DcfInputs, past5YCagr: number | null): Ch
 
 function ResultsSection({
   bridge,
+  assumptions,
   currentPrice,
   priceAsOf,
   ticker,
   myFairValue,
   actions,
+  onField,
 }: {
   bridge: DcfBridge;
+  assumptions: DcfInputs;
   currentPrice: number;
   priceAsOf: string | null;
   ticker: string;
   myFairValue: number | null;
   actions: MethodViewProps["actions"];
+  onField: <K extends keyof DcfInputs>(key: K, value: DcfInputs[K]) => void;
 }) {
-  const undervalued = bridge.mos >= 0;
+  const priceGap =
+    currentPrice > 0 ? ((bridge.fv - currentPrice) / currentPrice) * 100 : 0;
+  const undervalued = bridge.fv >= currentPrice;
 
   return (
     <Card>
@@ -217,8 +243,8 @@ function ResultsSection({
           }`}
         >
           {undervalued
-            ? `Price is ${fmt1(bridge.mos)}% below your fair value — $${fmt2(bridge.fv - currentPrice)} per share of margin`
-            : `Price is ${fmt1(Math.abs(bridge.mos))}% above your fair value — no margin of safety at this price`}
+            ? `Price is ${fmt1(priceGap)}% below your fair value — $${fmt2(bridge.fv - currentPrice)} per share of cushion`
+            : `Price is ${fmt1(Math.abs(priceGap))}% above your fair value — no cushion at this price`}
         </p>
       </div>
 
@@ -226,7 +252,7 @@ function ResultsSection({
         <div className="flex flex-col gap-2.5 px-[18px] py-[18px] md:gap-3 md:px-6 md:py-5">
           <div className="flex flex-wrap items-center justify-between gap-1.5">
             <span className="text-[10px] font-bold tracking-wider text-slate-400 uppercase">
-              My model fair value
+              Margin of safety
             </span>
             {myFairValue !== null && (
               <span className="rounded-full border border-emerald-200 bg-emerald-50 px-[7px] py-0.5 text-[10px] font-bold text-emerald-700">
@@ -234,9 +260,26 @@ function ResultsSection({
               </span>
             )}
           </div>
-          <div>
+          <div className="flex items-center gap-1.5 rounded-[10px] border-2 border-slate-200 bg-white px-3.5 py-2 focus-within:border-blue-400">
+            <NumberInput
+              value={assumptions.mosPercent}
+              limits={MOS_PERCENT_LIMITS}
+              onCommit={(value) => onField("mosPercent", value)}
+              ariaLabel="Margin of safety"
+              className="min-w-0 flex-1 text-[28px] font-bold text-slate-900 md:text-[32px]"
+            />
+            <span className="text-[18px] font-semibold text-slate-400">%</span>
+          </div>
+          <p className="text-[11px] text-slate-400">
+            Haircut on intrinsic ${fmt2(bridge.intrinsic)} → fair value
+          </p>
+
+          <div className="mt-1 border-t border-slate-100 pt-2.5">
+            <span className="text-[10px] font-bold tracking-wider text-slate-400 uppercase">
+              My model fair value
+            </span>
             <span
-              className={`block font-mono text-[40px] leading-none font-bold tabular-nums md:text-[52px] ${
+              className={`mt-1 block font-mono text-[40px] leading-none font-bold tabular-nums md:text-[52px] ${
                 undervalued ? "text-emerald-600" : "text-red-500"
               }`}
             >
@@ -247,7 +290,7 @@ function ResultsSection({
                 undervalued ? "text-emerald-600" : "text-red-500"
               }`}
             >
-              {fmtSigned(bridge.mos)} vs. current price
+              {fmtSigned(priceGap)} vs. current price
             </span>
           </div>
           <button
@@ -273,22 +316,13 @@ function ResultsSection({
               {priceAsOf ? ` · ${priceAsOf}` : ""}
             </span>
           </div>
-          <button
-            type="button"
-            onClick={actions.onUseInDecision}
-            disabled={actions.handingOff || bridge.fv <= 0}
-            className={`self-start rounded-lg px-3.5 py-[7px] text-[11px] font-bold disabled:opacity-60 ${
-              actions.handingOff ? "bg-blue-100 text-blue-700" : "bg-blue-600 text-white hover:bg-blue-700"
-            }`}
-          >
-            {actions.handingOff ? "Returning…" : "Use in decision →"}
-          </button>
         </div>
       </div>
 
       <div className="flex items-center gap-2 overflow-x-auto border-t border-slate-100 bg-slate-50 px-[18px] py-2.5 md:px-[22px]">
         <span className="shrink-0 text-[10px] font-semibold text-slate-400">Inside the model →</span>
         {[
+          { label: "Intrinsic / share", value: `$${fmt2(bridge.intrinsic)}` },
           { label: "Terminal value", value: fmtMoneyM(bridge.tv) },
           { label: "PV of terminal value", value: fmtMoneyM(bridge.pvTv) },
           {
@@ -316,6 +350,7 @@ function AssumptionsSection({
   assumptions,
   anchorDrivers,
   anchorsAvailable,
+  fcfMarginY1FromFilings,
   anchorPeriod,
   sourceFilings,
   past5YCagr,
@@ -327,6 +362,7 @@ function AssumptionsSection({
   assumptions: DcfInputs;
   anchorDrivers: DcfDrivers;
   anchorsAvailable: boolean;
+  fcfMarginY1FromFilings: boolean;
   anchorPeriod: string | null;
   sourceFilings: FilingRef[];
   past5YCagr: number | null;
@@ -419,12 +455,13 @@ function AssumptionsSection({
             />
             <DriverField
               label="FCF margin Y1"
-              hint="Free cash flow as a % of revenue in year 1. Each year: FCF = revenue × margin. Prefill from filings: (TTM operating cash flow − TTM CapEx) ÷ TTM revenue. CapEx is an outflow, so it subtracts; if CapEx exceeds OCF the prefill floors at 0%."
+              hint="Free cash flow as a % of revenue in year 1. Each year: FCF = revenue × margin. Prefill from filings: (TTM operating cash flow − TTM CapEx) ÷ TTM revenue. CapEx is an outflow, so it subtracts; if CapEx exceeds OCF the prefill floors at 0%. When prefilled from filings this field is locked."
               value={assumptions.fcfMarginY1}
               reference={anchorDrivers.fcfMarginY1}
               suffix="%"
               limits={DRIVER_LIMITS.fcfMarginY1}
               onChange={(v) => onField("fcfMarginY1", v)}
+              readOnly={fcfMarginY1FromFilings}
             />
             <DriverField
               label="FCF margin terminal"
@@ -505,13 +542,17 @@ function BridgeSection({
   bridge,
   assumptions,
   currentPrice,
+  onField,
 }: {
   bridge: DcfBridge;
   assumptions: DcfInputs;
   currentPrice: number;
+  onField: <K extends keyof DcfInputs>(key: K, value: DcfInputs[K]) => void;
 }) {
   const [evOpen, setEvOpen] = useState(false);
-  const undervalued = bridge.mos >= 0;
+  const priceGap =
+    currentPrice > 0 ? ((bridge.fv - currentPrice) / currentPrice) * 100 : 0;
+  const undervalued = bridge.fv >= currentPrice;
 
   return (
     <Card>
@@ -523,7 +564,7 @@ function BridgeSection({
           </span>
         </div>
         <p className="mt-px text-[11px] text-slate-400">
-          FCF → terminal value → EV → plus cash, less debt → equity → fair value per share
+          FCF → terminal value → EV → plus cash, less debt → equity → intrinsic → MOS → fair value
         </p>
       </div>
 
@@ -606,6 +647,35 @@ function BridgeSection({
             </span>
           </div>
 
+          <div className="mt-0.5 border-t-2 border-slate-200" />
+
+          <div className="mt-1.5 flex items-center justify-between rounded-lg bg-slate-50 px-3.5 py-2.5">
+            <div>
+              <span className="text-[12px] font-bold text-slate-800">= Intrinsic value / share</span>
+              <span className="ml-2 text-[10px] text-slate-400">equity ÷ shares</span>
+            </div>
+            <span className="font-mono text-[18px] font-bold text-slate-900 tabular-nums">
+              ${fmt2(bridge.intrinsic)}
+            </span>
+          </div>
+
+          <div className="mt-2 flex items-center justify-between gap-3 rounded-[7px] border border-slate-200 bg-white px-3.5 py-2">
+            <div>
+              <span className="text-[12px] font-bold text-slate-700">− Margin of safety</span>
+              <span className="ml-2 text-[10px] text-slate-400">your haircut</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <NumberInput
+                value={assumptions.mosPercent}
+                limits={MOS_PERCENT_LIMITS}
+                onCommit={(value) => onField("mosPercent", value)}
+                ariaLabel="Margin of safety"
+                className="w-16 text-right text-[16px] font-bold text-slate-900"
+              />
+              <span className="text-[13px] font-semibold text-slate-400">%</span>
+            </div>
+          </div>
+
           <div className="mt-0.5 border-t-2 border-slate-900" />
 
           <div
@@ -619,7 +689,9 @@ function BridgeSection({
               >
                 = Fair value per share
               </span>
-              <span className="ml-2 text-[10px] text-slate-400">equity value ÷ shares</span>
+              <span className="ml-2 text-[10px] text-slate-400">
+                intrinsic × (1 − {fmt1(assumptions.mosPercent)}%)
+              </span>
             </div>
             <span
               className={`font-mono text-[22px] font-bold tabular-nums ${
@@ -645,14 +717,14 @@ function BridgeSection({
               <span
                 className={`text-[12px] font-bold ${undervalued ? "text-emerald-700" : "text-red-600"}`}
               >
-                Margin of safety
+                vs. current price
               </span>
               <span
                 className={`font-mono text-[16px] font-bold tabular-nums ${
                   undervalued ? "text-emerald-600" : "text-red-500"
                 }`}
               >
-                {fmtSigned(bridge.mos)}
+                {fmtSigned(priceGap)}
               </span>
             </div>
           </div>

@@ -1,3 +1,5 @@
+import type { ValuationMethod } from "./types";
+
 export type Quote = {
   ticker: string;
   name: string;
@@ -13,6 +15,8 @@ export type Quote = {
 export type WatchlistItem = Quote & {
   stockId: string;
   fairValue: number | null;
+  /** Method behind `fairValue` when one is set as My Fair Value. */
+  fairValueMethod: ValuationMethod | null;
   /** MOS vs prior close when a fair value exists: (fv - price) / price. */
   mosPercent: number | null;
 };

@@ -47,6 +47,7 @@ export function rdcfToDcfInputs(inp: RdcfInputs, growthY1_5: number): DcfInputs 
     cash: inp.cash,
     debt: inp.debt,
     shares: inp.shares,
+    mosPercent: 0,
   };
 }
 

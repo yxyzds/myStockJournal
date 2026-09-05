@@ -39,9 +39,20 @@ type Drafts = {
 function draftsFrom(data: ValuationWorkbench): Drafts {
   const saved = (method: ImplementedMethod) =>
     data.models.find((model) => model.method === method)?.assumptions;
+  const dcf = (saved("dcf") as DcfInputs | undefined) ?? dcfInputsFromAnchors(data.anchors);
+  const rdcf = (saved("rdcf") as RdcfInputs | undefined) ?? rdcfInputsFromAnchors(data.anchors);
+  // Filing-computed Y1 margin always wins over a stale saved worksheet.
+  if (data.anchors.fcfMarginY1FromFilings) {
+    dcf.fcfMarginY1 = data.anchors.drivers.fcfMarginY1;
+    rdcf.fcfMarginY1 = data.anchors.drivers.fcfMarginY1;
+  }
+  // Older DCF worksheets predate the user MOS haircut.
+  if (dcf.mosPercent == null || !Number.isFinite(dcf.mosPercent)) {
+    dcf.mosPercent = 0;
+  }
   return {
-    dcf: (saved("dcf") as DcfInputs | undefined) ?? dcfInputsFromAnchors(data.anchors),
-    rdcf: (saved("rdcf") as RdcfInputs | undefined) ?? rdcfInputsFromAnchors(data.anchors),
+    dcf,
+    rdcf,
     pe: (saved("pe") as PeInputs | undefined) ?? (defaultAssumptions("pe", data.anchors) as PeInputs),
   };
 }
@@ -320,18 +331,6 @@ function TopBar({
               className="hidden rounded-[7px] bg-emerald-600 px-3 py-1.5 text-[11px] font-bold text-white hover:bg-emerald-700 disabled:opacity-50 md:block"
             >
               Set Fair Value
-            </button>
-          )}
-          {producesFairValue && (
-            <button
-              type="button"
-              onClick={actions.onUseInDecision}
-              disabled={!canAct || actions.handingOff}
-              className={`rounded-[7px] px-2.5 py-1.5 text-[11px] font-bold disabled:opacity-60 md:px-3 ${
-                actions.handingOff ? "bg-blue-100 text-blue-700" : "bg-blue-600 text-white hover:bg-blue-700"
-              }`}
-            >
-              {actions.handingOff ? "Returning…" : "Use in decision"}
             </button>
           )}
         </div>

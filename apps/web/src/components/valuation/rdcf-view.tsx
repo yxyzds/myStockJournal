@@ -77,6 +77,7 @@ export function RdcfView({
   const challenges = useRdcfChallenges(implied, dcfBaseline.growthY1_5, ticker);
 
   function setField<K extends keyof RdcfInputs>(key: K, value: RdcfInputs[K]) {
+    if (key === "fcfMarginY1" && anchors.fcfMarginY1FromFilings) return;
     onChange({ ...assumptions, [key]: value });
   }
 
@@ -100,6 +101,7 @@ export function RdcfView({
       <HeldConstantsSection
         assumptions={assumptions}
         anchorsAvailable={anchors.available}
+        fcfMarginY1FromFilings={anchors.fcfMarginY1FromFilings}
         anchorPeriod={anchors.period}
         sourceFilings={anchors.sourceFilings}
         past5YCagr={anchors.past5YCagr}
@@ -438,12 +440,14 @@ function HeldDriverRow({
   value,
   limits,
   onChange,
+  readOnly = false,
 }: {
   label: string;
   hint: string;
   value: number;
   limits: (typeof DRIVER_LIMITS)[keyof typeof DRIVER_LIMITS];
   onChange: (value: number) => void;
+  readOnly?: boolean;
 }) {
   const [hintOpen, setHintOpen] = useState(false);
 
@@ -454,12 +458,19 @@ function HeldDriverRow({
           {label}
           <FieldHint text={hint} open={hintOpen} onToggle={() => setHintOpen((open) => !open)} />
         </span>
-        <div className="flex items-center gap-1 rounded-[7px] border border-slate-200 bg-white px-2 py-1 focus-within:border-blue-300">
+        <div
+          className={`flex items-center gap-1 rounded-[7px] border px-2 py-1 ${
+            readOnly
+              ? "border-slate-100 bg-slate-50"
+              : "border-slate-200 bg-white focus-within:border-blue-300"
+          }`}
+        >
           <NumberInput
             value={value}
             limits={limits}
             onCommit={onChange}
             ariaLabel={label}
+            readOnly={readOnly}
             className="w-12 text-right text-[12px] font-bold text-slate-900"
           />
           <span className="text-[10px] text-slate-400">%</span>
@@ -477,6 +488,7 @@ function HeldDriverRow({
 function HeldConstantsSection({
   assumptions,
   anchorsAvailable,
+  fcfMarginY1FromFilings,
   anchorPeriod,
   sourceFilings,
   past5YCagr,
@@ -485,6 +497,7 @@ function HeldConstantsSection({
 }: {
   assumptions: RdcfInputs;
   anchorsAvailable: boolean;
+  fcfMarginY1FromFilings: boolean;
   anchorPeriod: string | null;
   sourceFilings: FilingRef[];
   past5YCagr: number | null;
@@ -589,6 +602,7 @@ function HeldConstantsSection({
                 value={assumptions[driver.key]}
                 limits={DRIVER_LIMITS[driver.key]}
                 onChange={(value) => onField(driver.key, value)}
+                readOnly={driver.key === "fcfMarginY1" && fcfMarginY1FromFilings}
               />
             ))}
           </div>

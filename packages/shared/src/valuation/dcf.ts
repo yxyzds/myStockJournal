@@ -9,6 +9,8 @@ export type DcfInputs = {
   cash: number;
   debt: number;
   shares: number;
+  /** User haircut (%) applied to intrinsic value to get fair value. */
+  mosPercent: number;
 };
 
 export type DcfYearRow = {
@@ -26,7 +28,11 @@ export type DcfBridge = {
   pvTv: number;
   ev: number;
   equity: number;
+  /** Equity value ÷ shares, before the MOS haircut. */
+  intrinsic: number;
+  /** Intrinsic × (1 − mosPercent/100) — the model fair value. */
   fv: number;
+  /** Echo of the user's MOS input. */
   mos: number;
 };
 
@@ -41,6 +47,7 @@ export const DDOG_BASE_INPUTS: DcfInputs = {
   cash: 3200,
   debt: 800,
   shares: 325,
+  mosPercent: 0,
 };
 
 export const DDOG_CURRENT_PRICE = 248.0;
@@ -72,8 +79,9 @@ export function calcDcfBridge(
   rows: DcfYearRow[],
   currentPrice: number,
 ): DcfBridge {
+  void currentPrice; // Kept for call-site compatibility; price vs FV is a UI concern.
   if (inp.wacc <= inp.termGrowth) {
-    return { pvFcfs: 0, tv: 0, pvTv: 0, ev: 0, equity: 0, fv: 0, mos: -100 };
+    return { pvFcfs: 0, tv: 0, pvTv: 0, ev: 0, equity: 0, intrinsic: 0, fv: 0, mos: inp.mosPercent };
   }
   const pvFcfs = rows.reduce((sum, row) => sum + row.pvFcf, 0);
   const lastFcf = rows[rows.length - 1].fcf;
@@ -81,9 +89,10 @@ export function calcDcfBridge(
   const pvTv = tv / Math.pow(1 + inp.wacc / 100, 10);
   const ev = pvFcfs + pvTv;
   const equity = ev + inp.cash - inp.debt;
-  const fv = equity / inp.shares;
-  const mos = ((fv - currentPrice) / currentPrice) * 100;
-  return { pvFcfs, tv, pvTv, ev, equity, fv, mos };
+  const intrinsic = equity / inp.shares;
+  const mos = inp.mosPercent;
+  const fv = intrinsic * (1 - mos / 100);
+  return { pvFcfs, tv, pvTv, ev, equity, intrinsic, fv, mos };
 }
 
 export function valueDcf(inp: DcfInputs, currentPrice: number, startYear = 2026) {

@@ -5,6 +5,17 @@ export type PePoint = {
   growth: number;
 };
 
+/** Chart-ready multiple point — yearly or week/month bars from live prices. */
+export type PeSeriesPoint = {
+  /** Axis label: "2024", "2025-09", "2025-09-12", etc. */
+  label: string;
+  pe: number;
+  /** EPS growth % used for PEG; null when unknown. */
+  growth: number | null;
+};
+
+export type PeChartPeriod = "week" | "month" | "year";
+
 export type PeInputs = {
   /** The multiple the user is willing to pay. */
   expectedPe: number;

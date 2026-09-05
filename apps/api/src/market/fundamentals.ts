@@ -10,7 +10,7 @@ import { fetchEdgarFundamentals } from "./edgar";
  * and P/E history cannot (they need analyst estimates and price history), so
  * those stay bundled and are simply absent for tickers we have not curated.
  */
-type BundledAnchors = Omit<ValuationAnchors, "available" | "sourceFilings">;
+type BundledAnchors = Omit<ValuationAnchors, "available" | "sourceFilings" | "fcfMarginY1FromFilings">;
 
 /** Refetch weekly. Filings land quarterly, but a 10-Q can arrive any day. */
 const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -18,7 +18,7 @@ const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
  * Bump when the cached payload shape or merge rules change so stale rows are
  * refetched instead of serving week-old driver prefills.
  */
-const CACHE_VERSION = 2;
+const CACHE_VERSION = 3;
 
 /** Neutral drivers for a ticker we have no estimate for. The user must review them. */
 const FALLBACK_DRIVERS: DcfDrivers = {
@@ -230,6 +230,7 @@ function unavailableAnchors(): ValuationAnchors {
     fwdEps: null,
     peHistory: [],
     drivers: FALLBACK_DRIVERS,
+    fcfMarginY1FromFilings: false,
   };
 }
 
@@ -307,6 +308,7 @@ function asAnchors(payload: unknown, period: string | null): ValuationAnchors | 
     fwdEps: num(row.fwdEps),
     peHistory: asPeHistory(row.peHistory),
     drivers: asDrivers(row.drivers),
+    fcfMarginY1FromFilings: row.fcfMarginY1FromFilings === true,
   };
 }
 
@@ -378,6 +380,7 @@ function anchorsFromEdgar(
       ...bundled?.drivers,
       ...edgar.observedDrivers,
     },
+    fcfMarginY1FromFilings: edgar.observedDrivers.fcfMarginY1 != null,
   };
 }
 
@@ -403,7 +406,12 @@ export async function getAnchors(rawTicker: string): Promise<ValuationAnchors> {
   if (cached) return cached.anchors;
   if (!bundled) return unavailableAnchors();
 
-  const anchors: ValuationAnchors = { available: true, sourceFilings: [], ...bundled };
+  const anchors: ValuationAnchors = {
+    available: true,
+    sourceFilings: [],
+    fcfMarginY1FromFilings: false,
+    ...bundled,
+  };
   await writeCache(ticker, anchors);
   return anchors;
 }

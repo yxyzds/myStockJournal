@@ -51,12 +51,14 @@ export function NumberInput({
   onCommit,
   className = "",
   ariaLabel,
+  readOnly = false,
 }: {
   value: number;
   limits: NumberLimits;
   onCommit: (value: number) => void;
   className?: string;
   ariaLabel?: string;
+  readOnly?: boolean;
 }) {
   const [draft, setDraft] = useState<string | null>(null);
 
@@ -65,11 +67,13 @@ export function NumberInput({
       type="number"
       inputMode="decimal"
       aria-label={ariaLabel}
+      readOnly={readOnly}
       value={draft ?? String(value)}
       step={limits.step}
       min={limits.min}
       max={limits.max}
       onChange={(event) => {
+        if (readOnly) return;
         setDraft(event.target.value);
         const parsed = Number(event.target.value);
         if (
@@ -82,13 +86,19 @@ export function NumberInput({
         }
       }}
       onBlur={(event) => {
+        if (readOnly) {
+          setDraft(null);
+          return;
+        }
         setDraft(null);
         const parsed = Number(event.target.value);
         if (Number.isFinite(parsed)) {
           onCommit(Math.min(limits.max, Math.max(limits.min, parsed)));
         }
       }}
-      className={`bg-transparent p-0 font-mono tabular-nums outline-none ${className}`}
+      className={`bg-transparent p-0 font-mono tabular-nums outline-none ${
+        readOnly ? "cursor-default text-slate-700" : ""
+      } ${className}`}
     />
   );
 }
@@ -106,6 +116,7 @@ export function DriverField({
   suffix,
   limits,
   onChange,
+  readOnly = false,
 }: {
   label: string;
   /** Shown when the user opens the ? affordance. */
@@ -115,10 +126,12 @@ export function DriverField({
   suffix: string;
   limits: NumberLimits;
   onChange: (value: number) => void;
+  /** Filing-derived drivers stay locked — same idea as AnchorRow. */
+  readOnly?: boolean;
 }) {
   const [hintOpen, setHintOpen] = useState(false);
   const threshold = Math.max(Math.abs(reference * 0.12), 0.3);
-  const diverges = Math.abs(value - reference) > threshold;
+  const diverges = !readOnly && Math.abs(value - reference) > threshold;
 
   return (
     <div className="flex flex-col gap-1">
@@ -139,9 +152,11 @@ export function DriverField({
       ) : null}
       <div
         className={`flex items-center gap-[3px] rounded-[7px] border px-2.5 py-[7px] transition-colors ${
-          diverges
-            ? "border-amber-300 bg-amber-50"
-            : "border-slate-200 bg-white focus-within:border-blue-400 focus-within:ring-1 focus-within:ring-blue-100 hover:border-blue-300"
+          readOnly
+            ? "border-slate-100 bg-slate-50"
+            : diverges
+              ? "border-amber-300 bg-amber-50"
+              : "border-slate-200 bg-white focus-within:border-blue-400 focus-within:ring-1 focus-within:ring-blue-100 hover:border-blue-300"
         }`}
       >
         <NumberInput
@@ -149,14 +164,22 @@ export function DriverField({
           limits={limits}
           onCommit={onChange}
           ariaLabel={label}
+          readOnly={readOnly}
           className="w-full text-[14px] font-bold text-slate-900"
         />
         <span className="shrink-0 text-[11px] text-slate-400 select-none">{suffix}</span>
       </div>
       <div className="flex h-3.5 items-center justify-between">
-        <span className={`text-[10px] ${diverges ? "font-semibold text-amber-600" : "text-slate-300"}`}>
-          Estimate: {reference}
-          {suffix}
+        <span
+          className={`text-[10px] ${
+            readOnly
+              ? "text-slate-400"
+              : diverges
+                ? "font-semibold text-amber-600"
+                : "text-slate-300"
+          }`}
+        >
+          {readOnly ? `From filings · ${reference}${suffix}` : `Estimate: ${reference}${suffix}`}
         </span>
         {diverges && (
           <span className="rounded-[4px] border border-amber-200 bg-amber-50 px-[5px] py-px text-[9px] font-bold text-amber-600">
