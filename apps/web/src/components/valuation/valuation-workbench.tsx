@@ -226,6 +226,12 @@ export function ValuationWorkbenchPage({ ticker }: { ticker: string }) {
             actions={actions}
             assumptions={drafts.dcf}
             onChange={(assumptions) => setDrafts({ ...drafts, dcf: assumptions })}
+            review={data.dcfAssumptionReview}
+            onReview={(review) => {
+              queryClient.setQueryData<ValuationWorkbench>(["valuation", symbol], (prev) =>
+                prev ? { ...prev, dcfAssumptionReview: review } : prev,
+              );
+            }}
           />
         ) : method === "rdcf" ? (
           <RdcfView

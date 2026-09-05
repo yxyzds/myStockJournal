@@ -14,8 +14,13 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
-/** Buy / sell / thesis-update — the three journal decision types. */
-export const decisionTypeEnum = pgEnum("decision_type", ["buy", "sell", "thesis_update"]);
+/** Buy / sell / thesis update / set fair value — actions that appear on Recent Decisions. */
+export const decisionTypeEnum = pgEnum("decision_type", [
+  "buy",
+  "sell",
+  "thesis_update",
+  "fair_value",
+]);
 /** Valuation methods the user can run: DCF, reverse DCF, P/E, EV/EBITDA, sum-of-the-parts. */
 export const valuationMethodEnum = pgEnum("valuation_method", [
   "dcf",
@@ -47,6 +52,8 @@ export const stocks = pgTable(
     watched: boolean("watched").notNull().default(true),
     /** Latest stock-level Analyze result; overwritten on Re-run. */
     tradeReview: jsonb("trade_review"),
+    /** Latest DCF assumption review; overwritten on Re-run. */
+    dcfAssumptionReview: jsonb("dcf_assumption_review"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

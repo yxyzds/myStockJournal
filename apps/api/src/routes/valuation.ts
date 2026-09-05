@@ -4,7 +4,9 @@ import {
   METHOD_LABELS,
   buildValuation,
   fairValueFromOutputs,
+  isDcfAssumptionReview,
   isImplementedMethod,
+  parseDcfInputs,
   type ImplementedMethod,
   type PeerMultiple,
   type ValuationAnchors,
@@ -16,9 +18,12 @@ import {
   type ValuationSnapshot,
   type ValuationWorkbench,
 } from "@mystockjournal/shared";
+import { reviewDcfAssumptions } from "../ai/dcf-review";
+import { env } from "../env";
 import type { AppEnv } from "../types";
 import { db } from "../db";
-import { valuationModels, valuationSnapshots } from "../db/schema";
+import { stocks, valuationModels, valuationSnapshots } from "../db/schema";
+import { recordDecision } from "../lib/decisions";
 import { TICKER_RE, getOrCreateStock, parseTicker } from "../lib/stocks";
 import { getAnchors } from "../market/fundamentals";
 import { buildPeChart, peUnavailableReason } from "../market/pe-series";
@@ -161,9 +166,53 @@ valuationRoutes.get("/:ticker/valuation", async (c) => {
     anchors,
     models,
     myFairValue: myFairValue ? fairValueFromOutputs(myFairValue.outputs) : null,
+    dcfAssumptionReview: isDcfAssumptionReview(stock.dcfAssumptionReview)
+      ? stock.dcfAssumptionReview
+      : null,
   };
 
   return c.json(payload);
+});
+
+/**
+ * POST /stocks/:ticker/valuation/dcf/ai-review — one-sentence critique of each
+ * DCF driver except filing-locked FCF margin Y1.
+ */
+valuationRoutes.post("/:ticker/valuation/dcf/ai-review", async (c) => {
+  if (!env.aiApiKey || !env.aiBaseUrl) {
+    return c.json(
+      { error: "Set AI_BASE_URL and AI_API_KEY in .env to enable DCF review" },
+      503,
+    );
+  }
+
+  const loaded = await loadWorkbenchContext(c.get("userId"), c.req.param("ticker"));
+  if ("error" in loaded) return c.json({ error: loaded.error }, loaded.status);
+
+  const body = await c.req.json().catch(() => null);
+  const rawAssumptions =
+    body && typeof body === "object" ? (body as { assumptions?: unknown }).assumptions : undefined;
+  const merged = withServerAnchors("dcf", rawAssumptions, loaded.anchors);
+  const parsed = parseDcfInputs(merged);
+  if ("error" in parsed) return c.json({ error: parsed.error }, 400);
+
+  try {
+    const review = await reviewDcfAssumptions({
+      ticker: loaded.stock.ticker,
+      name: loaded.quote.name || loaded.stock.name,
+      assumptions: parsed.value,
+      anchors: loaded.anchors,
+      currentPrice: loaded.ctx.currentPrice,
+    });
+    await db
+      .update(stocks)
+      .set({ dcfAssumptionReview: review, updatedAt: new Date() })
+      .where(and(eq(stocks.id, loaded.stock.id), eq(stocks.userId, loaded.stock.userId)));
+    return c.json({ review });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "DCF review failed";
+    return c.json({ error: message }, 502);
+  }
 });
 
 /**
@@ -286,6 +335,17 @@ valuationRoutes.post("/:ticker/valuation/:method/my-fair-value", async (c) => {
       .where(eq(valuationModels.id, existing[0].id))
       .returning();
     return rows[0];
+  });
+
+  const fairValue = fairValueFromOutputs(updated.outputs);
+  await recordDecision({
+    userId: stock.userId,
+    stockId: stock.id,
+    type: "fair_value",
+    rationale:
+      fairValue != null
+        ? `Set My Fair Value to $${fairValue.toFixed(2)} via ${METHOD_LABELS[method]}`
+        : `Set My Fair Value via ${METHOD_LABELS[method]}`,
   });
 
   return c.json({ model: toModel(updated) });
