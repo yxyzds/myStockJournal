@@ -1,7 +1,7 @@
-import type { TradeReview } from "./ai/trade-review";
+import type { TradeReview, TradeReviewGrade } from "./ai/trade-review";
 import type { Quote } from "./market";
 
-export type DecisionType = "buy" | "sell" | "thesis_update";
+export type DecisionType = "buy" | "sell" | "thesis_update" | "fair_value";
 export type ValuationMethod = "dcf" | "rdcf" | "pe" | "evebitda" | "sotp";
 
 export type Stock = {
@@ -65,4 +65,17 @@ export type StockDetail = {
   journal: JournalEntry[];
   transactions: StockTransaction[];
   tradeReview: TradeReview | null;
+};
+
+/** Home-page Recent Decisions row. */
+export type RecentDecision = {
+  id: string;
+  ticker: string;
+  name: string;
+  type: DecisionType;
+  date: string;
+  rationale: string;
+  /** Share quantity for buy/sell; null for journal and fair-value rows. */
+  qty: number | null;
+  grade: TradeReviewGrade | null;
 };

@@ -670,17 +670,40 @@ function FairValueControl({ symbol }: { symbol: string }) {
   );
 }
 
+function analyzeHint(input: { hasBuy: boolean; hasSell: boolean; hasFairValue: boolean }) {
+  const missing: string[] = [];
+  if (!input.hasBuy) missing.push("one buy");
+  if (!input.hasSell) missing.push("one sell");
+  if (!input.hasFairValue) missing.push("a fair value");
+  if (missing.length === 0) return null;
+  if (missing.length === 1) return `Add ${missing[0]} to analyze`;
+  if (missing.length === 2) return `Add ${missing[0]} and ${missing[1]} to analyze`;
+  return `Add ${missing[0]}, ${missing[1]}, and ${missing[2]} to analyze`;
+}
+
 function RateMyTransactionBar({
   ticker,
-  journalCount,
+  hasBuy,
+  hasSell,
   review,
   onReview,
 }: {
   ticker: string;
-  journalCount: number;
+  hasBuy: boolean;
+  hasSell: boolean;
   review: TradeReview | null;
   onReview: (review: TradeReview) => void;
 }) {
+  const valuationQuery = useQuery({
+    queryKey: ["valuation", ticker],
+    queryFn: () => api<ValuationWorkbench>(`/stocks/${ticker}/valuation`),
+  });
+  const hasFairValue = valuationQuery.data?.myFairValue != null;
+  const hint = valuationQuery.isPending
+    ? null
+    : analyzeHint({ hasBuy, hasSell, hasFairValue });
+  const canAnalyze = !valuationQuery.isPending && hint == null;
+
   const rateMutation = useMutation({
     mutationFn: () =>
       api<{ review: TradeReview }>(`/stocks/${ticker}/ai/trade-review`, { method: "POST" }),
@@ -701,12 +724,14 @@ function RateMyTransactionBar({
       <div className="flex w-full items-center justify-between gap-3 border-t border-[#ebf0f5] px-4 py-[18px] md:px-6">
         <div className="flex min-w-0 flex-col gap-0.5">
           <span className="text-[13px] font-semibold text-[#1e293b]">Rate My Transaction</span>
-          <span className="text-[11px] text-[#94a3b8]">AI analysis of this trade</span>
+          <span className="text-[11px] text-[#94a3b8]">
+            {hint ?? "AI analysis of this trade"}
+          </span>
           {errorMessage && <p className="text-[11px] font-medium text-red-500">{errorMessage}</p>}
         </div>
         <button
           type="button"
-          disabled={analyzing || journalCount === 0}
+          disabled={analyzing || !canAnalyze}
           onClick={() => rateMutation.mutate()}
           className="flex shrink-0 items-center gap-2 rounded-[10px] px-4 py-[9px] text-white disabled:opacity-60"
           style={{
@@ -743,12 +768,13 @@ function RateMyTransactionBar({
             <span className="text-[9px] font-bold tracking-widest uppercase">AI Verdict</span>
           </div>
           <p className="text-[12px] leading-[1.5] font-medium text-[#334155]">{review.blurb}</p>
+          {hint && <p className="text-[11px] text-[#94a3b8]">{hint}</p>}
           {errorMessage && <p className="text-[11px] font-medium text-red-500">{errorMessage}</p>}
         </div>
         <button
           type="button"
           title="Re-analyze"
-          disabled={analyzing}
+          disabled={analyzing || !canAnalyze}
           onClick={() => rateMutation.mutate()}
           className="flex shrink-0 items-center gap-1.5 rounded-[7px] border border-[#e2e8f0] px-2.5 py-1.5 text-[#94a3b8] hover:border-[#93c5fd] hover:bg-[#eff6ff] hover:text-[#2563eb] disabled:opacity-50"
         >
@@ -978,7 +1004,8 @@ export function StockDetail({ ticker }: { ticker: string }) {
           )}
           <RateMyTransactionBar
             ticker={symbol}
-            journalCount={data?.journal.length ?? 0}
+            hasBuy={(data?.transactions ?? []).some((txn) => txn.type === "buy")}
+            hasSell={(data?.transactions ?? []).some((txn) => txn.type === "sell")}
             review={tradeReview}
             onReview={(review) => {
               queryClient.setQueryData<StockDetail>(["stock", symbol], (prev) =>

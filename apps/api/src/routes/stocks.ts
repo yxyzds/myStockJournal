@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { and, asc, eq, inArray } from "drizzle-orm";
 import {
+  fairValueFromOutputs,
   isTradeReviewGrade,
   type JournalEntry,
   type JournalSnapshot,
@@ -13,7 +14,8 @@ import { reviewTradeJournal } from "../ai/trade-review";
 import { env } from "../env";
 import type { AppEnv } from "../types";
 import { db } from "../db";
-import { decisions, journalEntries, stocks } from "../db/schema";
+import { decisions, journalEntries, stocks, valuationModels } from "../db/schema";
+import { recordDecision } from "../lib/decisions";
 import { getOrCreateStock, num } from "../lib/stocks";
 
 function todayNyDate() {
@@ -182,6 +184,13 @@ stockRoutes.post("/:ticker/journal", async (c) => {
     })
     .returning();
 
+  await recordDecision({
+    userId: found.stock.userId,
+    stockId: found.stock.id,
+    type: "thesis_update",
+    rationale: text,
+  });
+
   return c.json({ entry: toJournal(inserted[0]) }, 201);
 });
 
@@ -211,6 +220,14 @@ stockRoutes.patch("/:ticker/journal/:entryId", async (c) => {
     .returning();
 
   if (!updated[0]) return c.json({ error: "Entry not found" }, 404);
+
+  await recordDecision({
+    userId: found.stock.userId,
+    stockId: found.stock.id,
+    type: "thesis_update",
+    rationale: text,
+  });
+
   return c.json({ entry: toJournal(updated[0]) });
 });
 
@@ -335,7 +352,7 @@ stockRoutes.post("/:ticker/ai/trade-review", async (c) => {
   if ("error" in found) return c.json({ error: found.error }, found.status);
   const { stock } = found;
 
-  const [journalRows, decisionRows] = await Promise.all([
+  const [journalRows, decisionRows, fvRows] = await Promise.all([
     db
       .select()
       .from(journalEntries)
@@ -352,6 +369,17 @@ stockRoutes.post("/:ticker/ai/trade-review", async (c) => {
       .from(decisions)
       .where(and(eq(decisions.userId, stock.userId), eq(decisions.stockId, stock.id)))
       .orderBy(asc(decisions.date), asc(decisions.createdAt)),
+    db
+      .select()
+      .from(valuationModels)
+      .where(
+        and(
+          eq(valuationModels.userId, stock.userId),
+          eq(valuationModels.stockId, stock.id),
+          eq(valuationModels.isMyFairValue, true),
+        ),
+      )
+      .limit(1),
   ]);
 
   const journal = journalRows.map(toJournal);
@@ -362,6 +390,16 @@ stockRoutes.post("/:ticker/ai/trade-review", async (c) => {
   const transactions = decisionRows
     .map(toTransaction)
     .filter((row): row is StockTransaction => row != null);
+  const hasBuy = transactions.some((txn) => txn.type === "buy");
+  const hasSell = transactions.some((txn) => txn.type === "sell");
+  if (!hasBuy || !hasSell) {
+    return c.json({ error: "Record at least one buy and one sell before asking for a review" }, 400);
+  }
+
+  const hasFairValue = fairValueFromOutputs(fvRows[0]?.outputs) != null;
+  if (!hasFairValue) {
+    return c.json({ error: "Set a fair value before asking for a review" }, 400);
+  }
 
   try {
     const review = await reviewTradeJournal({

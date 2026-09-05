@@ -1,3 +1,4 @@
+import type { DcfAssumptionReview } from "../ai/dcf-review";
 import type { Quote } from "../market";
 import type { ValuationMethod } from "../types";
 import type { DcfInputs, DcfYearRow } from "./dcf";
@@ -80,6 +81,7 @@ export type ValuationWorkbench = {
   anchors: ValuationAnchors;
   models: ValuationModel[];
   myFairValue: number | null;
+  dcfAssumptionReview: DcfAssumptionReview | null;
 };
 
 /** A peer's current multiples, for comparison on the P/E chart. */

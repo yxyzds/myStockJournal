@@ -1,11 +1,15 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useMutation } from "@tanstack/react-query";
 import {
+  DCF_REVIEW_FIELD_LABELS,
+  DCF_REVIEW_FIELDS,
   DRIVER_LIMITS,
   MOS_PERCENT_LIMITS,
   scenarioDrivers,
   valueDcf,
+  type DcfAssumptionReview,
   type DcfBridge,
   type DcfDrivers,
   type DcfInputs,
@@ -13,6 +17,7 @@ import {
   type DcfYearRow,
   type FilingRef,
 } from "@mystockjournal/shared";
+import { ApiError, api } from "@/lib/api";
 import type { MethodViewProps } from "./actions";
 import {
   AnchorRow,
@@ -44,6 +49,8 @@ const SCENARIOS: DcfScenario[] = ["bear", "base", "bull"];
 export type DcfViewProps = MethodViewProps & {
   assumptions: DcfInputs;
   onChange: (assumptions: DcfInputs) => void;
+  review: DcfAssumptionReview | null;
+  onReview: (review: DcfAssumptionReview) => void;
 };
 
 export function DcfView({
@@ -55,6 +62,8 @@ export function DcfView({
   onChange,
   myFairValue,
   actions,
+  review,
+  onReview,
 }: DcfViewProps) {
   const [scenario, setScenario] = useState<DcfScenario | "custom">("base");
 
@@ -119,6 +128,9 @@ export function DcfView({
           scenarioFairValues={scenarioFairValues}
           onScenario={applyScenario}
           onField={setField}
+          ticker={ticker}
+          review={review}
+          onReview={onReview}
         />
         <BridgeSection
           bridge={bridge}
@@ -358,6 +370,9 @@ function AssumptionsSection({
   scenarioFairValues,
   onScenario,
   onField,
+  ticker,
+  review,
+  onReview,
 }: {
   assumptions: DcfInputs;
   anchorDrivers: DcfDrivers;
@@ -370,6 +385,9 @@ function AssumptionsSection({
   scenarioFairValues: Record<DcfScenario, number>;
   onScenario: (scenario: DcfScenario) => void;
   onField: <K extends keyof DcfInputs>(key: K, value: DcfInputs[K]) => void;
+  ticker: string;
+  review: DcfAssumptionReview | null;
+  onReview: (review: DcfAssumptionReview) => void;
 }) {
   // Filed figures are facts, so they are only typed in when no filing covered the ticker.
   const manualEntry = !anchorsAvailable;
@@ -534,7 +552,131 @@ function AssumptionsSection({
           </p>
         </div>
       </div>
+
+      <DcfAssumptionReviewBar
+        ticker={ticker}
+        assumptions={assumptions}
+        review={review}
+        onReview={onReview}
+      />
     </Card>
+  );
+}
+
+function RobotIcon({ size = 17 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden>
+      <line x1="12" y1="2" x2="12" y2="5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      <circle cx="12" cy="2" r="1" fill="currentColor" />
+      <rect x="4" y="5" width="16" height="11" rx="3" stroke="currentColor" strokeWidth="1.5" />
+      <circle cx="9" cy="10.5" r="1.5" fill="currentColor" />
+      <circle cx="15" cy="10.5" r="1.5" fill="currentColor" />
+      <path d="M9 13.5h6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+      <path d="M8 16v2M16 16v2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      <path d="M6 18h12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function DcfAssumptionReviewBar({
+  ticker,
+  assumptions,
+  review,
+  onReview,
+}: {
+  ticker: string;
+  assumptions: DcfInputs;
+  review: DcfAssumptionReview | null;
+  onReview: (review: DcfAssumptionReview) => void;
+}) {
+  const rateMutation = useMutation({
+    mutationFn: () =>
+      api<{ review: DcfAssumptionReview }>(`/stocks/${ticker}/valuation/dcf/ai-review`, {
+        method: "POST",
+        body: JSON.stringify({ assumptions }),
+      }),
+    onSuccess: (data) => onReview(data.review),
+  });
+
+  const errorMessage =
+    rateMutation.error instanceof ApiError
+      ? rateMutation.error.message
+      : rateMutation.error instanceof Error
+        ? rateMutation.error.message
+        : null;
+
+  const analyzing = rateMutation.isPending;
+
+  if (!review) {
+    return (
+      <div className="flex w-full items-center justify-between gap-3 border-t border-[#ebf0f5] px-4 py-[18px] md:px-[22px]">
+        <div className="flex min-w-0 flex-col gap-0.5">
+          <span className="text-[13px] font-semibold text-[#1e293b]">Rate My Assumptions</span>
+          <span className="text-[11px] text-[#94a3b8]">AI review of these DCF drivers</span>
+          {errorMessage && <p className="text-[11px] font-medium text-red-500">{errorMessage}</p>}
+        </div>
+        <button
+          type="button"
+          disabled={analyzing}
+          onClick={() => rateMutation.mutate()}
+          className="flex shrink-0 items-center gap-2 rounded-[10px] px-4 py-[9px] text-white disabled:opacity-60"
+          style={{
+            background: analyzing ? "#3b5fc0" : "linear-gradient(135deg, #1e40af 0%, #2563eb 100%)",
+            boxShadow: "0 2px 10px rgba(37,99,235,0.28), 0 1px 3px rgba(15,23,42,0.1)",
+          }}
+        >
+          <RobotIcon size={17} />
+          <span className="text-[12px] font-semibold whitespace-nowrap">
+            {analyzing ? "Analyzing…" : "Analyze"}
+          </span>
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="w-full border-t border-[#ebf0f5] px-4 py-[18px] md:px-[22px]">
+      <div className="flex items-start gap-3.5">
+        <div
+          className="flex h-[54px] min-w-[54px] shrink-0 items-center justify-center rounded-xl px-2"
+          style={{
+            background: "linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)",
+            boxShadow: "0 0 0 1.5px #93c5fd",
+          }}
+        >
+          <span className="text-center text-[11px] leading-tight font-bold text-[#1e40af]">
+            {review.grade}
+          </span>
+        </div>
+        <div className="flex min-w-0 flex-1 flex-col gap-2">
+          <div className="flex items-center gap-1.5 text-[#94a3b8]">
+            <RobotIcon size={12} />
+            <span className="text-[9px] font-bold tracking-widest uppercase">AI Verdict</span>
+          </div>
+          <div className="flex flex-col gap-2">
+            {DCF_REVIEW_FIELDS.map((key) => (
+              <div key={key}>
+                <p className="text-[10px] font-bold text-slate-400">{DCF_REVIEW_FIELD_LABELS[key]}</p>
+                <p className="text-[12px] leading-[1.5] font-medium text-[#334155]">
+                  {review.comments[key]}
+                </p>
+              </div>
+            ))}
+          </div>
+          {errorMessage && <p className="text-[11px] font-medium text-red-500">{errorMessage}</p>}
+        </div>
+        <button
+          type="button"
+          title="Re-analyze"
+          disabled={analyzing}
+          onClick={() => rateMutation.mutate()}
+          className="flex shrink-0 items-center gap-1.5 rounded-[7px] border border-[#e2e8f0] px-2.5 py-1.5 text-[#94a3b8] hover:border-[#93c5fd] hover:bg-[#eff6ff] hover:text-[#2563eb] disabled:opacity-50"
+        >
+          <RobotIcon size={12} />
+          <span className="text-[11px] font-medium">{analyzing ? "Analyzing…" : "Re-run"}</span>
+        </button>
+      </div>
+    </div>
   );
 }
 
