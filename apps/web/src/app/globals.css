@@ -137,14 +137,3 @@ body {
     @apply font-sans;
   }
 }
-
-@keyframes rateRipple {
-  0% {
-    transform: scale(1);
-    opacity: 0.35;
-  }
-  100% {
-    transform: scale(1.55);
-    opacity: 0;
-  }
-}
