@@ -10,10 +10,12 @@ import {
   type JournalEntry,
   type StockDetail,
   type StockTransaction,
+  type TradeReview,
+  type TradeReviewGrade,
   type ValuationMethod,
   type ValuationWorkbench,
 } from "@mystockjournal/shared";
-import { api } from "@/lib/api";
+import { ApiError, api } from "@/lib/api";
 import { formatEntryDate, formatPrice, isCalendarDate, todayNyDate } from "@/lib/format";
 import { JUDGMENT_ITEMS } from "@/lib/mock-journal";
 
@@ -654,56 +656,139 @@ function FairValueControl({ symbol }: { symbol: string }) {
   );
 }
 
-function RateMyTransactionBar() {
-  const [rated, setRated] = useState(false);
+const GRADE_STYLE: Record<
+  TradeReviewGrade,
+  { ring: string; fill: string; text: string; label: string }
+> = {
+  Clownery: {
+    ring: "#ef4444",
+    fill: "linear-gradient(145deg, #fef2f2 0%, #fee2e2 100%)",
+    text: "text-red-700",
+    label: "text-red-600",
+  },
+  Copeium: {
+    ring: "#f97316",
+    fill: "linear-gradient(145deg, #fff7ed 0%, #ffedd5 100%)",
+    text: "text-orange-700",
+    label: "text-orange-600",
+  },
+  Midtake: {
+    ring: "#64748b",
+    fill: "linear-gradient(145deg, #f8fafc 0%, #e2e8f0 100%)",
+    text: "text-slate-700",
+    label: "text-slate-500",
+  },
+  Based: {
+    ring: "#2563eb",
+    fill: "linear-gradient(145deg, #eff6ff 0%, #dbeafe 100%)",
+    text: "text-blue-800",
+    label: "text-blue-600",
+  },
+  Oracle: {
+    ring: "#059669",
+    fill: "linear-gradient(145deg, #ecfdf5 0%, #d1fae5 100%)",
+    text: "text-emerald-800",
+    label: "text-emerald-600",
+  },
+};
 
-  if (!rated) {
+function RateMyTransactionBar({
+  ticker,
+  journalCount,
+}: {
+  ticker: string;
+  journalCount: number;
+}) {
+  const [review, setReview] = useState<TradeReview | null>(null);
+
+  const rateMutation = useMutation({
+    mutationFn: () =>
+      api<{ review: TradeReview }>(`/stocks/${ticker}/ai/trade-review`, { method: "POST" }),
+    onSuccess: (data) => setReview(data.review),
+  });
+
+  const errorMessage =
+    rateMutation.error instanceof ApiError
+      ? rateMutation.error.message
+      : rateMutation.error instanceof Error
+        ? rateMutation.error.message
+        : null;
+
+  if (!review) {
     return (
       <div className="flex w-full flex-col items-center gap-3 border-t border-[#ebf0f5] pt-[22px] pb-6">
         <div className="relative flex items-center justify-center">
-          <div className="pointer-events-none absolute size-[76px] rounded-full bg-blue-600" style={{ animation: "rateRipple 2s ease-out infinite" }} />
-          <div
-            className="pointer-events-none absolute size-[76px] rounded-full bg-blue-600"
-            style={{ animation: "rateRipple 2s ease-out infinite 0.7s" }}
-          />
+          {!rateMutation.isPending && (
+            <>
+              <div
+                className="pointer-events-none absolute size-[76px] rounded-full bg-blue-600"
+                style={{ animation: "rateRipple 2s ease-out infinite" }}
+              />
+              <div
+                className="pointer-events-none absolute size-[76px] rounded-full bg-blue-600"
+                style={{ animation: "rateRipple 2s ease-out infinite 0.7s" }}
+              />
+            </>
+          )}
           <button
             type="button"
-            onClick={() => setRated(true)}
-            className="relative flex size-[76px] items-center justify-center rounded-full text-white shadow-[0_6px_24px_rgba(37,99,235,0.35)] transition-transform hover:scale-[1.07] active:scale-95"
+            disabled={rateMutation.isPending || journalCount === 0}
+            onClick={() => rateMutation.mutate()}
+            className="relative flex size-[76px] items-center justify-center rounded-full text-white shadow-[0_6px_24px_rgba(37,99,235,0.35)] transition-transform hover:scale-[1.07] active:scale-95 disabled:opacity-60 disabled:hover:scale-100"
             style={{ background: "linear-gradient(145deg, #1e40af 0%, #2563eb 55%, #3b82f6 100%)" }}
-            aria-label="Rate my transaction"
+            aria-label="Rate my journal"
           >
-            <svg width="26" height="26" viewBox="0 0 20 20" fill="currentColor" aria-hidden>
-              <path d="M10 2l2.4 5 5.6.8-4 3.9.9 5.5L10 14.5l-4.9 2.7.9-5.5L2 7.8l5.6-.8L10 2z" />
-            </svg>
+            {rateMutation.isPending ? (
+              <span className="text-[11px] font-bold tracking-wide">…</span>
+            ) : (
+              <svg width="26" height="26" viewBox="0 0 20 20" fill="currentColor" aria-hidden>
+                <path d="M10 2l2.4 5 5.6.8-4 3.9.9 5.5L10 14.5l-4.9 2.7.9-5.5L2 7.8l5.6-.8L10 2z" />
+              </svg>
+            )}
           </button>
         </div>
-        <div className="flex flex-col items-center gap-0.5">
-          <span className="text-[13px] font-semibold tracking-tight text-slate-800">Rate My Transaction</span>
-          <span className="text-[11px] text-slate-400">Let AI judge this trade</span>
+        <div className="flex flex-col items-center gap-0.5 px-6">
+          <span className="text-[13px] font-semibold tracking-tight text-slate-800">
+            {rateMutation.isPending ? "Judging your notes…" : "Rate My Journal"}
+          </span>
+          <span className="text-center text-[11px] text-slate-400">
+            {journalCount === 0
+              ? "Write a journal entry first — AI needs something to roast"
+              : "AI grades your journal · Clownery → Oracle"}
+          </span>
+          {errorMessage && (
+            <p className="mt-1 text-center text-[11px] font-medium text-red-500">{errorMessage}</p>
+          )}
         </div>
       </div>
     );
   }
 
+  const style = GRADE_STYLE[review.grade];
+
   return (
     <div className="flex w-full flex-col items-center gap-3 border-t border-[#ebf0f5] pt-[22px] pb-6">
       <div className="relative flex items-center justify-center">
         <div
-          className="flex size-[76px] flex-col items-center justify-center rounded-full"
+          className="flex size-[76px] flex-col items-center justify-center rounded-full px-1"
           style={{
-            background: "linear-gradient(145deg, #eff6ff 0%, #dbeafe 100%)",
-            boxShadow: "0 0 0 3px #2563eb, 0 6px 20px rgba(37,99,235,0.22)",
+            background: style.fill,
+            boxShadow: `0 0 0 3px ${style.ring}, 0 6px 20px rgba(15,23,42,0.12)`,
           }}
         >
-          <span className="text-[28px] leading-none font-bold text-blue-800">78</span>
-          <span className="mt-0.5 text-[9px] tracking-wide text-blue-300">/100</span>
+          <span className={`text-center text-[11px] leading-tight font-bold ${style.text}`}>
+            {review.grade}
+          </span>
         </div>
         <button
           type="button"
           title="Re-rate"
-          onClick={() => setRated(false)}
-          className="absolute -top-0.5 -right-0.5 flex size-[22px] items-center justify-center rounded-full border border-slate-200 bg-white text-slate-400 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-600"
+          disabled={rateMutation.isPending}
+          onClick={() => {
+            setReview(null);
+            rateMutation.mutate();
+          }}
+          className="absolute -top-0.5 -right-0.5 flex size-[22px] items-center justify-center rounded-full border border-slate-200 bg-white text-slate-400 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-600 disabled:opacity-50"
         >
           <svg width="11" height="11" viewBox="0 0 20 20" fill="none" aria-hidden>
             <path
@@ -715,10 +800,15 @@ function RateMyTransactionBar() {
         </button>
       </div>
       <div className="flex flex-col items-center gap-1">
-        <span className="text-[10px] font-bold tracking-widest text-blue-600 uppercase">Rate My Transaction</span>
-        <p className="px-8 text-center text-[13px] font-medium text-slate-700">
-          Strong reasoning — but your evidence base is thin for the growth assumption.
+        <span className={`text-[10px] font-bold tracking-widest uppercase ${style.label}`}>
+          {review.grade}
+        </span>
+        <p className="max-w-[320px] px-6 text-center text-[13px] font-medium text-slate-700">
+          {review.blurb}
         </p>
+        {errorMessage && (
+          <p className="mt-1 text-center text-[11px] font-medium text-red-500">{errorMessage}</p>
+        )}
       </div>
     </div>
   );
@@ -939,7 +1029,7 @@ export function StockDetail({ ticker }: { ticker: string }) {
               )}
             </div>
           )}
-          <RateMyTransactionBar />
+          <RateMyTransactionBar ticker={symbol} journalCount={data?.journal.length ?? 0} />
         </section>
 
         <EventsCard ticker={symbol} />

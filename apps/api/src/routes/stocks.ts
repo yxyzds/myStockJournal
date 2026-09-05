@@ -1,6 +1,8 @@
 import { Hono } from "hono";
 import { and, asc, eq, inArray } from "drizzle-orm";
 import type { JournalEntry, JournalSnapshot, Quote, StockDetail, StockTransaction } from "@mystockjournal/shared";
+import { reviewTradeJournal } from "../ai/trade-review";
+import { env } from "../env";
 import type { AppEnv } from "../types";
 import { db } from "../db";
 import { decisions, journalEntries } from "../db/schema";
@@ -297,4 +299,62 @@ stockRoutes.delete("/:ticker/transactions/:id", async (c) => {
 
   if (!deleted[0]) return c.json({ error: "Transaction not found" }, 404);
   return c.json({ ok: true });
+});
+
+/**
+ * POST /stocks/:ticker/ai/trade-review — grade the journal (and trades) with a
+ * five-tier slang label + short English blurb.
+ */
+stockRoutes.post("/:ticker/ai/trade-review", async (c) => {
+  if (!env.aiApiKey || !env.aiBaseUrl) {
+    return c.json(
+      { error: "Set AI_BASE_URL and AI_API_KEY in .env to enable Trade review" },
+      503,
+    );
+  }
+
+  const found = await getOrCreateStock(c.get("userId"), c.req.param("ticker"));
+  if ("error" in found) return c.json({ error: found.error }, found.status);
+  const { stock } = found;
+
+  const [journalRows, decisionRows] = await Promise.all([
+    db
+      .select()
+      .from(journalEntries)
+      .where(
+        and(
+          eq(journalEntries.userId, stock.userId),
+          eq(journalEntries.stockId, stock.id),
+          eq(journalEntries.archived, false),
+        ),
+      )
+      .orderBy(asc(journalEntries.date), asc(journalEntries.createdAt)),
+    db
+      .select()
+      .from(decisions)
+      .where(and(eq(decisions.userId, stock.userId), eq(decisions.stockId, stock.id)))
+      .orderBy(asc(decisions.date), asc(decisions.createdAt)),
+  ]);
+
+  const journal = journalRows.map(toJournal);
+  if (journal.length === 0) {
+    return c.json({ error: "Write at least one journal entry before asking for a review" }, 400);
+  }
+
+  const transactions = decisionRows
+    .map(toTransaction)
+    .filter((row): row is StockTransaction => row != null);
+
+  try {
+    const review = await reviewTradeJournal({
+      ticker: stock.ticker,
+      name: stock.name,
+      journal,
+      transactions,
+    });
+    return c.json({ review });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Trade review failed";
+    return c.json({ error: message }, 502);
+  }
 });
