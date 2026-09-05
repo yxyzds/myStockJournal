@@ -51,13 +51,12 @@ function validateTxnForm(input: { price: string; qty: string; date: string; rati
 }
 
 function fieldClass(invalid: boolean, emphasized = false) {
-  if (invalid) {
-    return "w-full rounded-lg border-2 border-red-400 bg-white px-3 py-2 text-[14px] text-slate-800 outline-none";
-  }
-  if (emphasized) {
-    return "w-full rounded-lg border-2 border-blue-600 bg-white px-3 py-2 text-[14px] text-slate-800 outline-none placeholder:text-slate-400";
-  }
-  return "w-full rounded-lg border border-[#ebf0f5] bg-[#f4f6f9] px-3 py-2 text-[14px] text-slate-800 outline-none placeholder:text-slate-400";
+  const base =
+    "w-full rounded-lg bg-white px-3 py-2 text-[14px] text-slate-800 outline-none placeholder:text-slate-400";
+  if (invalid) return `${base} border-2 border-red-400`;
+  if (emphasized) return `${base} border-2 border-blue-600`;
+  // Fields are unfilled, so the border carries the affordance and focus tints it blue.
+  return `${base} border border-slate-200 focus:border-blue-600`;
 }
 
 function FieldHint({ message }: { message?: string }) {
@@ -506,10 +505,10 @@ function EditingTransactionForm({
           onChange={(e) => setReason(e.target.value)}
           placeholder="Describe why you're making this trade…"
           rows={3}
-          className={`w-full resize-none rounded-lg px-3 py-2.5 text-[13px] leading-relaxed text-slate-700 outline-none placeholder:text-slate-400 ${
+          className={`w-full resize-none rounded-lg bg-white px-3 py-2.5 text-[13px] leading-relaxed text-slate-700 outline-none placeholder:text-slate-400 ${
             showErrors && errors.rationale
-              ? "border-2 border-red-400 bg-white"
-              : "border border-[#ebf0f5] bg-[#f4f6f9]"
+              ? "border-2 border-red-400"
+              : "border border-slate-200 focus:border-blue-600"
           }`}
         />
         {showErrors && <FieldHint message={errors.rationale} />}

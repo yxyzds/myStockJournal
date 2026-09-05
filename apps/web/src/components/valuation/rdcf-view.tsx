@@ -6,6 +6,7 @@ import {
   valueRdcf,
   type DcfInputs,
   type DcfYearRow,
+  type FilingRef,
   type RdcfInputs,
 } from "@mystockjournal/shared";
 import type { MethodViewProps } from "./actions";
@@ -15,6 +16,7 @@ import {
   CardHeader,
   ChallengeCard,
   Chevron,
+  FilingSourceNote,
   NumberInput,
   fmt1,
   fmt2,
@@ -78,6 +80,7 @@ export function RdcfView({
         assumptions={assumptions}
         anchorsAvailable={anchors.available}
         anchorPeriod={anchors.period}
+        sourceFilings={anchors.sourceFilings}
         past5YCagr={anchors.past5YCagr}
         currentPrice={currentPrice}
         onField={setField}
@@ -412,6 +415,7 @@ function HeldConstantsSection({
   assumptions,
   anchorsAvailable,
   anchorPeriod,
+  sourceFilings,
   past5YCagr,
   currentPrice,
   onField,
@@ -419,11 +423,13 @@ function HeldConstantsSection({
   assumptions: RdcfInputs;
   anchorsAvailable: boolean;
   anchorPeriod: string | null;
+  sourceFilings: FilingRef[];
   past5YCagr: number | null;
   currentPrice: number;
   onField: <K extends keyof RdcfInputs>(key: K, value: RdcfInputs[K]) => void;
 }) {
-  const [unlocked, setUnlocked] = useState(!anchorsAvailable);
+  // Filed figures are facts, so they are only typed in when no filing covered the ticker.
+  const manualEntry = !anchorsAvailable;
 
   return (
     <Card>
@@ -434,31 +440,26 @@ function HeldConstantsSection({
 
       <div className="flex flex-col gap-4 p-5 md:flex-row">
         <div className="flex-1 rounded-[10px] border border-slate-100 bg-slate-50 p-3.5">
-          <div className="mb-2.5 flex items-start justify-between gap-2">
-            <div>
-              <span className="text-[11px] font-bold tracking-wide text-slate-500 uppercase">
-                Anchors
-              </span>
-              <p className="mt-px text-[10px] text-slate-400">
-                {anchorsAvailable
-                  ? `Prefetched${anchorPeriod ? ` · ${anchorPeriod}` : ""} · override only if needed`
-                  : "No source data — enter the figures yourself"}
-              </p>
+          <div className="mb-2.5">
+            <span className="text-[11px] font-bold tracking-wide text-slate-500 uppercase">
+              Anchors
+            </span>
+            <div className="mt-px">
+              {manualEntry ? (
+                <p className="text-[10px] text-slate-400">
+                  No filing data — enter the figures yourself
+                </p>
+              ) : (
+                <FilingSourceNote period={anchorPeriod} filings={sourceFilings} />
+              )}
             </div>
-            <button
-              type="button"
-              onClick={() => setUnlocked((value) => !value)}
-              className="shrink-0 rounded-[5px] border border-dashed border-slate-300 px-2 py-[3px] text-[10px] font-semibold text-slate-500 hover:border-slate-400 hover:text-slate-700"
-            >
-              {unlocked ? "Lock" : "Unlock"}
-            </button>
           </div>
 
           <div className="flex flex-col">
             <AnchorRow
               label="TTM revenue"
               display={`$${assumptions.ttmRevenue.toLocaleString()}M`}
-              unlocked={unlocked}
+              editable={manualEntry}
               value={assumptions.ttmRevenue}
               limits={{ min: 0.01, max: 1e7, step: 1 }}
               onChange={(v) => onField("ttmRevenue", v)}
@@ -466,7 +467,7 @@ function HeldConstantsSection({
             <AnchorRow
               label="Cash & investments"
               display={`$${assumptions.cash.toLocaleString()}M`}
-              unlocked={unlocked}
+              editable={manualEntry}
               value={assumptions.cash}
               limits={{ min: 0, max: 1e7, step: 1 }}
               onChange={(v) => onField("cash", v)}
@@ -474,7 +475,7 @@ function HeldConstantsSection({
             <AnchorRow
               label="Total debt"
               display={`$${assumptions.debt.toLocaleString()}M`}
-              unlocked={unlocked}
+              editable={manualEntry}
               value={assumptions.debt}
               limits={{ min: 0, max: 1e7, step: 1 }}
               onChange={(v) => onField("debt", v)}
@@ -482,7 +483,7 @@ function HeldConstantsSection({
             <AnchorRow
               label="Diluted shares"
               display={`${assumptions.shares.toLocaleString()}M`}
-              unlocked={unlocked}
+              editable={manualEntry}
               value={assumptions.shares}
               limits={{ min: 0.0001, max: 1e6, step: 1 }}
               onChange={(v) => onField("shares", v)}

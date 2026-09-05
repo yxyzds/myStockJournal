@@ -1,14 +1,19 @@
 import { eq } from "drizzle-orm";
-import type { DcfDrivers, PePoint, ValuationAnchors } from "@mystockjournal/shared";
+import type { DcfDrivers, FilingRef, PePoint, ValuationAnchors } from "@mystockjournal/shared";
 import { db } from "../db";
 import { fundamentalsCache } from "../db/schema";
+import { fetchEdgarFundamentals } from "./edgar";
 
 /**
- * Valuation anchors come from `fundamentals_cache`. No filings vendor is wired
- * up yet, so a small bundled dataset seeds the cache on first read. Swapping in
- * a real SEC/vendor fetch means writing to that table — nothing here changes.
+ * Valuation anchors, resolved in order: `fundamentals_cache`, then SEC EDGAR,
+ * then a small bundled dataset. Statement figures come from filings; forward EPS
+ * and P/E history cannot (they need analyst estimates and price history), so
+ * those stay bundled and are simply absent for tickers we have not curated.
  */
-type BundledAnchors = Omit<ValuationAnchors, "available">;
+type BundledAnchors = Omit<ValuationAnchors, "available" | "sourceFilings">;
+
+/** Refetch weekly. Filings land quarterly, but a 10-Q can arrive any day. */
+const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 /** Neutral drivers for a ticker we have no estimate for. The user must review them. */
 const FALLBACK_DRIVERS: DcfDrivers = {
@@ -71,7 +76,8 @@ const DDOG_PE_HISTORY: PePoint[] = [
 /** Revenue, cash, and debt in $M; share counts in millions, as filings report them. */
 const BUNDLED: Record<string, BundledAnchors> = {
   AAPL: {
-    period: "TTM FY2025",
+    // The annual FY2025 figure, not a trailing twelve months — EDGAR supersedes it.
+    period: "FY2025",
     ttmRevenue: 416_000,
     cash: 132_000,
     debt: 98_000,
@@ -209,6 +215,7 @@ function unavailableAnchors(): ValuationAnchors {
   return {
     available: false,
     period: null,
+    sourceFilings: [],
     ttmRevenue: 0,
     cash: 0,
     debt: 0,
@@ -255,6 +262,25 @@ function asDrivers(value: unknown): DcfDrivers {
   };
 }
 
+function asFilings(value: unknown): FilingRef[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((row) => {
+      if (!row || typeof row !== "object") return null;
+      const ref = row as Record<string, unknown>;
+      if (typeof ref.url !== "string" || typeof ref.form !== "string") return null;
+      // Only SEC archive links are rendered as anchors, so reject anything else.
+      if (!ref.url.startsWith("https://www.sec.gov/")) return null;
+      return {
+        form: ref.form,
+        filingDate: typeof ref.filingDate === "string" ? ref.filingDate : "",
+        reportDate: typeof ref.reportDate === "string" ? ref.reportDate : "",
+        url: ref.url,
+      };
+    })
+    .filter((ref): ref is FilingRef => ref != null);
+}
+
 /** A cached payload is only usable if the figures the EV bridge divides by are present. */
 function asAnchors(payload: unknown, period: string | null): ValuationAnchors | null {
   if (!payload || typeof payload !== "object") return null;
@@ -266,6 +292,7 @@ function asAnchors(payload: unknown, period: string | null): ValuationAnchors | 
   return {
     available: true,
     period,
+    sourceFilings: asFilings(row.sourceFilings),
     ttmRevenue,
     cash: num(row.cash) ?? 0,
     debt: num(row.debt) ?? 0,
@@ -278,7 +305,8 @@ function asAnchors(payload: unknown, period: string | null): ValuationAnchors | 
   };
 }
 
-async function readCache(ticker: string): Promise<ValuationAnchors | null> {
+/** Cached anchors, plus whether they are recent enough to serve without refetching. */
+async function readCache(ticker: string): Promise<{ anchors: ValuationAnchors; fresh: boolean } | null> {
   try {
     const rows = await db
       .select()
@@ -286,14 +314,17 @@ async function readCache(ticker: string): Promise<ValuationAnchors | null> {
       .where(eq(fundamentalsCache.ticker, ticker))
       .limit(1);
     if (!rows[0]) return null;
-    return asAnchors(rows[0].payload, rows[0].period);
+
+    const anchors = asAnchors(rows[0].payload, rows[0].period);
+    if (!anchors) return null;
+    return { anchors, fresh: Date.now() - rows[0].fetchedAt.getTime() < CACHE_TTL_MS };
   } catch (error) {
     console.warn("fundamentals cache read failed", error);
     return null;
   }
 }
 
-async function writeCache(ticker: string, anchors: BundledAnchors) {
+async function writeCache(ticker: string, anchors: Omit<ValuationAnchors, "available">) {
   try {
     const { period, ...payload } = anchors;
     await db
@@ -309,25 +340,58 @@ async function writeCache(ticker: string, anchors: BundledAnchors) {
 }
 
 /**
- * Anchors for a ticker. Returns `available: false` when nothing is known, which
- * tells the valuation page to unlock the anchor fields for manual entry.
+ * Merge filing figures with the parts EDGAR cannot supply. Forward EPS needs an
+ * analyst estimate and P/E history needs price history, so both come from the
+ * bundled set when we have curated one. Drivers prefer the curated judgment,
+ * then what history implies, then a neutral default.
+ */
+function anchorsFromEdgar(
+  edgar: NonNullable<Awaited<ReturnType<typeof fetchEdgarFundamentals>>>,
+  bundled: BundledAnchors | undefined,
+): ValuationAnchors {
+  return {
+    available: true,
+    period: edgar.asOf ? `TTM through ${edgar.asOf}` : (bundled?.period ?? null),
+    sourceFilings: edgar.sourceFilings,
+    ttmRevenue: edgar.ttmRevenue,
+    cash: edgar.cash,
+    debt: edgar.debt,
+    shares: edgar.shares,
+    past5YCagr: edgar.past5YCagr ?? bundled?.past5YCagr ?? null,
+    ttmEps: edgar.ttmEps ?? bundled?.ttmEps ?? null,
+    fwdEps: bundled?.fwdEps ?? null,
+    peHistory: bundled?.peHistory ?? [],
+    drivers: {
+      ...FALLBACK_DRIVERS,
+      ...edgar.observedDrivers,
+      ...bundled?.drivers,
+    },
+  };
+}
+
+/**
+ * Anchors for a ticker. Returns `available: false` when no filing or bundled
+ * figures exist, which tells the valuation page to accept manual entry instead.
  */
 export async function getAnchors(rawTicker: string): Promise<ValuationAnchors> {
   const ticker = rawTicker.trim().toUpperCase();
 
   const cached = await readCache(ticker);
-  if (cached) return cached;
+  if (cached?.fresh) return cached.anchors;
 
   const bundled = BUNDLED[ticker];
+  const edgar = await fetchEdgarFundamentals(ticker);
+  if (edgar) {
+    const anchors = anchorsFromEdgar(edgar, bundled);
+    await writeCache(ticker, anchors);
+    return anchors;
+  }
+
+  // EDGAR was unreachable or does not cover this filer. Stale cache beats nothing.
+  if (cached) return cached.anchors;
   if (!bundled) return unavailableAnchors();
 
-  await writeCache(ticker, bundled);
-  return { available: true, ...bundled };
-}
-
-/** Overwrite the anchors for a ticker, e.g. when the user corrects a figure. */
-export async function saveAnchors(rawTicker: string, anchors: ValuationAnchors) {
-  const ticker = rawTicker.trim().toUpperCase();
-  const { available: _available, ...rest } = anchors;
-  await writeCache(ticker, rest);
+  const anchors: ValuationAnchors = { available: true, sourceFilings: [], ...bundled };
+  await writeCache(ticker, anchors);
+  return anchors;
 }

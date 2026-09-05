@@ -6,3 +6,4 @@ export * from "./valuation/pe";
 export * from "./valuation/anchors";
 export * from "./valuation/model";
 export * from "./valuation/compute";
+export * from "./valuation/xbrl";

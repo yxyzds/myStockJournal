@@ -10,6 +10,7 @@ import {
   type DcfInputs,
   type DcfScenario,
   type DcfYearRow,
+  type FilingRef,
 } from "@mystockjournal/shared";
 import type { MethodViewProps } from "./actions";
 import {
@@ -19,6 +20,7 @@ import {
   ChallengeCard,
   Chevron,
   DriverField,
+  FilingSourceNote,
   fmt1,
   fmt2,
   fmtMoneyM,
@@ -96,6 +98,7 @@ export function DcfView({
           anchorDrivers={anchors.drivers}
           anchorsAvailable={anchors.available}
           anchorPeriod={anchors.period}
+          sourceFilings={anchors.sourceFilings}
           past5YCagr={anchors.past5YCagr}
           scenario={scenario}
           scenarioFairValues={scenarioFairValues}
@@ -314,6 +317,7 @@ function AssumptionsSection({
   anchorDrivers,
   anchorsAvailable,
   anchorPeriod,
+  sourceFilings,
   past5YCagr,
   scenario,
   scenarioFairValues,
@@ -324,14 +328,15 @@ function AssumptionsSection({
   anchorDrivers: DcfDrivers;
   anchorsAvailable: boolean;
   anchorPeriod: string | null;
+  sourceFilings: FilingRef[];
   past5YCagr: number | null;
   scenario: DcfScenario | "custom";
   scenarioFairValues: Record<DcfScenario, number>;
   onScenario: (scenario: DcfScenario) => void;
   onField: <K extends keyof DcfInputs>(key: K, value: DcfInputs[K]) => void;
 }) {
-  // Anchors start locked, but there is nothing to lock when no source had figures.
-  const [unlocked, setUnlocked] = useState(!anchorsAvailable);
+  // Filed figures are facts, so they are only typed in when no filing covered the ticker.
+  const manualEntry = !anchorsAvailable;
 
   return (
     <Card>
@@ -430,18 +435,20 @@ function AssumptionsSection({
         <div className="flex w-full flex-col gap-2.5 border-t border-slate-100 bg-slate-50 px-4 py-4 md:w-[240px] md:shrink-0 md:border-t-0 md:px-[18px] md:py-[18px]">
           <div>
             <span className="text-[11px] font-bold text-slate-500">Anchors</span>
-            <p className="text-[10px] leading-snug text-slate-400">
-              {anchorsAvailable
-                ? `Prefetched${anchorPeriod ? ` · ${anchorPeriod}` : ""} · override only if needed`
-                : "No source data for this ticker — enter the figures yourself"}
-            </p>
+            {manualEntry ? (
+              <p className="text-[10px] leading-snug text-slate-400">
+                No filing data for this ticker — enter the figures yourself
+              </p>
+            ) : (
+              <FilingSourceNote period={anchorPeriod} filings={sourceFilings} />
+            )}
           </div>
 
           <div className="flex flex-col">
             <AnchorRow
               label="TTM revenue"
               display={`$${assumptions.ttmRevenue.toLocaleString()}M`}
-              unlocked={unlocked}
+              editable={manualEntry}
               value={assumptions.ttmRevenue}
               limits={ANCHOR_LIMITS.ttmRevenue}
               onChange={(v) => onField("ttmRevenue", v)}
@@ -449,7 +456,7 @@ function AssumptionsSection({
             <AnchorRow
               label="Cash & investments"
               display={`$${assumptions.cash.toLocaleString()}M`}
-              unlocked={unlocked}
+              editable={manualEntry}
               value={assumptions.cash}
               limits={ANCHOR_LIMITS.cash}
               onChange={(v) => onField("cash", v)}
@@ -457,7 +464,7 @@ function AssumptionsSection({
             <AnchorRow
               label="Total debt"
               display={`$${assumptions.debt.toLocaleString()}M`}
-              unlocked={unlocked}
+              editable={manualEntry}
               value={assumptions.debt}
               limits={ANCHOR_LIMITS.debt}
               onChange={(v) => onField("debt", v)}
@@ -465,7 +472,7 @@ function AssumptionsSection({
             <AnchorRow
               label="Diluted shares"
               display={`${assumptions.shares.toLocaleString()}M`}
-              unlocked={unlocked}
+              editable={manualEntry}
               value={assumptions.shares}
               limits={ANCHOR_LIMITS.shares}
               onChange={(v) => onField("shares", v)}
@@ -479,18 +486,9 @@ function AssumptionsSection({
             )}
           </div>
 
-          <div className="flex flex-col gap-1.5 pt-1">
-            <button
-              type="button"
-              onClick={() => setUnlocked((value) => !value)}
-              className="rounded-md border border-dashed border-slate-300 px-2.5 py-1.5 text-center text-[10px] font-semibold text-slate-400 hover:border-blue-400 hover:text-blue-600"
-            >
-              {unlocked ? "Lock anchors" : "Unlock to override"}
-            </button>
-            <p className="text-center text-[10px] leading-snug text-slate-400">
-              Cash and debt convert enterprise value into equity value per share.
-            </p>
-          </div>
+          <p className="pt-1 text-[10px] leading-snug text-slate-400">
+            Cash and debt convert enterprise value into equity value per share.
+          </p>
         </div>
       </div>
     </Card>

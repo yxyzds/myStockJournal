@@ -8,6 +8,17 @@ export type DcfDrivers = Pick<
   "growthY1_5" | "growthY6_10" | "termGrowth" | "wacc" | "fcfMarginY1" | "fcfMarginTerm"
 >;
 
+/** A filing the anchors were read out of, so the user can check the source. */
+export type FilingRef = {
+  /** Form type as EDGAR labels it, e.g. "10-K" or "10-Q". */
+  form: string;
+  /** Date the filing reached EDGAR (YYYY-MM-DD). */
+  filingDate: string;
+  /** Last day of the period the filing covers (YYYY-MM-DD). */
+  reportDate: string;
+  url: string;
+};
+
 /**
  * Prefetched company figures a valuation starts from. Money is in $M and share
  * counts in millions, matching how filings report them.
@@ -17,6 +28,8 @@ export type ValuationAnchors = {
   available: boolean;
   /** Period the statement figures cover, e.g. "TTM Q2 FY2026". */
   period: string | null;
+  /** Filings these figures came from, newest first. Empty when the source had no links. */
+  sourceFilings: FilingRef[];
   ttmRevenue: number;
   cash: number;
   debt: number;

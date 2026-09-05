@@ -15,4 +15,6 @@ export const env = {
   localUserId: required("DEV_USER_ID"),
   localUserEmail: process.env.DEV_USER_EMAIL ?? "dev@localhost",
   localUserName: process.env.DEV_USER_NAME ?? "Dev",
+  /** SEC rejects requests without a contact address. See https://www.sec.gov/os/webmaster-faq. */
+  secUserAgent: process.env.SEC_USER_AGENT ?? "",
 };
