@@ -383,6 +383,7 @@ function AssumptionsSection({
           <div className="grid grid-cols-2 gap-2.5 md:grid-cols-3 md:gap-3">
             <DriverField
               label="Revenue growth Y1–5"
+              hint="Expected annual revenue growth for forecast years 1–5. When filings are available this is prefilled from the past 5-year revenue CAGR; edit it to set your own outlook."
               value={assumptions.growthY1_5}
               reference={anchorDrivers.growthY1_5}
               suffix="%"
@@ -391,6 +392,7 @@ function AssumptionsSection({
             />
             <DriverField
               label="Revenue growth Y6–10"
+              hint="Expected annual revenue growth for years 6–10 as the business matures. This is a forward judgment, not read from filings."
               value={assumptions.growthY6_10}
               reference={anchorDrivers.growthY6_10}
               suffix="%"
@@ -399,6 +401,7 @@ function AssumptionsSection({
             />
             <DriverField
               label="Terminal growth (g)"
+              hint="Perpetual growth after year 10 in the Gordon growth terminal value. Must stay below WACC or the terminal value is undefined."
               value={assumptions.termGrowth}
               reference={anchorDrivers.termGrowth}
               suffix="%"
@@ -407,6 +410,7 @@ function AssumptionsSection({
             />
             <DriverField
               label="WACC"
+              hint="Weighted average cost of capital — the discount rate applied to each year's free cash flow and to the terminal value."
               value={assumptions.wacc}
               reference={anchorDrivers.wacc}
               suffix="%"
@@ -415,6 +419,7 @@ function AssumptionsSection({
             />
             <DriverField
               label="FCF margin Y1"
+              hint="Free cash flow as a % of revenue in year 1. Each year: FCF = revenue × margin. Prefill from filings: (TTM operating cash flow − TTM CapEx) ÷ TTM revenue. CapEx is an outflow, so it subtracts; if CapEx exceeds OCF the prefill floors at 0%."
               value={assumptions.fcfMarginY1}
               reference={anchorDrivers.fcfMarginY1}
               suffix="%"
@@ -423,6 +428,7 @@ function AssumptionsSection({
             />
             <DriverField
               label="FCF margin terminal"
+              hint="Assumed FCF / revenue in year 10. Margin fades linearly from Y1 to this terminal rate over the 10-year forecast; year-10 FCF also feeds the terminal value."
               value={assumptions.fcfMarginTerm}
               reference={anchorDrivers.fcfMarginTerm}
               suffix="%"

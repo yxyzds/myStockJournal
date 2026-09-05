@@ -16,6 +16,7 @@ import {
   CardHeader,
   ChallengeCard,
   Chevron,
+  FieldHint,
   FilingSourceNote,
   NumberInput,
   fmt1,
@@ -26,12 +27,32 @@ import {
 } from "./primitives";
 
 const HELD_DRIVERS = [
-  { key: "wacc", label: "WACC (discount rate)" },
-  { key: "termGrowth", label: "Terminal growth (g)" },
-  { key: "fcfMarginY1", label: "FCF margin Y1" },
-  { key: "fcfMarginTerm", label: "FCF margin terminal" },
-  { key: "growthY6_10", label: "Revenue growth Y6–10 (rule)" },
-] as const satisfies readonly { key: keyof RdcfInputs; label: string }[];
+  {
+    key: "wacc",
+    label: "WACC (discount rate)",
+    hint: "Discount rate applied to free cash flows and the terminal value while solving for implied Y1–5 growth.",
+  },
+  {
+    key: "termGrowth",
+    label: "Terminal growth (g)",
+    hint: "Perpetual growth after year 10. Must stay below WACC or the reverse DCF cannot solve.",
+  },
+  {
+    key: "fcfMarginY1",
+    label: "FCF margin Y1",
+    hint: "FCF / revenue in year 1. Prefill: (TTM operating cash flow − TTM CapEx) ÷ TTM revenue from filings. Held constant while growth is solved.",
+  },
+  {
+    key: "fcfMarginTerm",
+    label: "FCF margin terminal",
+    hint: "FCF / revenue in year 10; margin fades from Y1 to this rate. Held constant in the reverse DCF.",
+  },
+  {
+    key: "growthY6_10",
+    label: "Revenue growth Y6–10 (rule)",
+    hint: "Growth assumed for years 6–10 while the model solves only for the Y1–5 CAGR implied by today's price.",
+  },
+] as const satisfies readonly { key: keyof RdcfInputs; label: string; hint: string }[];
 
 export type RdcfViewProps = MethodViewProps & {
   assumptions: RdcfInputs;
@@ -411,6 +432,48 @@ function ComparisonSection({
   );
 }
 
+function HeldDriverRow({
+  label,
+  hint,
+  value,
+  limits,
+  onChange,
+}: {
+  label: string;
+  hint: string;
+  value: number;
+  limits: (typeof DRIVER_LIMITS)[keyof typeof DRIVER_LIMITS];
+  onChange: (value: number) => void;
+}) {
+  const [hintOpen, setHintOpen] = useState(false);
+
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="flex items-center justify-between gap-3">
+        <span className="flex flex-1 items-center gap-1 text-[11px] text-slate-600">
+          {label}
+          <FieldHint text={hint} open={hintOpen} onToggle={() => setHintOpen((open) => !open)} />
+        </span>
+        <div className="flex items-center gap-1 rounded-[7px] border border-slate-200 bg-white px-2 py-1 focus-within:border-blue-300">
+          <NumberInput
+            value={value}
+            limits={limits}
+            onCommit={onChange}
+            ariaLabel={label}
+            className="w-12 text-right text-[12px] font-bold text-slate-900"
+          />
+          <span className="text-[10px] text-slate-400">%</span>
+        </div>
+      </div>
+      {hintOpen ? (
+        <p className="rounded-md border border-blue-50 bg-blue-50/60 px-2 py-1.5 text-[10px] leading-snug text-slate-600">
+          {hint}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 function HeldConstantsSection({
   assumptions,
   anchorsAvailable,
@@ -519,19 +582,14 @@ function HeldConstantsSection({
           </div>
           <div className="flex flex-col gap-2">
             {HELD_DRIVERS.map((driver) => (
-              <div key={driver.key} className="flex items-center justify-between gap-3">
-                <span className="flex-1 text-[11px] text-slate-600">{driver.label}</span>
-                <div className="flex items-center gap-1 rounded-[7px] border border-slate-200 bg-white px-2 py-1 focus-within:border-blue-300">
-                  <NumberInput
-                    value={assumptions[driver.key]}
-                    limits={DRIVER_LIMITS[driver.key]}
-                    onCommit={(value) => onField(driver.key, value)}
-                    ariaLabel={driver.label}
-                    className="w-12 text-right text-[12px] font-bold text-slate-900"
-                  />
-                  <span className="text-[10px] text-slate-400">%</span>
-                </div>
-              </div>
+              <HeldDriverRow
+                key={driver.key}
+                label={driver.label}
+                hint={driver.hint}
+                value={assumptions[driver.key]}
+                limits={DRIVER_LIMITS[driver.key]}
+                onChange={(value) => onField(driver.key, value)}
+              />
             ))}
           </div>
         </div>

@@ -100,6 +100,7 @@ export function NumberInput({
  */
 export function DriverField({
   label,
+  hint,
   value,
   reference,
   suffix,
@@ -107,18 +108,35 @@ export function DriverField({
   onChange,
 }: {
   label: string;
+  /** Shown when the user opens the ? affordance. */
+  hint?: string;
   value: number;
   reference: number;
   suffix: string;
   limits: NumberLimits;
   onChange: (value: number) => void;
 }) {
+  const [hintOpen, setHintOpen] = useState(false);
   const threshold = Math.max(Math.abs(reference * 0.12), 0.3);
   const diverges = Math.abs(value - reference) > threshold;
 
   return (
     <div className="flex flex-col gap-1">
-      <span className="text-[10px] font-bold tracking-[0.07em] text-slate-500 uppercase">{label}</span>
+      <div className="flex items-center gap-1">
+        <span className="text-[10px] font-bold tracking-[0.07em] text-slate-500 uppercase">{label}</span>
+        {hint ? (
+          <FieldHint
+            text={hint}
+            open={hintOpen}
+            onToggle={() => setHintOpen((open) => !open)}
+          />
+        ) : null}
+      </div>
+      {hint && hintOpen ? (
+        <p className="rounded-md border border-slate-100 bg-slate-50 px-2 py-1.5 text-[10px] leading-snug font-normal tracking-normal text-slate-600 normal-case">
+          {hint}
+        </p>
+      ) : null}
       <div
         className={`flex items-center gap-[3px] rounded-[7px] border px-2.5 py-[7px] transition-colors ${
           diverges
@@ -147,6 +165,37 @@ export function DriverField({
         )}
       </div>
     </div>
+  );
+}
+
+/** Compact ? control. Pass `onToggle` to manage open state in the parent (inline copy). */
+export function FieldHint({
+  text,
+  open,
+  onToggle,
+}: {
+  text: string;
+  open?: boolean;
+  onToggle?: () => void;
+}) {
+  const isOpen = open ?? false;
+  const toggle = onToggle ?? (() => undefined);
+
+  return (
+    <button
+      type="button"
+      aria-label="What this field means"
+      aria-expanded={isOpen}
+      aria-description={text}
+      onClick={toggle}
+      className={`flex size-3.5 shrink-0 items-center justify-center rounded-full border text-[9px] font-bold leading-none transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-200 ${
+        isOpen
+          ? "border-blue-400 bg-blue-50 text-blue-600"
+          : "border-slate-300 text-slate-400 hover:border-slate-400 hover:text-slate-600"
+      }`}
+    >
+      ?
+    </button>
   );
 }
 
