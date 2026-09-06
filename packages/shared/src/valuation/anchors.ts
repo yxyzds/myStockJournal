@@ -1,4 +1,5 @@
 import type { DcfInputs } from "./dcf";
+import type { EvEbitdaAnnualPoint, EvEbitdaInputs } from "./evebitda";
 import type { PeInputs, PePoint } from "./pe";
 import type { RdcfInputs } from "./rdcf";
 
@@ -38,6 +39,8 @@ export type ValuationAnchors = {
   past5YCagr: number | null;
   ttmEps: number | null;
   fwdEps: number | null;
+  ttmEbitda: number | null;
+  ebitdaHistory: EvEbitdaAnnualPoint[];
   peHistory: PePoint[];
   /** Starting point for the editable drivers, from the vendor or an AI estimate. */
   drivers: DcfDrivers;
@@ -93,6 +96,7 @@ export const DRIVER_LIMITS: Record<keyof DcfDrivers, { min: number; max: number;
 };
 
 export const EXPECTED_PE_LIMITS = { min: 0, max: 200, step: 0.5 };
+export const EXPECTED_EV_EBITDA_LIMITS = { min: 0, max: 80, step: 0.5 };
 export const EXPECTED_GROWTH_LIMITS = { min: 0.1, max: 100, step: 0.5 };
 /** Haircut applied to DCF intrinsic value to produce fair value. */
 export const MOS_PERCENT_LIMITS = { min: 0, max: 90, step: 1 };
@@ -164,6 +168,19 @@ export function peInputsFromAnchors(anchors: ValuationAnchors, expectedPe: numbe
     ttmEps: anchors.ttmEps ?? 0,
     fwdEps: anchors.fwdEps ?? anchors.ttmEps ?? 0,
     expectedGrowth: 10,
+  };
+}
+
+export function evEbitdaInputsFromAnchors(
+  anchors: ValuationAnchors,
+  expectedEvEbitda: number,
+): EvEbitdaInputs {
+  return {
+    expectedEvEbitda,
+    ttmEbitda: anchors.ttmEbitda ?? 0,
+    cash: anchors.cash,
+    debt: anchors.debt,
+    shares: anchors.shares,
   };
 }
 

@@ -12,6 +12,7 @@ export type PeSeriesPoint = {
   pe: number;
   /** EPS growth % used for PEG; null when unknown. */
   growth: number | null;
+  evEbitda?: number | null;
 };
 
 export type PeChartPeriod = "week" | "month" | "year";
@@ -46,6 +47,14 @@ export function epsFor(inp: PeInputs) {
 /** PEG only carries meaning for a profitable company that is growing. */
 function pegIsMeaningful(eps: number, growth: number) {
   return eps > 0 && growth > 0;
+}
+
+/** Human-readable why a ticker cannot be plotted or compared as a P/E. */
+export function peUnavailableReason(price: number | null, eps: number | null): string | null {
+  if (price == null) return "暂无行情价格，无法计算 P/E。";
+  if (eps == null) return "无 EPS 数据（ETF 等标的暂不支持）。";
+  if (eps <= 0) return "EPS 为零或为负，P/E 无定义。";
+  return null;
 }
 
 export function valuePe(inp: PeInputs, currentPrice: number): PeResult {

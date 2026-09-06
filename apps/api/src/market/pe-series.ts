@@ -1,4 +1,10 @@
-import type { PeerMultiple, PeChartPeriod, PePoint, PeSeriesPoint } from "@mystockjournal/shared";
+import {
+  peUnavailableReason,
+  type PeerMultiple,
+  type PeChartPeriod,
+  type PePoint,
+  type PeSeriesPoint,
+} from "@mystockjournal/shared";
 import { getAnchors } from "./fundamentals";
 import { getQuotes } from "./quotes";
 import { fetchTencentKline, type KlinePeriod } from "./tencent";
@@ -28,13 +34,7 @@ function peFromPrice(price: number, eps: number | null): number | null {
   return round1(price / eps);
 }
 
-/** Human-readable why the peer cannot be plotted as a P/E. */
-export function peUnavailableReason(price: number | null, eps: number | null): string | null {
-  if (price == null) return "暂无行情价格，无法计算 P/E。";
-  if (eps == null) return "无 EPS 数据（ETF 等标的暂不支持）。";
-  if (eps <= 0) return "EPS 为零或为负，P/E 无定义。";
-  return null;
-}
+export { peUnavailableReason };
 
 function peerFields(
   ticker: string,
@@ -53,6 +53,8 @@ function peerFields(
     peg: pe != null && growth != null && growth > 0 ? round1(pe / growth) : null,
     history,
     peUnavailableReason: pe == null ? peUnavailableReason(price, eps) : null,
+    evEbitda: null,
+    evEbitdaUnavailableReason: null,
   };
 }
 

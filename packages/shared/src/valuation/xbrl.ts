@@ -56,6 +56,23 @@ export function latestAnnual(facts: XbrlFact[]): DurationFact | null {
   return newest(facts.filter(isDuration).filter((f) => spans(f, ANNUAL_MIN_DAYS, ANNUAL_MAX_DAYS)));
 }
 
+export type AnnualValue = {
+  year: number;
+  end: string;
+  value: number;
+};
+
+/** One annual figure per fiscal year-end, oldest first. */
+export function annualValues(facts: XbrlFact[]): AnnualValue[] {
+  return dedupeByEnd(
+    facts.filter(isDuration).filter((f) => spans(f, ANNUAL_MIN_DAYS, ANNUAL_MAX_DAYS)),
+  ).map((fact) => ({
+    year: Number(fact.end.slice(0, 4)),
+    end: fact.end,
+    value: fact.val,
+  }));
+}
+
 /** Newest balance-sheet figure, e.g. cash or debt. */
 export function latestInstant(facts: XbrlFact[]): XbrlFact | null {
   return newest(facts.filter((fact) => !isDuration(fact)));

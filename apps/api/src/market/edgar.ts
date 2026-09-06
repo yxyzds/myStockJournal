@@ -1,10 +1,12 @@
 import {
   DRIVER_LIMITS,
   annualCagr,
+  annualValues,
   latestInstant,
   latestQuarter,
   ttmFromFacts,
   type DcfDrivers,
+  type EvEbitdaAnnualPoint,
   type FilingRef,
   type XbrlFact,
 } from "@mystockjournal/shared";
@@ -58,6 +60,15 @@ const CAPEX_TAGS = [
   "PaymentsToAcquirePropertyPlantAndEquipment",
   "PaymentsToAcquireProductiveAssets",
 ];
+const EBITDA_TAGS = ["EarningsBeforeInterestTaxesDepreciationAndAmortization"];
+const OPERATING_INCOME_TAGS = ["OperatingIncomeLoss"];
+const DA_TAGS = [
+  "DepreciationAndAmortization",
+  "DepreciationDepletionAndAmortization",
+  "DepreciationAmortizationAndAccretionNet",
+  /** Filers that split D&A (e.g. Microsoft) keep this cash-flow line current. */
+  "Depreciation",
+];
 
 type CompanyFacts = {
   facts?: Record<string, Record<string, { units?: Record<string, XbrlFact[]> }>>;
@@ -88,6 +99,8 @@ export type EdgarFundamentals = {
   debt: number;
   shares: number;
   ttmEps: number | null;
+  ttmEbitda: number | null;
+  ebitdaHistory: EvEbitdaAnnualPoint[];
   past5YCagr: number | null;
   /** Drivers we can ground in history. Judgment calls like WACC are left out. */
   observedDrivers: Partial<DcfDrivers>;
@@ -255,6 +268,36 @@ function clamp(value: number, limits: { min: number; max: number }) {
   return Math.min(limits.max, Math.max(limits.min, value));
 }
 
+/** TTM EBITDA in whole dollars: prefer the explicit tag, else operating income + D&A. */
+function ttmEbitdaFromFacts(companyFacts: CompanyFacts): number | null {
+  const direct = ttmFromFacts(factsFor(companyFacts, EBITDA_TAGS, "USD"));
+  if (direct != null) return direct;
+
+  const operatingIncome = ttmFromFacts(factsFor(companyFacts, OPERATING_INCOME_TAGS, "USD"));
+  const da = ttmFromFacts(factsFor(companyFacts, DA_TAGS, "USD"));
+  if (operatingIncome == null || da == null) return null;
+  return operatingIncome + Math.abs(da);
+}
+
+/** Annual EBITDA in $M. Direct tag wins a year when both constructions exist. */
+function ebitdaHistoryFromFacts(companyFacts: CompanyFacts): EvEbitdaAnnualPoint[] {
+  const byYear = new Map<number, number>();
+  const daByYear = new Map(
+    annualValues(factsFor(companyFacts, DA_TAGS, "USD")).map((row) => [row.year, Math.abs(row.value)]),
+  );
+  for (const row of annualValues(factsFor(companyFacts, OPERATING_INCOME_TAGS, "USD"))) {
+    const da = daByYear.get(row.year);
+    if (da == null) continue;
+    byYear.set(row.year, row.value + da);
+  }
+  for (const row of annualValues(factsFor(companyFacts, EBITDA_TAGS, "USD"))) {
+    byYear.set(row.year, row.value);
+  }
+  return [...byYear.entries()]
+    .map(([year, ebitda]) => ({ year, ebitda: toMillions(ebitda) }))
+    .sort((a, b) => a.year - b.year);
+}
+
 function round1(value: number) {
   return Math.round(value * 10) / 10;
 }
@@ -294,6 +337,7 @@ export async function fetchEdgarFundamentals(ticker: string): Promise<EdgarFunda
 
   const past5YCagr = annualCagr(revenueFacts, 5);
   const ttmEps = ttmFromFacts(factsFor(companyFacts, DILUTED_EPS_TAGS, "USD/shares"));
+  const ttmEbitda = ttmEbitdaFromFacts(companyFacts);
 
   return {
     cik,
@@ -306,6 +350,8 @@ export async function fetchEdgarFundamentals(ticker: string): Promise<EdgarFunda
     debt: toMillions(totalDebt(companyFacts)),
     shares: toMillions(sharesFact.val),
     ttmEps: ttmEps == null ? null : round2(ttmEps),
+    ttmEbitda: ttmEbitda == null ? null : toMillions(ttmEbitda),
+    ebitdaHistory: ebitdaHistoryFromFacts(companyFacts),
     past5YCagr: past5YCagr == null ? null : round1(past5YCagr),
     observedDrivers: observedDrivers(companyFacts, ttmRevenue, past5YCagr),
     sourceFilings: submissions ? recentFilings(submissions, cik) : [],
