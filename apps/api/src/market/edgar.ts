@@ -293,8 +293,18 @@ function ebitdaHistoryFromFacts(companyFacts: CompanyFacts): EvEbitdaAnnualPoint
   for (const row of annualValues(factsFor(companyFacts, EBITDA_TAGS, "USD"))) {
     byYear.set(row.year, row.value);
   }
+  const sharesByYear = new Map(
+    annualValues(factsFor(companyFacts, DILUTED_SHARES_TAGS, "shares")).map((row) => [
+      row.year,
+      toMillions(row.value),
+    ]),
+  );
   return [...byYear.entries()]
-    .map(([year, ebitda]) => ({ year, ebitda: toMillions(ebitda) }))
+    .map(([year, ebitda]) => ({
+      year,
+      ebitda: toMillions(ebitda),
+      shares: sharesByYear.get(year) ?? null,
+    }))
     .sort((a, b) => a.year - b.year);
 }
 

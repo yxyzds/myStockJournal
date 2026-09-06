@@ -9,6 +9,7 @@ import {
 import { getAnchors } from "./fundamentals";
 import { getQuotes } from "./quotes";
 import { fetchTencentKline, type KlinePeriod } from "./tencent";
+import { fetchYahooYearEndCloses } from "./yahoo-chart";
 
 const WEEK_BARS = 52;
 const MONTH_BARS = 36;
@@ -98,13 +99,16 @@ export function annualSeriesFromFilings(
   shares: number,
   cash: number,
   debt: number,
+  useYearShares = false,
 ): EvEbitdaSeriesPoint[] {
   if (!(shares > 0)) return [];
   return history
     .map((point) => {
       const close = yearCloses.get(point.year);
       if (close == null) return null;
-      const evEbitda = multipleFromEv(enterpriseValue(close, shares, cash, debt), point.ebitda);
+      const yearShares =
+        useYearShares && point.shares != null && point.shares > 0 ? point.shares : shares;
+      const evEbitda = multipleFromEv(enterpriseValue(close, yearShares, cash, debt), point.ebitda);
       if (evEbitda == null) return null;
       return { label: String(point.year), evEbitda };
     })
@@ -147,9 +151,10 @@ async function annualRowForTicker(ticker: string): Promise<{
   series: EvEbitdaSeriesPoint[];
   peer: PeerMultiple;
 }> {
-  const [anchors, quotes, bars] = await Promise.all([
+  const [anchors, quotes, adjCloses, bars] = await Promise.all([
     getAnchors(ticker),
     getQuotes([ticker]),
+    fetchYahooYearEndCloses(ticker),
     fetchTencentKline(ticker, "month", YEAR_MONTH_BARS),
   ]);
   const quote = quotes[0];
@@ -163,12 +168,14 @@ async function annualRowForTicker(ticker: string): Promise<{
     anchors.cash,
     anchors.debt,
   );
+  const adjusted = adjCloses.size > 0;
   let series = annualSeriesFromFilings(
     anchors.ebitdaHistory,
-    yearEndCloses(bars),
+    adjusted ? adjCloses : yearEndCloses(bars),
     anchors.shares,
     anchors.cash,
     anchors.debt,
+    !adjusted,
   );
   if (series.length === 0 && peer.evEbitda != null) {
     series = [{ label: String(new Date().getFullYear()), evEbitda: peer.evEbitda }];

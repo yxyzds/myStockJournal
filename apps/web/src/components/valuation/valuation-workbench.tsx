@@ -69,10 +69,14 @@ function draftsFrom(data: ValuationWorkbench): Drafts {
   if (dcf.mosPercent == null || !Number.isFinite(dcf.mosPercent)) {
     dcf.mosPercent = 0;
   }
+  const pe = (saved("pe") as PeInputs | undefined) ?? (defaultAssumptions("pe", data.anchors) as PeInputs);
+  pe.ttmEps = data.anchors.ttmEps ?? 0;
+  pe.fwdEps = data.anchors.fwdEps ?? 0;
+
   return {
     dcf,
     rdcf,
-    pe: (saved("pe") as PeInputs | undefined) ?? (defaultAssumptions("pe", data.anchors) as PeInputs),
+    pe,
     evebitda: evebitdaDraft(saved("evebitda"), data.anchors),
   };
 }

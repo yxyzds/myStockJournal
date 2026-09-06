@@ -175,7 +175,7 @@ export async function fetchTencentKline(
       const json = await getJson<TencentKlineResponse>(url);
       const block = json.data?.[code];
       if (!block || typeof block !== "object") continue;
-      const rows = block[period] ?? block[`qfq${period}`];
+      const rows = block[`qfq${period}`] ?? block[period];
       const bars = parseKlineBars(rows);
       if (bars.length > best.length) best = bars;
       if (bars.length >= Math.min(capped, 8)) return bars;

@@ -120,7 +120,7 @@ function withServerAnchors(
     return {
       ...body,
       ttmEps: anchors.ttmEps ?? 0,
-      fwdEps: anchors.fwdEps ?? anchors.ttmEps ?? 0,
+      fwdEps: anchors.fwdEps ?? 0,
     };
   }
 

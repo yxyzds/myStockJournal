@@ -16,7 +16,6 @@ import {
 } from "@mystockjournal/shared";
 import { ApiError, api } from "@/lib/api";
 import { formatEntryDate, formatPrice, isCalendarDate, todayNyDate } from "@/lib/format";
-import { JUDGMENT_ITEMS } from "@/lib/mock-journal";
 
 function parseMoney(raw: string) {
   const cleaned = raw.replace(/[$,\s]/g, "");
@@ -952,33 +951,6 @@ function RateMyTransactionBar({
   );
 }
 
-function EventsCard({ ticker }: { ticker: string }) {
-  const items = JUDGMENT_ITEMS.filter((item) => item.title.toUpperCase().includes(ticker));
-  if (items.length === 0) return null;
-
-  return (
-    <section className="rounded-2xl border border-[#ebf0f5] bg-white p-4 md:p-6">
-      <div className="mb-4 flex items-center gap-2">
-        <p className="text-[16px] font-bold text-slate-800">Important Events</p>
-        <span className="ml-auto rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700 uppercase">
-          Needs judgment
-        </span>
-      </div>
-      <div className="flex flex-col">
-        {items.map((evt) => (
-          <div key={evt.id} className="flex items-start gap-3 rounded-[10px] px-2 py-3 hover:bg-slate-50 md:px-3">
-            <span className={`mt-1 size-2 shrink-0 rounded-full ${evt.dotColor}`} />
-            <div className="min-w-0 flex-1">
-              <p className="text-[13px] font-semibold text-slate-800">{evt.title}</p>
-              <p className="mt-0.5 text-[12px] leading-snug text-slate-500">{evt.teaser}</p>
-            </div>
-          </div>
-        ))}
-      </div>
-    </section>
-  );
-}
-
 export function StockDetail({ ticker }: { ticker: string }) {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -1178,8 +1150,6 @@ export function StockDetail({ ticker }: { ticker: string }) {
             }}
           />
         </section>
-
-        <EventsCard ticker={symbol} />
       </div>
     </div>
   );

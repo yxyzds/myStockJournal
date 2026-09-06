@@ -1,5 +1,6 @@
 import { eq } from "drizzle-orm";
 import type {
+  AnchorSourceRef,
   DcfDrivers,
   EvEbitdaAnnualPoint,
   FilingRef,
@@ -9,16 +10,22 @@ import type {
 import { db } from "../db";
 import { fundamentalsCache } from "../db/schema";
 import { fetchEdgarFundamentals } from "./edgar";
+import { fetchYahooFwdEps, yahooAnalysisUrl, type YahooForecast } from "./yahoo-forecast";
 
 /**
  * Valuation anchors, resolved in order: `fundamentals_cache`, then SEC EDGAR,
  * then a small bundled dataset. Statement figures come from filings; forward EPS
- * and P/E history cannot (they need analyst estimates and price history), so
- * those stay bundled and are simply absent for tickers we have not curated.
+ * comes only from a live Yahoo earningsTrend fetch — never a curated fallback.
+ * P/E history stays bundled.
  */
 type BundledAnchors = Omit<
   ValuationAnchors,
-  "available" | "sourceFilings" | "fcfMarginY1FromFilings" | "ttmEbitda" | "ebitdaHistory"
+  | "available"
+  | "sourceFilings"
+  | "fcfMarginY1FromFilings"
+  | "ttmEbitda"
+  | "ebitdaHistory"
+  | "fwdEpsSource"
 > & {
   ttmEbitda?: number | null;
   ebitdaHistory?: EvEbitdaAnnualPoint[];
@@ -30,7 +37,7 @@ const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
  * Bump when the cached payload shape or merge rules change so stale rows are
  * refetched instead of serving week-old driver prefills.
  */
-const CACHE_VERSION = 5;
+const CACHE_VERSION = 9;
 
 /** Neutral drivers for a ticker we have no estimate for. The user must review them. */
 const FALLBACK_DRIVERS: DcfDrivers = {
@@ -101,7 +108,7 @@ const BUNDLED: Record<string, BundledAnchors> = {
     shares: 14_900,
     past5YCagr: 7.5,
     ttmEps: 6.43,
-    fwdEps: 9.38,
+    fwdEps: null,
     peHistory: AAPL_PE_HISTORY,
     drivers: {
       growthY1_5: 7,
@@ -120,7 +127,7 @@ const BUNDLED: Record<string, BundledAnchors> = {
     shares: 12_200,
     past5YCagr: 15.4,
     ttmEps: 9.1,
-    fwdEps: 10.5,
+    fwdEps: null,
     peHistory: GOOGL_PE_HISTORY,
     drivers: {
       growthY1_5: 11,
@@ -139,7 +146,7 @@ const BUNDLED: Record<string, BundledAnchors> = {
     shares: 7450,
     past5YCagr: 14.2,
     ttmEps: 13.6,
-    fwdEps: 15.8,
+    fwdEps: null,
     peHistory: [
       { year: 2018, pe: 24.6, growth: 18 },
       { year: 2019, pe: 26.4, growth: 21 },
@@ -167,7 +174,7 @@ const BUNDLED: Record<string, BundledAnchors> = {
     shares: 2540,
     past5YCagr: 17.8,
     ttmEps: 25.6,
-    fwdEps: 28.4,
+    fwdEps: null,
     peHistory: [
       { year: 2018, pe: 19.6, growth: 39 },
       { year: 2019, pe: 22.4, growth: -16 },
@@ -195,7 +202,7 @@ const BUNDLED: Record<string, BundledAnchors> = {
     shares: 24_800,
     past5YCagr: 64.8,
     ttmEps: 3.1,
-    fwdEps: 4.5,
+    fwdEps: null,
     peHistory: NVDA_PE_HISTORY,
     drivers: {
       growthY1_5: 28,
@@ -215,7 +222,7 @@ const BUNDLED: Record<string, BundledAnchors> = {
     shares: 325,
     past5YCagr: 39.2,
     ttmEps: 1.2,
-    fwdEps: 1.85,
+    fwdEps: null,
     peHistory: DDOG_PE_HISTORY,
     drivers: {
       growthY1_5: 20,
@@ -240,6 +247,7 @@ function unavailableAnchors(): ValuationAnchors {
     past5YCagr: null,
     ttmEps: null,
     fwdEps: null,
+    fwdEpsSource: null,
     ttmEbitda: null,
     ebitdaHistory: [],
     peHistory: [],
@@ -274,11 +282,12 @@ function asEbitdaHistory(value: unknown): EvEbitdaAnnualPoint[] {
   return value
     .map((row) => {
       if (!row || typeof row !== "object") return null;
-      const point = row as { year?: unknown; ebitda?: unknown };
+      const point = row as { year?: unknown; ebitda?: unknown; shares?: unknown };
       const year = num(point.year);
       const ebitda = num(point.ebitda);
       if (year == null || ebitda == null) return null;
-      return { year, ebitda };
+      const shares = num(point.shares);
+      return { year, ebitda, shares: shares != null && shares > 0 ? shares : null };
     })
     .filter((point): point is EvEbitdaAnnualPoint => point != null)
     .sort((a, b) => a.year - b.year);
@@ -295,6 +304,26 @@ function asDrivers(value: unknown): DcfDrivers {
     fcfMarginY1: pick("fcfMarginY1"),
     fcfMarginTerm: pick("fcfMarginTerm"),
   };
+}
+
+function asFwdEpsSource(value: unknown): AnchorSourceRef | null {
+  if (!value || typeof value !== "object") return null;
+  const row = value as { label?: unknown; url?: unknown };
+  if (typeof row.label !== "string" || typeof row.url !== "string") return null;
+  if (!row.url.startsWith("https://finance.yahoo.com/")) return null;
+  return { label: row.label, url: row.url };
+}
+
+function yahooSource(ticker: string): AnchorSourceRef {
+  return { label: "Yahoo Finance", url: yahooAnalysisUrl(ticker) };
+}
+
+function resolveFwdEps(
+  ticker: string,
+  forecast: YahooForecast | null,
+): { fwdEps: number | null; fwdEpsSource: AnchorSourceRef | null } {
+  if (!forecast) return { fwdEps: null, fwdEpsSource: null };
+  return { fwdEps: forecast.fwdEps, fwdEpsSource: yahooSource(ticker) };
 }
 
 function asFilings(value: unknown): FilingRef[] {
@@ -334,7 +363,8 @@ function asAnchors(payload: unknown, period: string | null): ValuationAnchors | 
     shares,
     past5YCagr: num(row.past5YCagr),
     ttmEps: num(row.ttmEps),
-    fwdEps: num(row.fwdEps),
+    fwdEps: row.fwdEps == null ? null : num(row.fwdEps),
+    fwdEpsSource: asFwdEpsSource(row.fwdEpsSource),
     ttmEbitda: num(row.ttmEbitda),
     ebitdaHistory: asEbitdaHistory(row.ebitdaHistory),
     peHistory: asPeHistory(row.peHistory),
@@ -382,9 +412,8 @@ async function writeCache(ticker: string, anchors: Omit<ValuationAnchors, "avail
 }
 
 /**
- * Merge filing figures with the parts EDGAR cannot supply. Forward EPS needs an
- * analyst estimate and P/E history needs price history, so both come from the
- * bundled set when we have curated one.
+ * Merge filing figures with the parts EDGAR cannot supply. Forward EPS is only
+ * the live Yahoo current-year consensus; P/E history still comes from the bundled set.
  *
  * Driver merge order: neutral default → curated judgment → filing-observed.
  * Observed keys today are only `fcfMarginY1` and `growthY1_5`; when present they
@@ -393,6 +422,7 @@ async function writeCache(ticker: string, anchors: Omit<ValuationAnchors, "avail
 function anchorsFromEdgar(
   edgar: NonNullable<Awaited<ReturnType<typeof fetchEdgarFundamentals>>>,
   bundled: BundledAnchors | undefined,
+  fwd: { fwdEps: number | null; fwdEpsSource: AnchorSourceRef | null },
 ): ValuationAnchors {
   return {
     available: true,
@@ -404,7 +434,8 @@ function anchorsFromEdgar(
     shares: edgar.shares,
     past5YCagr: edgar.past5YCagr ?? bundled?.past5YCagr ?? null,
     ttmEps: edgar.ttmEps ?? bundled?.ttmEps ?? null,
-    fwdEps: bundled?.fwdEps ?? null,
+    fwdEps: fwd.fwdEps,
+    fwdEpsSource: fwd.fwdEpsSource,
     ttmEbitda: edgar.ttmEbitda ?? bundled?.ttmEbitda ?? null,
     ebitdaHistory: edgar.ebitdaHistory.length > 0 ? edgar.ebitdaHistory : (bundled?.ebitdaHistory ?? []),
     peHistory: bundled?.peHistory ?? [],
@@ -425,18 +456,32 @@ export async function getAnchors(rawTicker: string): Promise<ValuationAnchors> {
   const ticker = rawTicker.trim().toUpperCase();
 
   const cached = await readCache(ticker);
-  if (cached?.fresh) return cached.anchors;
+  if (cached?.fresh && cached.anchors.fwdEps != null) return cached.anchors;
 
   const bundled = BUNDLED[ticker];
-  const edgar = await fetchEdgarFundamentals(ticker);
+  const [edgar, forecast] = await Promise.all([
+    cached?.fresh ? Promise.resolve(null) : fetchEdgarFundamentals(ticker),
+    fetchYahooFwdEps(ticker),
+  ]);
+  const fwd = resolveFwdEps(ticker, forecast);
+
+  if (cached?.fresh) {
+    const anchors = { ...cached.anchors, fwdEps: fwd.fwdEps, fwdEpsSource: fwd.fwdEpsSource };
+    if (fwd.fwdEps != null) await writeCache(ticker, anchors);
+    return anchors;
+  }
+
   if (edgar) {
-    const anchors = anchorsFromEdgar(edgar, bundled);
+    const anchors = anchorsFromEdgar(edgar, bundled, fwd);
     await writeCache(ticker, anchors);
     return anchors;
   }
 
-  // EDGAR was unreachable or does not cover this filer. Stale cache beats nothing.
-  if (cached) return cached.anchors;
+  // EDGAR was unreachable or does not cover this filer. Stale cache beats nothing
+  // for filings, but forward EPS is never backfilled from a snapshot.
+  if (cached) {
+    return { ...cached.anchors, fwdEps: fwd.fwdEps, fwdEpsSource: fwd.fwdEpsSource };
+  }
   if (!bundled) return unavailableAnchors();
 
   const anchors: ValuationAnchors = {
@@ -444,6 +489,8 @@ export async function getAnchors(rawTicker: string): Promise<ValuationAnchors> {
     sourceFilings: [],
     fcfMarginY1FromFilings: false,
     ...bundled,
+    fwdEps: fwd.fwdEps,
+    fwdEpsSource: fwd.fwdEpsSource,
     ttmEbitda: bundled.ttmEbitda ?? null,
     ebitdaHistory: bundled.ebitdaHistory ?? [],
   };
