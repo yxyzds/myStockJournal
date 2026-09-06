@@ -1,6 +1,6 @@
 "use client";
 
-import type { FilingRef } from "@mystockjournal/shared";
+import type { AnchorSourceRef, FilingRef } from "@mystockjournal/shared";
 import { useState, type ReactNode } from "react";
 
 export const fmtMoneyM = (v: number) => `$${Math.round(v).toLocaleString()}M`;
@@ -303,6 +303,26 @@ export function FilingSourceNote({
         </div>
       )}
     </div>
+  );
+}
+
+/** Small “?” next to a figure. Hover shows the source; click opens it. */
+export function SourceHint({ source }: { source: AnchorSourceRef }) {
+  return (
+    <span className="relative inline-flex items-center">
+      <a
+        href={source.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label={source.label}
+        className="peer flex size-3.5 items-center justify-center rounded-full border border-slate-300 text-[8px] font-bold leading-none text-slate-400 hover:border-slate-400 hover:text-slate-600"
+      >
+        ?
+      </a>
+      <span className="pointer-events-none absolute bottom-full left-0 z-10 mb-1.5 hidden w-48 rounded-md bg-slate-800 px-2 py-1.5 text-left text-[10px] leading-snug text-white peer-hover:block peer-focus-visible:block">
+        {source.label} consensus this-year EPS (S&P Global, non-GAAP)
+      </span>
+    </span>
   );
 }
 

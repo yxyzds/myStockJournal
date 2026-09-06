@@ -13,6 +13,7 @@ import {
   trailingAveragePe,
   valueEvEbitda,
   valuePe,
+  type AnchorSourceRef,
   type EvEbitdaInputs,
   type EvEbitdaSeriesPoint,
   type PeerMultiple,
@@ -25,7 +26,7 @@ import { api } from "@/lib/api";
 import { useDebounced } from "@/hooks/use-debounced";
 import type { MethodViewProps } from "./actions";
 import { PEER_COLORS, PeChart, type PeChartMode } from "./pe-chart";
-import { Card, CardHeader, NumberInput, fmt1, fmt2, fmtMoneyM, fmtSigned } from "./primitives";
+import { Card, CardHeader, NumberInput, SourceHint, fmt1, fmt2, fmtMoneyM, fmtSigned } from "./primitives";
 
 export type MultiplesView = "pe" | "peg" | "evebitda";
 export type MultiplesLens = "pe" | "evebitda";
@@ -452,6 +453,9 @@ export function PeView({
             assumptions={peAssumptions}
             result={peResult}
             currentPrice={currentPrice}
+            hasFairValue={
+              peAssumptions.epsBasis === "fwd" ? anchors.fwdEps != null : anchors.ttmEps != null
+            }
             myFairValue={myFairValue}
             actions={actions}
             onField={setPeField}
@@ -463,6 +467,7 @@ export function PeView({
             currentPrice={currentPrice}
             hasFwdEps={anchors.fwdEps != null}
             hasTtmEps={anchors.ttmEps != null}
+            fwdEpsSource={anchors.fwdEpsSource}
             avg5Y={avg5Y}
             myFairValue={myFairValue}
             actions={actions}
@@ -710,6 +715,7 @@ function RightRail({
   currentPrice,
   hasFwdEps,
   hasTtmEps,
+  fwdEpsSource,
   avg5Y,
   myFairValue,
   actions,
@@ -720,12 +726,15 @@ function RightRail({
   currentPrice: number;
   hasFwdEps: boolean;
   hasTtmEps: boolean;
+  fwdEpsSource: AnchorSourceRef | null;
   avg5Y: number | null;
   myFairValue: number | null;
   actions: MethodViewProps["actions"];
   onField: <K extends keyof PeInputs>(key: K, value: PeInputs[K]) => void;
 }) {
-  const undervalued = result.mos >= 0;
+  const hasFairValue =
+    assumptions.epsBasis === "fwd" ? hasFwdEps : hasTtmEps;
+  const undervalued = hasFairValue && result.mos >= 0;
 
   return (
     <div className="flex flex-col gap-2.5">
@@ -785,22 +794,31 @@ function RightRail({
               </div>
             </div>
             <div className="flex items-center justify-between gap-2 rounded-[7px] border border-slate-100 bg-slate-50 px-2.5 py-1.5">
-              <span className="text-[11px] text-slate-500">
+              <span className="flex items-center gap-1 text-[11px] text-slate-500">
                 {assumptions.epsBasis === "ttm" ? "TTM EPS (actual)" : "Forward EPS (next 12 months)"}
+                {assumptions.epsBasis === "fwd" && fwdEpsSource ? (
+                  <SourceHint source={fwdEpsSource} />
+                ) : null}
               </span>
               <span className="font-mono text-[13px] font-bold text-slate-800 tabular-nums">
-                ${fmt2(result.eps)}
+                {hasFairValue ? `$${fmt2(result.eps)}` : "—"}
               </span>
             </div>
             <p className="mt-1.5 text-center text-[10px] text-slate-400">
-              Fair value = {assumptions.expectedPe}× × ${fmt2(result.eps)}
+              {hasFairValue
+                ? `Fair value = ${assumptions.expectedPe}× × $${fmt2(result.eps)}`
+                : "Fair value = —"}
             </p>
           </div>
         </Card>
 
         <div
           className={`rounded-[14px] border px-3.5 py-3.5 md:px-[18px] md:py-4 ${
-            undervalued ? "border-emerald-100 bg-emerald-50" : "border-red-100 bg-red-50"
+            !hasFairValue
+              ? "border-slate-100 bg-slate-50"
+              : undervalued
+                ? "border-emerald-100 bg-emerald-50"
+                : "border-red-100 bg-red-50"
           }`}
         >
           <div className="flex flex-wrap items-center justify-between gap-1.5">
@@ -815,10 +833,10 @@ function RightRail({
           </div>
           <span
             className={`mt-1.5 block font-mono text-[32px] leading-none font-bold tabular-nums md:text-[48px] ${
-              undervalued ? "text-emerald-700" : "text-red-500"
+              !hasFairValue ? "text-slate-300" : undervalued ? "text-emerald-700" : "text-red-500"
             }`}
           >
-            ${fmt2(result.fairValue)}
+            {hasFairValue ? `$${fmt2(result.fairValue)}` : "—"}
           </span>
           <div className="mt-2 flex flex-col gap-1">
             <div className="flex items-center justify-between rounded-[7px] bg-white px-2.5 py-1.5">
@@ -829,39 +847,43 @@ function RightRail({
             </div>
             <div
               className={`flex items-center justify-between rounded-[7px] px-2.5 py-1.5 ${
-                undervalued ? "bg-emerald-100" : "bg-red-100"
+                !hasFairValue ? "bg-white" : undervalued ? "bg-emerald-100" : "bg-red-100"
               }`}
             >
               <span
-                className={`text-[11px] font-bold ${undervalued ? "text-emerald-700" : "text-red-600"}`}
+                className={`text-[11px] font-bold ${
+                  !hasFairValue ? "text-slate-500" : undervalued ? "text-emerald-700" : "text-red-600"
+                }`}
               >
                 Margin of safety
               </span>
               <span
                 className={`font-mono text-[14px] font-bold tabular-nums ${
-                  undervalued ? "text-emerald-600" : "text-red-500"
+                  !hasFairValue ? "text-slate-300" : undervalued ? "text-emerald-600" : "text-red-500"
                 }`}
               >
-                {fmtSigned(result.mos)}
+                {hasFairValue ? fmtSigned(result.mos) : "—"}
               </span>
             </div>
           </div>
-          <p
-            className={`mt-2 text-[11px] leading-snug font-semibold ${
-              undervalued ? "text-emerald-700" : "text-red-600"
-            }`}
-          >
-            {undervalued
-              ? `Price sits ${fmt1(result.mos)}% below your fair value`
-              : `Price sits ${fmt1(Math.abs(result.mos))}% above your fair value`}
-          </p>
+          {hasFairValue ? (
+            <p
+              className={`mt-2 text-[11px] leading-snug font-semibold ${
+                undervalued ? "text-emerald-700" : "text-red-600"
+              }`}
+            >
+              {undervalued
+                ? `Price sits ${fmt1(result.mos)}% below your fair value`
+                : `Price sits ${fmt1(Math.abs(result.mos))}% above your fair value`}
+            </p>
+          ) : null}
         </div>
       </div>
 
       <button
         type="button"
         onClick={actions.onSetFairValue}
-        disabled={actions.saving || result.fairValue <= 0}
+        disabled={actions.saving || !hasFairValue || result.fairValue <= 0}
         className="rounded-[9px] bg-emerald-600 py-2.5 text-[12px] font-bold text-white hover:bg-emerald-700 disabled:opacity-50"
       >
         {actions.saving ? "Saving…" : "Set as My Fair Value"}
@@ -874,6 +896,7 @@ function PegRightRail({
   assumptions,
   result,
   currentPrice,
+  hasFairValue,
   myFairValue,
   actions,
   onField,
@@ -881,11 +904,12 @@ function PegRightRail({
   assumptions: PeInputs;
   result: ReturnType<typeof valuePe>;
   currentPrice: number;
+  hasFairValue: boolean;
   myFairValue: number | null;
   actions: MethodViewProps["actions"];
   onField: <K extends keyof PeInputs>(key: K, value: PeInputs[K]) => void;
 }) {
-  const undervalued = result.mos >= 0;
+  const undervalued = hasFairValue && result.mos >= 0;
 
   return (
     <div className="flex flex-col gap-2.5">
@@ -987,7 +1011,11 @@ function PegRightRail({
 
         <div
           className={`rounded-[14px] border px-3.5 py-3.5 md:px-[18px] md:py-4 ${
-            undervalued ? "border-emerald-100 bg-emerald-50" : "border-red-100 bg-red-50"
+            !hasFairValue
+              ? "border-slate-100 bg-slate-50"
+              : undervalued
+                ? "border-emerald-100 bg-emerald-50"
+                : "border-red-100 bg-red-50"
           }`}
         >
           <div className="flex flex-wrap items-center justify-between gap-1.5">
@@ -1002,10 +1030,10 @@ function PegRightRail({
           </div>
           <span
             className={`mt-1.5 block font-mono text-[32px] leading-none font-bold tabular-nums md:text-[48px] ${
-              undervalued ? "text-emerald-700" : "text-red-500"
+              !hasFairValue ? "text-slate-300" : undervalued ? "text-emerald-700" : "text-red-500"
             }`}
           >
-            ${fmt2(result.fairValue)}
+            {hasFairValue ? `$${fmt2(result.fairValue)}` : "—"}
           </span>
           <div className="mt-2 flex flex-col gap-1">
             <div className="flex items-center justify-between rounded-[7px] bg-white px-2.5 py-1.5">
@@ -1016,39 +1044,43 @@ function PegRightRail({
             </div>
             <div
               className={`flex items-center justify-between rounded-[7px] px-2.5 py-1.5 ${
-                undervalued ? "bg-emerald-100" : "bg-red-100"
+                !hasFairValue ? "bg-white" : undervalued ? "bg-emerald-100" : "bg-red-100"
               }`}
             >
               <span
-                className={`text-[11px] font-bold ${undervalued ? "text-emerald-700" : "text-red-600"}`}
+                className={`text-[11px] font-bold ${
+                  !hasFairValue ? "text-slate-500" : undervalued ? "text-emerald-700" : "text-red-600"
+                }`}
               >
                 Margin of safety
               </span>
               <span
                 className={`font-mono text-[14px] font-bold tabular-nums ${
-                  undervalued ? "text-emerald-600" : "text-red-500"
+                  !hasFairValue ? "text-slate-300" : undervalued ? "text-emerald-600" : "text-red-500"
                 }`}
               >
-                {fmtSigned(result.mos)}
+                {hasFairValue ? fmtSigned(result.mos) : "—"}
               </span>
             </div>
           </div>
-          <p
-            className={`mt-2 text-[11px] leading-snug font-semibold ${
-              undervalued ? "text-emerald-700" : "text-red-600"
-            }`}
-          >
-            {undervalued
-              ? `Price sits ${fmt1(result.mos)}% below your fair value`
-              : `Price sits ${fmt1(Math.abs(result.mos))}% above your fair value`}
-          </p>
+          {hasFairValue ? (
+            <p
+              className={`mt-2 text-[11px] leading-snug font-semibold ${
+                undervalued ? "text-emerald-700" : "text-red-600"
+              }`}
+            >
+              {undervalued
+                ? `Price sits ${fmt1(result.mos)}% below your fair value`
+                : `Price sits ${fmt1(Math.abs(result.mos))}% above your fair value`}
+            </p>
+          ) : null}
         </div>
       </div>
 
       <button
         type="button"
         onClick={actions.onSetFairValue}
-        disabled={actions.saving || result.fairValue <= 0}
+        disabled={actions.saving || !hasFairValue || result.fairValue <= 0}
         className="rounded-[9px] bg-emerald-600 py-2.5 text-[12px] font-bold text-white hover:bg-emerald-700 disabled:opacity-50"
       >
         {actions.saving ? "Saving…" : "Set as My Fair Value"}

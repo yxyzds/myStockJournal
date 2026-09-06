@@ -9,6 +9,12 @@ export type DcfDrivers = Pick<
   "growthY1_5" | "growthY6_10" | "termGrowth" | "wacc" | "fcfMarginY1" | "fcfMarginTerm"
 >;
 
+/** A public page the user can open to check a non-filing figure. */
+export type AnchorSourceRef = {
+  label: string;
+  url: string;
+};
+
 /** A filing the anchors were read out of, so the user can check the source. */
 export type FilingRef = {
   /** Form type as EDGAR labels it, e.g. "10-K" or "10-Q". */
@@ -39,6 +45,8 @@ export type ValuationAnchors = {
   past5YCagr: number | null;
   ttmEps: number | null;
   fwdEps: number | null;
+  /** Where `fwdEps` came from. Absent when we have no analyst estimate. */
+  fwdEpsSource: AnchorSourceRef | null;
   ttmEbitda: number | null;
   ebitdaHistory: EvEbitdaAnnualPoint[];
   peHistory: PePoint[];
@@ -164,9 +172,9 @@ export function rdcfInputsFromAnchors(
 export function peInputsFromAnchors(anchors: ValuationAnchors, expectedPe: number): PeInputs {
   return {
     expectedPe,
-    epsBasis: anchors.fwdEps != null ? "fwd" : "ttm",
+    epsBasis: "fwd",
     ttmEps: anchors.ttmEps ?? 0,
-    fwdEps: anchors.fwdEps ?? anchors.ttmEps ?? 0,
+    fwdEps: anchors.fwdEps ?? 0,
     expectedGrowth: 10,
   };
 }
