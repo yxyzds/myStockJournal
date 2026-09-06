@@ -2,6 +2,8 @@
 export type EvEbitdaAnnualPoint = {
   year: number;
   ebitda: number;
+  /** Diluted shares that year, in millions. Needed so unadjusted prices are not paired with today's post-split count. */
+  shares?: number | null;
 };
 
 /** Chart-ready EV/EBITDA point — yearly or week/month bars from live prices. */

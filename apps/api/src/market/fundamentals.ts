@@ -30,7 +30,7 @@ const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
  * Bump when the cached payload shape or merge rules change so stale rows are
  * refetched instead of serving week-old driver prefills.
  */
-const CACHE_VERSION = 5;
+const CACHE_VERSION = 6;
 
 /** Neutral drivers for a ticker we have no estimate for. The user must review them. */
 const FALLBACK_DRIVERS: DcfDrivers = {
@@ -274,11 +274,12 @@ function asEbitdaHistory(value: unknown): EvEbitdaAnnualPoint[] {
   return value
     .map((row) => {
       if (!row || typeof row !== "object") return null;
-      const point = row as { year?: unknown; ebitda?: unknown };
+      const point = row as { year?: unknown; ebitda?: unknown; shares?: unknown };
       const year = num(point.year);
       const ebitda = num(point.ebitda);
       if (year == null || ebitda == null) return null;
-      return { year, ebitda };
+      const shares = num(point.shares);
+      return { year, ebitda, shares: shares != null && shares > 0 ? shares : null };
     })
     .filter((point): point is EvEbitdaAnnualPoint => point != null)
     .sort((a, b) => a.year - b.year);

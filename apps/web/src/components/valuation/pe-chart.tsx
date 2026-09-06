@@ -14,6 +14,16 @@ export const PEER_COLORS = ["#6366f1", "#f59e0b", "#ec4899", "#10b981", "#8b5cf6
 export type PeChartMode = "pe" | "peg" | "evebitda";
 export type PeChartPeriod = "week" | "month" | "year";
 
+/** ~6 ticks on the Y-axis so a 3000× outlier cannot paint a wall of labels. */
+function niceAxisStep(ceiling: number) {
+  if (!Number.isFinite(ceiling) || ceiling <= 0) return 1;
+  const raw = ceiling / 6;
+  const pow = 10 ** Math.floor(Math.log10(raw));
+  const err = raw / pow;
+  const nice = err <= 1 ? 1 : err <= 2 ? 2 : err <= 5 ? 5 : 10;
+  return nice * pow;
+}
+
 function metric(point: PeSeriesPoint, mode: PeChartMode): number | null {
   if (mode === "evebitda") return point.evEbitda ?? null;
   if (mode === "pe") return point.pe;
@@ -90,11 +100,15 @@ export function PeChart({
     const references =
       mode === "peg" ? [1, 2, expected, ...peerValues] : [avg5Y, avg10Y, expected, ...peerValues];
 
-    const ceiling = Math.max(...valid, ...references.filter((v): v is number => v != null), 1) * 1.18;
-    const step = ceiling < 5 ? 1 : ceiling < 15 ? 2 : ceiling < 40 ? 5 : ceiling < 120 ? 20 : 50;
+    const finite = [...valid, ...references].filter((v): v is number => v != null && Number.isFinite(v) && v >= 0);
+    const ceiling = Math.max(...finite, 1) * 1.18;
+    const step = niceAxisStep(ceiling);
 
     const gridLines: number[] = [];
-    for (let value = 0; value <= ceiling; value += step) gridLines.push(value);
+    for (let value = 0; value <= ceiling + step / 2; value += step) {
+      gridLines.push(value);
+      if (gridLines.length > 12) break;
+    }
 
     const xPos = (index: number) =>
       history.length < 2 ? PAD.left + PLOT_W / 2 : PAD.left + (index / (history.length - 1)) * PLOT_W;
