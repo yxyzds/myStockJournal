@@ -30,19 +30,18 @@ import { PeView } from "./pe-view";
 import { RdcfView } from "./rdcf-view";
 import { fmt2 } from "./primitives";
 
-type WorkbenchTab = "dcf" | "rdcf" | "multiples" | "sotp";
+type WorkbenchTab = "dcf" | "rdcf" | "multiples";
 
 const WORKBENCH_TABS: { id: WorkbenchTab; label: string }[] = [
   { id: "dcf", label: "DCF" },
   { id: "rdcf", label: "Reverse DCF" },
   { id: "multiples", label: "Multiples" },
-  { id: "sotp", label: "SOTP" },
 ];
 
 function tabOf(method: ValuationMethod): WorkbenchTab {
   if (method === "pe" || method === "evebitda") return "multiples";
-  if (method === "sotp") return "sotp";
-  return method;
+  if (method === "dcf" || method === "rdcf") return method;
+  return "dcf";
 }
 
 function isMultiplesMethod(method: ValuationMethod): method is "pe" | "evebitda" {
@@ -402,9 +401,7 @@ function TopBar({
               className={`rounded-[5px] px-2.5 py-1 text-[11px] font-semibold whitespace-nowrap ${
                 tabOf(method) === tab.id
                   ? "bg-white text-slate-900 shadow-sm"
-                  : tab.id !== "sotp"
-                    ? "text-slate-500 hover:text-slate-700"
-                    : "text-slate-300"
+                  : "text-slate-500 hover:text-slate-700"
               }`}
             >
               {tab.label}

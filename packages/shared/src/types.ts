@@ -79,3 +79,15 @@ export type RecentDecision = {
   qty: number | null;
   grade: TradeReviewGrade | null;
 };
+
+/** Home-page filing row — latest 10-K/10-Q on a watched ticker. */
+export type JudgmentItem = {
+  id: string;
+  ticker: string;
+  title: string;
+  teaser: string;
+  detail: string;
+  actionLabel: string;
+  actionHref: string;
+  form: string;
+};

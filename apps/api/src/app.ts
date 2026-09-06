@@ -6,6 +6,7 @@ import { stockRoutes } from "./routes/stocks";
 import { valuationRoutes } from "./routes/valuation";
 import { decisionRoutes } from "./routes/decisions";
 import { watchlistRoutes } from "./routes/watchlist";
+import { judgmentRoutes } from "./routes/judgment";
 import type { AppEnv } from "./types";
 
 export const app = new Hono<AppEnv>();
@@ -34,6 +35,7 @@ app.get("/me", (c) =>
 );
 
 app.route("/watchlist", watchlistRoutes);
+app.route("/judgment", judgmentRoutes);
 app.route("/decisions", decisionRoutes);
 app.route("/quotes", quotesRoutes);
 // Two routers share the /stocks prefix so valuation can live in its own file.
