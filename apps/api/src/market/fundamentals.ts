@@ -10,16 +10,12 @@ import type {
 import { db } from "../db";
 import { fundamentalsCache } from "../db/schema";
 import { fetchEdgarFundamentals } from "./edgar";
-import {
-  fetchStockAnalysisFwdEps,
-  stockAnalysisForecastUrl,
-  type StockAnalysisForecast,
-} from "./stockanalysis-forecast";
+import { fetchYahooFwdEps, yahooAnalysisUrl, type YahooForecast } from "./yahoo-forecast";
 
 /**
  * Valuation anchors, resolved in order: `fundamentals_cache`, then SEC EDGAR,
  * then a small bundled dataset. Statement figures come from filings; forward EPS
- * comes only from a live Stock Analysis fetch — never a curated fallback.
+ * comes only from a live Yahoo earningsTrend fetch — never a curated fallback.
  * P/E history stays bundled.
  */
 type BundledAnchors = Omit<
@@ -41,7 +37,7 @@ const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
  * Bump when the cached payload shape or merge rules change so stale rows are
  * refetched instead of serving week-old driver prefills.
  */
-const CACHE_VERSION = 8;
+const CACHE_VERSION = 9;
 
 /** Neutral drivers for a ticker we have no estimate for. The user must review them. */
 const FALLBACK_DRIVERS: DcfDrivers = {
@@ -314,20 +310,20 @@ function asFwdEpsSource(value: unknown): AnchorSourceRef | null {
   if (!value || typeof value !== "object") return null;
   const row = value as { label?: unknown; url?: unknown };
   if (typeof row.label !== "string" || typeof row.url !== "string") return null;
-  if (!row.url.startsWith("https://stockanalysis.com/")) return null;
+  if (!row.url.startsWith("https://finance.yahoo.com/")) return null;
   return { label: row.label, url: row.url };
 }
 
-function stockAnalysisSource(ticker: string): AnchorSourceRef {
-  return { label: "Stock Analysis", url: stockAnalysisForecastUrl(ticker) };
+function yahooSource(ticker: string): AnchorSourceRef {
+  return { label: "Yahoo Finance", url: yahooAnalysisUrl(ticker) };
 }
 
 function resolveFwdEps(
   ticker: string,
-  forecast: StockAnalysisForecast | null,
+  forecast: YahooForecast | null,
 ): { fwdEps: number | null; fwdEpsSource: AnchorSourceRef | null } {
   if (!forecast) return { fwdEps: null, fwdEpsSource: null };
-  return { fwdEps: forecast.fwdEps, fwdEpsSource: stockAnalysisSource(ticker) };
+  return { fwdEps: forecast.fwdEps, fwdEpsSource: yahooSource(ticker) };
 }
 
 function asFilings(value: unknown): FilingRef[] {
@@ -367,7 +363,7 @@ function asAnchors(payload: unknown, period: string | null): ValuationAnchors | 
     shares,
     past5YCagr: num(row.past5YCagr),
     ttmEps: num(row.ttmEps),
-    fwdEps: num(row.fwdEps),
+    fwdEps: row.fwdEps == null ? null : num(row.fwdEps),
     fwdEpsSource: asFwdEpsSource(row.fwdEpsSource),
     ttmEbitda: num(row.ttmEbitda),
     ebitdaHistory: asEbitdaHistory(row.ebitdaHistory),
@@ -417,7 +413,7 @@ async function writeCache(ticker: string, anchors: Omit<ValuationAnchors, "avail
 
 /**
  * Merge filing figures with the parts EDGAR cannot supply. Forward EPS is only
- * the live Stock Analysis fetch; P/E history still comes from the bundled set.
+ * the live Yahoo current-year consensus; P/E history still comes from the bundled set.
  *
  * Driver merge order: neutral default → curated judgment → filing-observed.
  * Observed keys today are only `fcfMarginY1` and `growthY1_5`; when present they
@@ -460,14 +456,20 @@ export async function getAnchors(rawTicker: string): Promise<ValuationAnchors> {
   const ticker = rawTicker.trim().toUpperCase();
 
   const cached = await readCache(ticker);
-  if (cached?.fresh) return cached.anchors;
+  if (cached?.fresh && cached.anchors.fwdEps != null) return cached.anchors;
 
   const bundled = BUNDLED[ticker];
   const [edgar, forecast] = await Promise.all([
-    fetchEdgarFundamentals(ticker),
-    fetchStockAnalysisFwdEps(ticker),
+    cached?.fresh ? Promise.resolve(null) : fetchEdgarFundamentals(ticker),
+    fetchYahooFwdEps(ticker),
   ]);
   const fwd = resolveFwdEps(ticker, forecast);
+
+  if (cached?.fresh) {
+    const anchors = { ...cached.anchors, fwdEps: fwd.fwdEps, fwdEpsSource: fwd.fwdEpsSource };
+    if (fwd.fwdEps != null) await writeCache(ticker, anchors);
+    return anchors;
+  }
 
   if (edgar) {
     const anchors = anchorsFromEdgar(edgar, bundled, fwd);

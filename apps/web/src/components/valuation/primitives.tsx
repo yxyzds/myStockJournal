@@ -306,23 +306,27 @@ export function FilingSourceNote({
   );
 }
 
-/** Small “?” next to a figure. Hover shows the source; click opens it. */
+/** Source line under a figure: “?” plus a link to the public page. */
 export function SourceHint({ source }: { source: AnchorSourceRef }) {
   return (
-    <span className="relative inline-flex items-center">
-      <a
-        href={source.url}
-        target="_blank"
-        rel="noopener noreferrer"
-        aria-label={source.label}
-        className="peer flex size-3.5 items-center justify-center rounded-full border border-slate-300 text-[8px] font-bold leading-none text-slate-400 hover:border-slate-400 hover:text-slate-600"
-      >
+    <p className="mt-1.5 flex items-start gap-1 text-[10px] leading-snug text-slate-400">
+      <span className="mt-px flex size-3.5 shrink-0 items-center justify-center rounded-full border border-slate-300 text-[8px] font-bold leading-none text-slate-400">
         ?
-      </a>
-      <span className="pointer-events-none absolute bottom-full left-0 z-10 mb-1.5 hidden w-48 rounded-md bg-slate-800 px-2 py-1.5 text-left text-[10px] leading-snug text-white peer-hover:block peer-focus-visible:block">
-        {source.label} consensus this-year EPS (S&P Global, non-GAAP)
       </span>
-    </span>
+      <span>
+        Source:{" "}
+        <a
+          href={source.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-0.5 font-semibold text-slate-500 underline decoration-slate-300 underline-offset-2 hover:text-blue-600 hover:decoration-blue-300"
+        >
+          {source.label}
+          <ExternalLinkIcon />
+        </a>
+        {" · "}consensus this-year EPS
+      </span>
+    </p>
   );
 }
 

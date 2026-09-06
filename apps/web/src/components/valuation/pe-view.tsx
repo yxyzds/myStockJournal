@@ -773,16 +773,15 @@ function RightRail({
               <div className="flex items-center rounded-md bg-slate-100 p-0.5">
                 {(
                   [
-                    { basis: "ttm", label: "TTM", available: hasTtmEps },
-                    { basis: "fwd", label: "Forward", available: hasFwdEps },
-                  ] as const
+                    { basis: "ttm" as const, label: "TTM" },
+                    { basis: "fwd" as const, label: "Forward" },
+                  ]
                 ).map((option) => (
                   <button
                     key={option.basis}
                     type="button"
-                    disabled={!option.available}
                     onClick={() => onField("epsBasis", option.basis)}
-                    className={`rounded-[5px] px-2 py-[3px] text-[10px] font-bold disabled:opacity-40 ${
+                    className={`rounded-[5px] px-2 py-[3px] text-[10px] font-bold ${
                       assumptions.epsBasis === option.basis
                         ? "bg-white text-slate-900 shadow-sm"
                         : "text-slate-500"
@@ -794,16 +793,16 @@ function RightRail({
               </div>
             </div>
             <div className="flex items-center justify-between gap-2 rounded-[7px] border border-slate-100 bg-slate-50 px-2.5 py-1.5">
-              <span className="flex items-center gap-1 text-[11px] text-slate-500">
+              <span className="text-[11px] text-slate-500">
                 {assumptions.epsBasis === "ttm" ? "TTM EPS (actual)" : "Forward EPS (next 12 months)"}
-                {assumptions.epsBasis === "fwd" && fwdEpsSource ? (
-                  <SourceHint source={fwdEpsSource} />
-                ) : null}
               </span>
               <span className="font-mono text-[13px] font-bold text-slate-800 tabular-nums">
                 {hasFairValue ? `$${fmt2(result.eps)}` : "—"}
               </span>
             </div>
+            {assumptions.epsBasis === "fwd" && fwdEpsSource ? (
+              <SourceHint source={fwdEpsSource} />
+            ) : null}
             <p className="mt-1.5 text-center text-[10px] text-slate-400">
               {hasFairValue
                 ? `Fair value = ${assumptions.expectedPe}× × $${fmt2(result.eps)}`
