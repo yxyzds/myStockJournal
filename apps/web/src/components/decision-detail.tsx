@@ -17,7 +17,6 @@ const VALUATION_METHODS = [
   { id: "pe", label: "P/E Band", value: "$225", note: "Preferred · Aug 20" },
   { id: "dcf", label: "DCF", value: "$235", note: "Base case · Aug 12" },
   { id: "evebitda", label: "EV/EBITDA", value: "$210", note: "" },
-  { id: "sotp", label: "SOTP", value: "$247", note: "" },
   { id: "rdcf", label: "Reverse DCF", value: "—", note: "Market implies 9.5% growth" },
 ];
 

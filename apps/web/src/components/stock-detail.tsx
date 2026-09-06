@@ -250,6 +250,134 @@ function JournalCard({
   );
 }
 
+function ChevronDownIcon({ size = 10, className }: { size?: number; className?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 10 10" fill="none" aria-hidden className={className}>
+      <path d="M2 4l3 3 3-3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function JournalFoldPill({
+  label,
+  pointing,
+  onClick,
+  className = "",
+}: {
+  label: string;
+  pointing: "up" | "down";
+  onClick?: () => void;
+  className?: string;
+}) {
+  const cls = `inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 py-0.5 text-slate-400 shadow-[0_1px_4px_rgba(15,23,42,0.08)] ${className}`;
+  const inner = (
+    <>
+      <span className="text-[11px] font-semibold text-slate-600">{label}</span>
+      <ChevronDownIcon className={pointing === "up" ? "rotate-180" : undefined} />
+    </>
+  );
+  if (onClick) {
+    return (
+      <button type="button" onClick={onClick} className={cls}>
+        {inner}
+      </button>
+    );
+  }
+  return <span className={cls}>{inner}</span>;
+}
+
+const JOURNAL_VISIBLE = 3;
+
+function JournalStack({
+  entries,
+  onDelete,
+  onSave,
+}: {
+  entries: JournalEntry[];
+  onDelete: (id: string) => void;
+  onSave: (id: string, text: string) => Promise<unknown>;
+}) {
+  const [expanded, setExpanded] = useState(false);
+
+  if (entries.length === 0) return null;
+
+  function renderCard(entry: JournalEntry, index: number) {
+    return (
+      <JournalCard
+        key={entry.id}
+        entry={entry}
+        index={index}
+        onDelete={() => onDelete(entry.id)}
+        onSave={(text) => onSave(entry.id, text)}
+      />
+    );
+  }
+
+  if (entries.length <= JOURNAL_VISIBLE) {
+    return <>{entries.map((entry, i) => renderCard(entry, i))}</>;
+  }
+
+  if (expanded) {
+    return (
+      <>
+        {entries.map((entry, i) => renderCard(entry, i))}
+        <div className="flex justify-center">
+          <JournalFoldPill label="Collapse" pointing="up" onClick={() => setExpanded(false)} />
+        </div>
+      </>
+    );
+  }
+
+  const hidden = entries.slice(0, -JOURNAL_VISIBLE);
+  const visible = entries.slice(-JOURNAL_VISIBLE);
+  const peek = hidden.slice(-3);
+  const peekHeight = 52 + (peek.length - 1) * 8;
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setExpanded(true)}
+        title="Show all entries"
+        className="relative w-full cursor-pointer border-0 bg-transparent p-0 text-left"
+        style={{ height: peekHeight }}
+      >
+        {peek.map((entry, layerIdx) => {
+          const depth = peek.length - 1 - layerIdx;
+          const index = entries.findIndex((e) => e.id === entry.id);
+          return (
+            <div
+              key={entry.id}
+              className="pointer-events-none absolute right-0 left-0 flex h-[52px] items-center gap-2.5 rounded-[14px] border border-[#e8eef5] bg-white px-[18px] shadow-[0_1px_4px_rgba(15,23,42,0.05)]"
+              style={{
+                transform: `translateY(${depth * 8}px) scaleX(${1 - depth * 0.022})`,
+                transformOrigin: "bottom center",
+                zIndex: layerIdx,
+                top: 0,
+              }}
+            >
+              <span className="flex size-[22px] shrink-0 items-center justify-center rounded-full bg-slate-100 text-[10px] font-bold text-slate-400">
+                {index + 1}
+              </span>
+              <span className="min-w-0 flex-1 truncate text-[12px] text-slate-400">
+                {entry.text.slice(0, 60)}
+                {entry.text.length > 60 ? "…" : ""}
+              </span>
+              <span className="shrink-0 text-[11px] text-slate-300">{formatEntryDate(entry.date)}</span>
+            </div>
+          );
+        })}
+        <JournalFoldPill
+          label={`${hidden.length} more ${hidden.length === 1 ? "entry" : "entries"}`}
+          pointing="down"
+          className="absolute bottom-0 left-1/2 z-10 -translate-x-1/2"
+        />
+      </button>
+      {visible.map((entry) => renderCard(entry, entries.findIndex((e) => e.id === entry.id)))}
+    </>
+  );
+}
+
 function NewEntryComposer({
   ticker,
   priceLabel,
@@ -346,6 +474,7 @@ function txnFormValues(txn: StockTransaction) {
 }
 
 function SavedTransaction({ txn, onEdit }: { txn: StockTransaction; onEdit: () => void }) {
+  const [open, setOpen] = useState(true);
   const isBuy = txn.type === "buy";
   return (
     <div
@@ -355,44 +484,81 @@ function SavedTransaction({ txn, onEdit }: { txn: StockTransaction; onEdit: () =
       onClick={onEdit}
     >
       <div className="flex items-start justify-between gap-2">
-        <span
-          className={`w-fit rounded-full px-2.5 py-1 text-[10px] font-bold tracking-wide uppercase ${
-            isBuy ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700"
-          }`}
-        >
-          Transaction · {isBuy ? "Buy" : "Sell"}
-        </span>
-        <button
-          type="button"
-          onClick={onEdit}
-          className="rounded-md p-1.5 text-slate-300 hover:bg-white/70 hover:text-slate-600"
-          aria-label="Edit transaction"
-        >
-          <PencilIcon />
-        </button>
-      </div>
-      <div className="grid grid-cols-3 gap-2">
-        {[
-          ["PRICE", formatPrice(txn.price)],
-          ["QUANTITY", txn.qty == null ? "—" : `${txn.qty} shares`],
-          ["DATE", formatEntryDate(txn.date).replace(", 2026", "")],
-        ].map(([label, val]) => (
-          <div key={label} className="min-w-0">
-            <p className="text-[10px] font-bold text-slate-400 uppercase md:text-[11px]">{label}</p>
-            <p
-              className={`mt-1 truncate font-mono text-[13px] font-bold md:text-base ${
-                isBuy ? "text-slate-800" : "text-rose-700"
-              }`}
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <span
+            className={`w-fit rounded-full px-2.5 py-1 text-[10px] font-bold tracking-wide uppercase ${
+              isBuy ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700"
+            }`}
+          >
+            Transaction · {isBuy ? "Buy" : "Sell"}
+          </span>
+          {!open && (
+            <span
+              className={`truncate font-mono text-[13px] font-bold ${isBuy ? "text-slate-800" : "text-rose-700"}`}
             >
-              {val}
-            </p>
+              {formatPrice(txn.price)}
+              {txn.qty != null ? ` · ${txn.qty} shares` : ""}
+              {` · ${formatEntryDate(txn.date).replace(", 2026", "")}`}
+            </span>
+          )}
+        </div>
+        <div className="flex shrink-0 items-center">
+          <button
+            type="button"
+            onClick={onEdit}
+            className="rounded-md p-1.5 text-slate-300 hover:bg-white/70 hover:text-slate-600"
+            aria-label="Edit transaction"
+          >
+            <PencilIcon />
+          </button>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setOpen((v) => !v);
+            }}
+            className="rounded-md p-1.5 text-slate-300 hover:bg-white/70 hover:text-slate-600"
+            aria-expanded={open}
+            aria-label={open ? "Collapse transaction" : "Expand transaction"}
+          >
+            <svg
+              width="13"
+              height="13"
+              viewBox="0 0 16 16"
+              fill="none"
+              className={`transition-transform ${open ? "rotate-180" : ""}`}
+            >
+              <path d="M4 6L8 10L12 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+            </svg>
+          </button>
+        </div>
+      </div>
+      {open && (
+        <>
+          <div className="grid grid-cols-3 gap-2">
+            {[
+              ["PRICE", formatPrice(txn.price)],
+              ["QUANTITY", txn.qty == null ? "—" : `${txn.qty} shares`],
+              ["DATE", formatEntryDate(txn.date).replace(", 2026", "")],
+            ].map(([label, val]) => (
+              <div key={label} className="min-w-0">
+                <p className="text-[10px] font-bold text-slate-400 uppercase md:text-[11px]">{label}</p>
+                <p
+                  className={`mt-1 truncate font-mono text-[13px] font-bold md:text-base ${
+                    isBuy ? "text-slate-800" : "text-rose-700"
+                  }`}
+                >
+                  {val}
+                </p>
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
-      <div className={`border-t pt-3 ${isBuy ? "border-emerald-200" : "border-rose-200"}`}>
-        <p className={`mb-1 text-[11px] font-bold uppercase ${isBuy ? "text-slate-400" : "text-rose-300"}`}>Reason</p>
-        <p className={`text-[13px] leading-relaxed ${isBuy ? "text-slate-600" : "text-rose-700"}`}>{txn.rationale}</p>
-      </div>
+          <div className={`border-t pt-3 ${isBuy ? "border-emerald-200" : "border-rose-200"}`}>
+            <p className={`mb-1 text-[11px] font-bold uppercase ${isBuy ? "text-slate-400" : "text-rose-300"}`}>Reason</p>
+            <p className={`text-[13px] leading-relaxed ${isBuy ? "text-slate-600" : "text-rose-700"}`}>{txn.rationale}</p>
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -926,15 +1092,13 @@ export function StockDetail({ ticker }: { ticker: string }) {
               {data?.journal.length ?? 0} {(data?.journal.length ?? 0) === 1 ? "entry" : "entries"}
             </span>
           </div>
-            {data?.journal.map((entry, i) => (
-              <JournalCard
-                key={entry.id}
-                entry={entry}
-                index={i}
-                onDelete={() => deleteJournal.mutate(entry.id)}
-                onSave={(text) => updateJournal.mutateAsync({ id: entry.id, text })}
-              />
-            ))}
+          {data?.journal && (
+            <JournalStack
+              entries={data.journal}
+              onDelete={(id) => deleteJournal.mutate(id)}
+              onSave={(id, text) => updateJournal.mutateAsync({ id, text })}
+            />
+          )}
           <NewEntryComposer
             ticker={symbol}
             priceLabel={formatPrice(data?.quote?.price ?? null, data?.quote?.currency)}

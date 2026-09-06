@@ -7,7 +7,7 @@ import type { PeInputs, PePoint } from "./pe";
 import type { RdcfInputs } from "./rdcf";
 import type { ValuationAnchors } from "./anchors";
 
-/** Methods with a working model. SOTP is still a placeholder. */
+/** Methods with a working model. */
 export const IMPLEMENTED_METHODS = ["dcf", "rdcf", "pe", "evebitda"] as const satisfies readonly ValuationMethod[];
 export type ImplementedMethod = (typeof IMPLEMENTED_METHODS)[number];
 
