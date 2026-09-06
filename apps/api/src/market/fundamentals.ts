@@ -1,5 +1,11 @@
 import { eq } from "drizzle-orm";
-import type { DcfDrivers, FilingRef, PePoint, ValuationAnchors } from "@mystockjournal/shared";
+import type {
+  DcfDrivers,
+  EvEbitdaAnnualPoint,
+  FilingRef,
+  PePoint,
+  ValuationAnchors,
+} from "@mystockjournal/shared";
 import { db } from "../db";
 import { fundamentalsCache } from "../db/schema";
 import { fetchEdgarFundamentals } from "./edgar";
@@ -10,7 +16,13 @@ import { fetchEdgarFundamentals } from "./edgar";
  * and P/E history cannot (they need analyst estimates and price history), so
  * those stay bundled and are simply absent for tickers we have not curated.
  */
-type BundledAnchors = Omit<ValuationAnchors, "available" | "sourceFilings" | "fcfMarginY1FromFilings">;
+type BundledAnchors = Omit<
+  ValuationAnchors,
+  "available" | "sourceFilings" | "fcfMarginY1FromFilings" | "ttmEbitda" | "ebitdaHistory"
+> & {
+  ttmEbitda?: number | null;
+  ebitdaHistory?: EvEbitdaAnnualPoint[];
+};
 
 /** Refetch weekly. Filings land quarterly, but a 10-Q can arrive any day. */
 const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -18,7 +30,7 @@ const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
  * Bump when the cached payload shape or merge rules change so stale rows are
  * refetched instead of serving week-old driver prefills.
  */
-const CACHE_VERSION = 3;
+const CACHE_VERSION = 5;
 
 /** Neutral drivers for a ticker we have no estimate for. The user must review them. */
 const FALLBACK_DRIVERS: DcfDrivers = {
@@ -228,6 +240,8 @@ function unavailableAnchors(): ValuationAnchors {
     past5YCagr: null,
     ttmEps: null,
     fwdEps: null,
+    ttmEbitda: null,
+    ebitdaHistory: [],
     peHistory: [],
     drivers: FALLBACK_DRIVERS,
     fcfMarginY1FromFilings: false,
@@ -252,6 +266,21 @@ function asPeHistory(value: unknown): PePoint[] {
       return { year, pe, growth };
     })
     .filter((point): point is PePoint => point != null)
+    .sort((a, b) => a.year - b.year);
+}
+
+function asEbitdaHistory(value: unknown): EvEbitdaAnnualPoint[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((row) => {
+      if (!row || typeof row !== "object") return null;
+      const point = row as { year?: unknown; ebitda?: unknown };
+      const year = num(point.year);
+      const ebitda = num(point.ebitda);
+      if (year == null || ebitda == null) return null;
+      return { year, ebitda };
+    })
+    .filter((point): point is EvEbitdaAnnualPoint => point != null)
     .sort((a, b) => a.year - b.year);
 }
 
@@ -306,6 +335,8 @@ function asAnchors(payload: unknown, period: string | null): ValuationAnchors | 
     past5YCagr: num(row.past5YCagr),
     ttmEps: num(row.ttmEps),
     fwdEps: num(row.fwdEps),
+    ttmEbitda: num(row.ttmEbitda),
+    ebitdaHistory: asEbitdaHistory(row.ebitdaHistory),
     peHistory: asPeHistory(row.peHistory),
     drivers: asDrivers(row.drivers),
     fcfMarginY1FromFilings: row.fcfMarginY1FromFilings === true,
@@ -374,6 +405,8 @@ function anchorsFromEdgar(
     past5YCagr: edgar.past5YCagr ?? bundled?.past5YCagr ?? null,
     ttmEps: edgar.ttmEps ?? bundled?.ttmEps ?? null,
     fwdEps: bundled?.fwdEps ?? null,
+    ttmEbitda: edgar.ttmEbitda ?? bundled?.ttmEbitda ?? null,
+    ebitdaHistory: edgar.ebitdaHistory.length > 0 ? edgar.ebitdaHistory : (bundled?.ebitdaHistory ?? []),
     peHistory: bundled?.peHistory ?? [],
     drivers: {
       ...FALLBACK_DRIVERS,
@@ -411,6 +444,8 @@ export async function getAnchors(rawTicker: string): Promise<ValuationAnchors> {
     sourceFilings: [],
     fcfMarginY1FromFilings: false,
     ...bundled,
+    ttmEbitda: bundled.ttmEbitda ?? null,
+    ebitdaHistory: bundled.ebitdaHistory ?? [],
   };
   await writeCache(ticker, anchors);
   return anchors;

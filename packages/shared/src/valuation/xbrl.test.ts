@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { annualCagr, latestInstant, latestQuarter, ttmFromFacts, type XbrlFact } from "./xbrl";
+import { annualCagr, annualValues, latestInstant, latestQuarter, ttmFromFacts, type XbrlFact } from "./xbrl";
 
 const duration = (start: string, end: string, val: number, filed = "2026-07-31"): XbrlFact => ({
   start,
@@ -99,6 +99,20 @@ describe("latestQuarter", () => {
   it("picks the single quarter over the year-to-date fact ending the same day", () => {
     // Both end 2026-06-27; only the span tells them apart.
     expect(latestQuarter(APPLE_REVENUE)?.val).toBe(109_417);
+  });
+});
+
+describe("annualValues", () => {
+  it("keeps one annual figure per year-end, oldest first", () => {
+    const facts = [
+      duration("2024-09-29", "2025-09-27", 416_161),
+      duration("2023-10-01", "2024-09-28", 391_035),
+      duration("2025-09-28", "2026-06-27", 364_357),
+    ];
+    expect(annualValues(facts)).toEqual([
+      { year: 2024, end: "2024-09-28", value: 391_035 },
+      { year: 2025, end: "2025-09-27", value: 416_161 },
+    ]);
   });
 });
 

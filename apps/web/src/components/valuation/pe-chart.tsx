@@ -11,10 +11,11 @@ const PLOT_H = VIEW_H - PAD.top - PAD.bottom;
 
 export const PEER_COLORS = ["#6366f1", "#f59e0b", "#ec4899", "#10b981", "#8b5cf6", "#0ea5e9", "#f43f5e", "#14b8a6"];
 
-export type PeChartMode = "pe" | "peg";
+export type PeChartMode = "pe" | "peg" | "evebitda";
 export type PeChartPeriod = "week" | "month" | "year";
 
 function metric(point: PeSeriesPoint, mode: PeChartMode): number | null {
+  if (mode === "evebitda") return point.evEbitda ?? null;
   if (mode === "pe") return point.pe;
   if (point.growth == null || point.growth <= 0) return null;
   return point.pe / point.growth;
@@ -37,20 +38,24 @@ export function PeChart({
   history,
   peerSeries,
   expectedPe,
+  expectedEvEbitda = 0,
   expectedGrowth,
   avg5Y,
   avg10Y,
   label,
+  emptyReason,
 }: {
   mode: PeChartMode;
   history: PeSeriesPoint[];
   /** Peer series already aligned conceptually; matched onto subject labels. */
   peerSeries: { ticker: string; series: PeSeriesPoint[]; color?: string }[];
   expectedPe: number;
+  expectedEvEbitda?: number;
   expectedGrowth: number;
   avg5Y: number | null;
   avg10Y: number | null;
   label: string;
+  emptyReason?: string | null;
 }) {
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
@@ -59,11 +64,15 @@ export function PeChart({
     const values = history.map((point) => metric(point, mode));
     const valid = values.filter((v): v is number => v != null);
     const expected =
-      expectedPe > 0
-        ? mode === "pe"
-          ? expectedPe
-          : expectedPe / Math.max(expectedGrowth, 0.1)
-        : null;
+      mode === "evebitda"
+        ? expectedEvEbitda > 0
+          ? expectedEvEbitda
+          : null
+        : expectedPe > 0
+          ? mode === "pe"
+            ? expectedPe
+            : expectedPe / Math.max(expectedGrowth, 0.1)
+          : null;
 
     const peersPlotted = peerSeries.map((peer, index) => {
       const plotted = alignPeer(history, peer.series, mode);
@@ -79,9 +88,7 @@ export function PeChart({
       peer.plotted.filter((value): value is number => value != null),
     );
     const references =
-      mode === "pe"
-        ? [avg5Y, avg10Y, expected, ...peerValues]
-        : [1, 2, expected, ...peerValues];
+      mode === "peg" ? [1, 2, expected, ...peerValues] : [avg5Y, avg10Y, expected, ...peerValues];
 
     const ceiling = Math.max(...valid, ...references.filter((v): v is number => v != null), 1) * 1.18;
     const step = ceiling < 5 ? 1 : ceiling < 15 ? 2 : ceiling < 40 ? 5 : ceiling < 120 ? 20 : 50;
@@ -121,7 +128,7 @@ export function PeChart({
         path: buildPath(peer.plotted),
       })),
     };
-  }, [mode, history, peerSeries, expectedPe, expectedGrowth, avg5Y, avg10Y]);
+  }, [mode, history, peerSeries, expectedPe, expectedEvEbitda, expectedGrowth, avg5Y, avg10Y]);
 
   const handleMouseMove = useCallback(
     (event: React.MouseEvent<SVGSVGElement>) => {
@@ -139,19 +146,25 @@ export function PeChart({
   if (history.length === 0) {
     return (
       <div className="flex h-[180px] items-center justify-center px-6 text-center">
-        <p className="text-[12px] text-slate-400">
-          No multiple history on file for this ticker yet, so there is nothing to compare your
-          expected multiple against.
-        </p>
+        {emptyReason ? (
+          <p className="rounded-lg border border-red-200 bg-red-50 px-3.5 py-2 text-[12px] font-semibold text-red-700">
+            {emptyReason}
+          </p>
+        ) : (
+          <p className="text-[12px] text-slate-400">
+            No multiple history on file for this ticker yet, so there is nothing to compare your
+            expected multiple against.
+          </p>
+        )}
       </div>
     );
   }
 
-  const mainColor = mode === "pe" ? "#3b82f6" : "#8b5cf6";
+  const mainColor = mode === "peg" ? "#8b5cf6" : mode === "evebitda" ? "#0d9488" : "#3b82f6";
   const expectedY = chart.expected != null ? chart.yPos(chart.expected) : null;
   const expectedInRange =
     expectedY != null && expectedY > PAD.top && expectedY < VIEW_H - PAD.bottom;
-  const suffix = mode === "pe" ? "x" : "";
+  const suffix = mode === "peg" ? "" : "x";
   const labelStep = history.length > 24 ? 4 : history.length > 12 ? 2 : 1;
 
   return (
@@ -160,7 +173,7 @@ export function PeChart({
       viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
       className="w-full"
       role="img"
-      aria-label={`${label} ${mode === "pe" ? "P/E" : "PEG"} history`}
+      aria-label={`${label} ${mode === "peg" ? "PEG" : mode === "evebitda" ? "EV/EBITDA" : "P/E"} history`}
       onMouseMove={handleMouseMove}
       onMouseLeave={() => setHoverIndex(null)}
     >
@@ -208,7 +221,7 @@ export function PeChart({
         );
       })}
 
-      {mode === "pe" && avg10Y != null && (
+      {(mode === "pe" || mode === "evebitda") && avg10Y != null && (
         <line
           x1={PAD.left}
           y1={chart.yPos(avg10Y)}
@@ -219,7 +232,7 @@ export function PeChart({
           strokeDasharray="4 3"
         />
       )}
-      {mode === "pe" && avg5Y != null && (
+      {(mode === "pe" || mode === "evebitda") && avg5Y != null && (
         <line
           x1={PAD.left}
           y1={chart.yPos(avg5Y)}
@@ -286,6 +299,20 @@ export function PeChart({
         strokeLinecap="round"
         strokeLinejoin="round"
       />
+
+      {chart.values.map((value, index) =>
+        value == null ? null : (
+          <circle
+            key={`pt-${history[index].label}-${index}`}
+            cx={chart.xPos(index)}
+            cy={chart.yPos(value)}
+            r={history.length < 2 ? 5 : 3}
+            fill={index === history.length - 1 ? mainColor : "white"}
+            stroke={mainColor}
+            strokeWidth={2}
+          />
+        ),
+      )}
 
       {hoverIndex !== null &&
         (() => {

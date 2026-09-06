@@ -2,19 +2,20 @@ import type { DcfAssumptionReview } from "../ai/dcf-review";
 import type { Quote } from "../market";
 import type { ValuationMethod } from "../types";
 import type { DcfInputs, DcfYearRow } from "./dcf";
+import type { EvEbitdaInputs } from "./evebitda";
 import type { PeInputs, PePoint } from "./pe";
 import type { RdcfInputs } from "./rdcf";
 import type { ValuationAnchors } from "./anchors";
 
-/** Methods with a working model. EV/EBITDA and SOTP are still placeholders. */
-export const IMPLEMENTED_METHODS = ["dcf", "rdcf", "pe"] as const satisfies readonly ValuationMethod[];
+/** Methods with a working model. SOTP is still a placeholder. */
+export const IMPLEMENTED_METHODS = ["dcf", "rdcf", "pe", "evebitda"] as const satisfies readonly ValuationMethod[];
 export type ImplementedMethod = (typeof IMPLEMENTED_METHODS)[number];
 
 export function isImplementedMethod(method: ValuationMethod): method is ImplementedMethod {
   return (IMPLEMENTED_METHODS as readonly ValuationMethod[]).includes(method);
 }
 
-export type ValuationAssumptions = DcfInputs | RdcfInputs | PeInputs;
+export type ValuationAssumptions = DcfInputs | RdcfInputs | PeInputs | EvEbitdaInputs;
 
 type OutputsBase = {
   /** Discounting starts here, so a saved model keeps its original year labels. */
@@ -60,7 +61,17 @@ export type PeOutputs = OutputsBase & {
   impliedPeAtPeg2: number | null;
 };
 
-export type ValuationOutputs = DcfOutputs | RdcfOutputs | PeOutputs;
+export type EvEbitdaOutputs = OutputsBase & {
+  method: "evebitda";
+  fairValue: number;
+  mosPercent: number;
+  ev: number;
+  currentMultiple: number | null;
+  targetEv: number;
+  equity: number;
+};
+
+export type ValuationOutputs = DcfOutputs | RdcfOutputs | PeOutputs | EvEbitdaOutputs;
 
 /** A saved worksheet. `isMyFairValue` marks the one number the watch list shows. */
 export type ValuationModel = {
@@ -96,6 +107,8 @@ export type PeerMultiple = {
   history: PePoint[];
   /** Set when `pe` is null — shown when the user taps a greyed-out peer. */
   peUnavailableReason: string | null;
+  evEbitda: number | null;
+  evEbitdaUnavailableReason: string | null;
 };
 
 /** Frozen valuation attached to a decision, so history survives later edits. */

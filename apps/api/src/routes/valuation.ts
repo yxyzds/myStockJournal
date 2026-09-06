@@ -26,6 +26,7 @@ import { stocks, valuationModels, valuationSnapshots } from "../db/schema";
 import { recordDecision } from "../lib/decisions";
 import { TICKER_RE, getOrCreateStock, parseTicker } from "../lib/stocks";
 import { getAnchors } from "../market/fundamentals";
+import { buildEvEbitdaChart } from "../market/ev-ebitda-series";
 import { buildPeChart, peUnavailableReason } from "../market/pe-series";
 import { getQuotes } from "../market/quotes";
 
@@ -120,6 +121,16 @@ function withServerAnchors(
       ...body,
       ttmEps: anchors.ttmEps ?? 0,
       fwdEps: anchors.fwdEps ?? anchors.ttmEps ?? 0,
+    };
+  }
+
+  if (method === "evebitda") {
+    return {
+      ...body,
+      ttmEbitda: anchors.ttmEbitda ?? 0,
+      cash: anchors.cash,
+      debt: anchors.debt,
+      shares: anchors.shares,
     };
   }
 
@@ -437,6 +448,27 @@ valuationRoutes.get("/:ticker/valuation/pe/chart", async (c) => {
 });
 
 /**
+ * GET /stocks/:ticker/valuation/evebitda/chart?period=&peers= — EV/EBITDA
+ * series. `year` pairs filed annual EBITDA with year-end prices; `week` /
+ * `month` rebuild the multiple from K-line closes × current capital structure
+ * ÷ latest TTM EBITDA.
+ */
+valuationRoutes.get("/:ticker/valuation/evebitda/chart", async (c) => {
+  const period = parseChartPeriod(c.req.query("period") ?? "year") ?? "year";
+  const ticker = parseTicker(c.req.param("ticker"));
+  if (!TICKER_RE.test(ticker)) return c.json({ error: "Invalid ticker" }, 400);
+
+  const peerTickers = (c.req.query("peers") ?? "")
+    .split(",")
+    .map((raw) => parseTicker(raw))
+    .filter((peer) => TICKER_RE.test(peer) && peer !== ticker)
+    .slice(0, MAX_PEERS);
+
+  const payload = await buildEvEbitdaChart(ticker, period, peerTickers);
+  return c.json(payload);
+});
+
+/**
  * GET /stocks/:ticker/valuation/pe/peers?tickers= — current multiples for the
  * peers a user picked, so the P/E chart can plot them. Capped at MAX_PEERS. A
  * peer we have no EPS for comes back with nulls rather than being dropped.
@@ -473,6 +505,8 @@ valuationRoutes.get("/:ticker/valuation/pe/peers", async (c) => {
       peg: pe != null && latestGrowth != null && latestGrowth > 0 ? pe / latestGrowth : null,
       history: anchors?.peHistory ?? [],
       peUnavailableReason: pe == null ? peUnavailableReason(price, eps) : null,
+      evEbitda: null,
+      evEbitdaUnavailableReason: null,
     });
   }
 

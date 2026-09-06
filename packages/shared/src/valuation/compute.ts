@@ -1,15 +1,18 @@
 import type { ValuationMethod } from "../types";
 import {
   DRIVER_LIMITS,
+  EXPECTED_EV_EBITDA_LIMITS,
   EXPECTED_GROWTH_LIMITS,
   EXPECTED_PE_LIMITS,
   MOS_PERCENT_LIMITS,
   dcfInputsFromAnchors,
+  evEbitdaInputsFromAnchors,
   peInputsFromAnchors,
   rdcfInputsFromAnchors,
   type ValuationAnchors,
 } from "./anchors";
 import { valueDcf, type DcfInputs } from "./dcf";
+import { valueEvEbitda, type EvEbitdaInputs } from "./evebitda";
 import { valuePe, type PeInputs } from "./pe";
 import { valueRdcf, type RdcfInputs } from "./rdcf";
 import {
@@ -27,6 +30,7 @@ const ANCHOR_LIMITS = {
   debt: { min: 0, max: 1e7 },
   shares: { min: 0.0001, max: 1e6 },
   eps: { min: -1e5, max: 1e5 },
+  ebitda: { min: -1e7, max: 1e7 },
 } as const;
 
 export type ValuationContext = {
@@ -145,6 +149,19 @@ export function parsePeInputs(raw: unknown): { value: PeInputs } | { error: stri
   return error ? { error } : { value };
 }
 
+export function parseEvEbitdaInputs(raw: unknown): { value: EvEbitdaInputs } | { error: string } {
+  const read = reader(raw);
+  const value: EvEbitdaInputs = {
+    expectedEvEbitda: read.num("expectedEvEbitda", "Expected EV/EBITDA", EXPECTED_EV_EBITDA_LIMITS),
+    ttmEbitda: read.num("ttmEbitda", "TTM EBITDA", ANCHOR_LIMITS.ebitda),
+    cash: read.num("cash", "Cash & investments", ANCHOR_LIMITS.cash),
+    debt: read.num("debt", "Total debt", ANCHOR_LIMITS.debt),
+    shares: read.num("shares", "Diluted shares", ANCHOR_LIMITS.shares),
+  };
+  const error = read.error();
+  return error ? { error } : { value };
+}
+
 /**
  * Validate assumptions for a method and run the model. This is the single place
  * that turns a request body or a stored worksheet into outputs.
@@ -206,6 +223,26 @@ export function buildValuation(
     };
   }
 
+  if (method === "evebitda") {
+    const parsed = parseEvEbitdaInputs(rawAssumptions);
+    if ("error" in parsed) return parsed;
+    const result = valueEvEbitda(parsed.value, ctx.currentPrice);
+    return {
+      assumptions: parsed.value,
+      outputs: {
+        method: "evebitda",
+        startYear: ctx.startYear,
+        currentPrice: ctx.currentPrice,
+        fairValue: result.fairValue,
+        mosPercent: result.mos,
+        ev: result.ev,
+        currentMultiple: result.currentMultiple,
+        targetEv: result.targetEv,
+        equity: result.equity,
+      },
+    };
+  }
+
   const parsed = parsePeInputs(rawAssumptions);
   if ("error" in parsed) return parsed;
   const result = valuePe(parsed.value, ctx.currentPrice);
@@ -234,6 +271,7 @@ export function defaultAssumptions(
 ): ValuationAssumptions {
   if (method === "dcf") return dcfInputsFromAnchors(anchors);
   if (method === "rdcf") return rdcfInputsFromAnchors(anchors);
+  if (method === "evebitda") return evEbitdaInputsFromAnchors(anchors, 0);
   // Start blank — user picks a multiple (history avg / peers / judgment) before the chart plots.
   return peInputsFromAnchors(anchors, 0);
 }

@@ -3,6 +3,7 @@ export * from "./market";
 export * from "./valuation/dcf";
 export * from "./valuation/rdcf";
 export * from "./valuation/pe";
+export * from "./valuation/evebitda";
 export * from "./valuation/anchors";
 export * from "./valuation/model";
 export * from "./valuation/compute";

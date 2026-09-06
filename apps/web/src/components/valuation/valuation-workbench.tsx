@@ -8,9 +8,11 @@ import {
   METHOD_LABELS,
   dcfInputsFromAnchors,
   defaultAssumptions,
+  evEbitdaInputsFromAnchors,
   isImplementedMethod,
   rdcfInputsFromAnchors,
   type DcfInputs,
+  type EvEbitdaInputs,
   type ImplementedMethod,
   type PeInputs,
   type RdcfInputs,
@@ -28,12 +30,30 @@ import { PeView } from "./pe-view";
 import { RdcfView } from "./rdcf-view";
 import { fmt2 } from "./primitives";
 
-const METHOD_TABS = Object.keys(METHOD_LABELS) as ValuationMethod[];
+type WorkbenchTab = "dcf" | "rdcf" | "multiples" | "sotp";
+
+const WORKBENCH_TABS: { id: WorkbenchTab; label: string }[] = [
+  { id: "dcf", label: "DCF" },
+  { id: "rdcf", label: "Reverse DCF" },
+  { id: "multiples", label: "Multiples" },
+  { id: "sotp", label: "SOTP" },
+];
+
+function tabOf(method: ValuationMethod): WorkbenchTab {
+  if (method === "pe" || method === "evebitda") return "multiples";
+  if (method === "sotp") return "sotp";
+  return method;
+}
+
+function isMultiplesMethod(method: ValuationMethod): method is "pe" | "evebitda" {
+  return method === "pe" || method === "evebitda";
+}
 
 type Drafts = {
   dcf: DcfInputs;
   rdcf: RdcfInputs;
   pe: PeInputs;
+  evebitda: EvEbitdaInputs;
 };
 
 function draftsFrom(data: ValuationWorkbench): Drafts {
@@ -54,7 +74,19 @@ function draftsFrom(data: ValuationWorkbench): Drafts {
     dcf,
     rdcf,
     pe: (saved("pe") as PeInputs | undefined) ?? (defaultAssumptions("pe", data.anchors) as PeInputs),
+    evebitda: evebitdaDraft(saved("evebitda"), data.anchors),
   };
+}
+
+function evebitdaDraft(saved: unknown, anchors: ValuationWorkbench["anchors"]): EvEbitdaInputs {
+  const expected =
+    saved &&
+    typeof saved === "object" &&
+    typeof (saved as EvEbitdaInputs).expectedEvEbitda === "number" &&
+    Number.isFinite((saved as EvEbitdaInputs).expectedEvEbitda)
+      ? (saved as EvEbitdaInputs).expectedEvEbitda
+      : 0;
+  return evEbitdaInputsFromAnchors(anchors, expected);
 }
 
 export function ValuationWorkbenchPage({ ticker }: { ticker: string }) {
@@ -76,9 +108,17 @@ export function ValuationWorkbenchPage({ ticker }: { ticker: string }) {
   const data = workbenchQuery.data;
 
   useEffect(() => {
-    if (!data || seededTicker.current === data.stock.ticker) return;
-    seededTicker.current = data.stock.ticker;
-    setDrafts(draftsFrom(data));
+    if (!data) return;
+    if (seededTicker.current !== data.stock.ticker) {
+      seededTicker.current = data.stock.ticker;
+      setDrafts(draftsFrom(data));
+      return;
+    }
+    // Repair a stale Multiples draft left over from before evebitda seeding existed.
+    setDrafts((current) => {
+      if (!current || typeof current.evebitda?.shares === "number") return current;
+      return { ...current, evebitda: draftsFrom(data).evebitda };
+    });
   }, [data]);
 
   useEffect(() => () => {
@@ -191,7 +231,13 @@ export function ValuationWorkbenchPage({ ticker }: { ticker: string }) {
         symbol={symbol}
         name={data.stock.name}
         method={method}
-        onMethod={setMethod}
+        onTab={(tab) => {
+          if (tab === "multiples") {
+            setMethod((current) => (current === "evebitda" ? "evebitda" : "pe"));
+            return;
+          }
+          setMethod(tab);
+        }}
         myFairValue={data.myFairValue}
         myFairValueMethod={myFairValueMethod}
         actions={actions}
@@ -213,7 +259,7 @@ export function ValuationWorkbenchPage({ ticker }: { ticker: string }) {
         ) : !isImplementedMethod(method) ? (
           <EmptyState
             title={`${METHOD_LABELS[method]} model`}
-            body="Not built yet. DCF, Reverse DCF, and P/E are available today."
+            body="Not built yet. DCF, Reverse DCF, and Multiples are available today."
           />
         ) : method === "dcf" ? (
           <DcfView
@@ -247,7 +293,7 @@ export function ValuationWorkbenchPage({ ticker }: { ticker: string }) {
             dcfBaseline={drafts.dcf}
             onOpenDcf={() => setMethod("dcf")}
           />
-        ) : (
+        ) : isMultiplesMethod(method) ? (
           <PeView
             ticker={symbol}
             anchors={data.anchors}
@@ -256,10 +302,14 @@ export function ValuationWorkbenchPage({ ticker }: { ticker: string }) {
             myFairValue={data.myFairValue}
             myFairValueMethod={myFairValueMethod}
             actions={actions}
-            assumptions={drafts.pe}
-            onChange={(assumptions) => setDrafts({ ...drafts, pe: assumptions })}
+            lens={method === "evebitda" ? "evebitda" : "pe"}
+            onLens={(next) => setMethod(next)}
+            peAssumptions={drafts.pe}
+            onPeChange={(assumptions) => setDrafts({ ...drafts, pe: assumptions })}
+            evAssumptions={drafts.evebitda}
+            onEvChange={(assumptions) => setDrafts({ ...drafts, evebitda: assumptions })}
           />
-        )}
+        ) : null}
       </div>
     </div>
   );
@@ -269,7 +319,7 @@ function TopBar({
   symbol,
   name,
   method,
-  onMethod,
+  onTab,
   myFairValue,
   myFairValueMethod,
   actions,
@@ -278,7 +328,7 @@ function TopBar({
   symbol: string;
   name: string;
   method: ValuationMethod;
-  onMethod: (method: ValuationMethod) => void;
+  onTab: (tab: WorkbenchTab) => void;
   myFairValue: number | null;
   myFairValueMethod: ValuationMethod | null;
   actions: ValuationActions;
@@ -344,20 +394,20 @@ function TopBar({
 
       <div className="overflow-x-auto px-4 pb-2.5 md:px-6">
         <div className="flex w-fit items-center rounded-[7px] bg-slate-100 p-[3px]">
-          {METHOD_TABS.map((tab) => (
+          {WORKBENCH_TABS.map((tab) => (
             <button
-              key={tab}
+              key={tab.id}
               type="button"
-              onClick={() => onMethod(tab)}
+              onClick={() => onTab(tab.id)}
               className={`rounded-[5px] px-2.5 py-1 text-[11px] font-semibold whitespace-nowrap ${
-                method === tab
+                tabOf(method) === tab.id
                   ? "bg-white text-slate-900 shadow-sm"
-                  : isImplementedMethod(tab)
+                  : tab.id !== "sotp"
                     ? "text-slate-500 hover:text-slate-700"
                     : "text-slate-300"
               }`}
             >
-              {METHOD_LABELS[tab]}
+              {tab.label}
             </button>
           ))}
         </div>
