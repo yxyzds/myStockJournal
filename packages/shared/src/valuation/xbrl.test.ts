@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { annualCagr, annualValues, latestInstant, latestQuarter, ttmFromFacts, type XbrlFact } from "./xbrl";
+import { annualCagr, annualValues, fiscalQuarterLabel, latestInstant, latestQuarter, quarterlySeriesWithQ4, ttmFromFacts, type XbrlFact } from "./xbrl";
 
 const duration = (start: string, end: string, val: number, filed = "2026-07-31"): XbrlFact => ({
   start,
@@ -140,5 +140,22 @@ describe("annualCagr", () => {
       duration("2025-09-28", "2026-09-26", 200),
     ];
     expect(annualCagr(facts, 5)).toBeNull();
+  });
+});
+
+describe("quarterlySeriesWithQ4", () => {
+  it("fills Apple's missing Q4 from annual minus nine-month YTD", () => {
+    const series = quarterlySeriesWithQ4(APPLE_REVENUE);
+    const q4 = series.find((row) => row.end === "2025-09-27");
+    expect(q4?.value).toBe(102_466);
+  });
+});
+
+describe("fiscalQuarterLabel", () => {
+  it("maps Apple's September year-end calendar", () => {
+    expect(fiscalQuarterLabel("2025-12-27", 9)).toEqual({ quarter: 1, fy: 2026 });
+    expect(fiscalQuarterLabel("2026-03-28", 9)).toEqual({ quarter: 2, fy: 2026 });
+    expect(fiscalQuarterLabel("2026-06-27", 9)).toEqual({ quarter: 3, fy: 2026 });
+    expect(fiscalQuarterLabel("2025-09-27", 9)).toEqual({ quarter: 4, fy: 2025 });
   });
 });

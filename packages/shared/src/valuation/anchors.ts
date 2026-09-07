@@ -26,6 +26,18 @@ export type FilingRef = {
   url: string;
 };
 
+/** One reported quarter shown above the DCF driver inputs. Money is in $M. */
+export type QuarterlyActual = {
+  end: string;
+  quarter: number;
+  fy: number;
+  revenue: number;
+  yoyGrowth: number | null;
+  fcf: number | null;
+  fcfMargin: number | null;
+  opMargin: number | null;
+};
+
 /**
  * Prefetched company figures a valuation starts from. Money is in $M and share
  * counts in millions, matching how filings report them.
@@ -50,6 +62,8 @@ export type ValuationAnchors = {
   ttmEbitda: number | null;
   ebitdaHistory: EvEbitdaAnnualPoint[];
   peHistory: PePoint[];
+  /** Recent reported quarters for the Assumptions actuals strip. Newest last. */
+  quarterlyActuals: QuarterlyActual[];
   /** Starting point for the editable drivers, from the vendor or an AI estimate. */
   drivers: DcfDrivers;
   /**

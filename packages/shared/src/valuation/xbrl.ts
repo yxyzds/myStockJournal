@@ -62,6 +62,11 @@ export type AnnualValue = {
   value: number;
 };
 
+export type PeriodValue = {
+  end: string;
+  value: number;
+};
+
 /** One annual figure per fiscal year-end, oldest first. */
 export function annualValues(facts: XbrlFact[]): AnnualValue[] {
   return dedupeByEnd(
@@ -71,6 +76,53 @@ export function annualValues(facts: XbrlFact[]): AnnualValue[] {
     end: fact.end,
     value: fact.val,
   }));
+}
+
+/** Standalone quarters only (not year-to-date), oldest first. */
+export function quarterlyValues(facts: XbrlFact[]): PeriodValue[] {
+  return dedupeByEnd(
+    facts.filter(isDuration).filter((f) => spans(f, QUARTER_MIN_DAYS, QUARTER_MAX_DAYS)),
+  ).map((fact) => ({ end: fact.end, value: fact.val }));
+}
+
+const NINE_MONTH_MIN_DAYS = 250;
+const NINE_MONTH_MAX_DAYS = 290;
+
+/**
+ * Quarterly series with a missing Q4 filled in from the annual figure minus
+ * nine-month YTD (10-K never files Q4 on its own).
+ */
+export function quarterlySeriesWithQ4(facts: XbrlFact[]): PeriodValue[] {
+  const byEnd = new Map(quarterlyValues(facts).map((row) => [row.end, row]));
+  const durations = facts.filter(isDuration);
+  for (const annual of durations.filter((f) => spans(f, ANNUAL_MIN_DAYS, ANNUAL_MAX_DAYS))) {
+    if (byEnd.has(annual.end)) continue;
+    const ytd = newest(
+      durations.filter(
+        (f) =>
+          f.start === annual.start &&
+          f.end < annual.end &&
+          daySpan(f.start, f.end) >= NINE_MONTH_MIN_DAYS &&
+          daySpan(f.start, f.end) <= NINE_MONTH_MAX_DAYS,
+      ),
+    );
+    if (!ytd) continue;
+    byEnd.set(annual.end, { end: annual.end, value: annual.val - ytd.val });
+  }
+  return [...byEnd.values()].sort((a, b) => a.end.localeCompare(b.end));
+}
+
+/**
+ * Map a period-end date onto Q1–Q4 of a fiscal year whose year-end month is
+ * `fyEndMonth` (1–12). The FY number is the calendar year of that year-end.
+ */
+export function fiscalQuarterLabel(end: string, fyEndMonth: number): { quarter: number; fy: number } {
+  const year = Number(end.slice(0, 4));
+  const month = Number(end.slice(5, 7));
+  const fy = month > fyEndMonth ? year + 1 : year;
+  let monthsInto = month - fyEndMonth;
+  if (monthsInto <= 0) monthsInto += 12;
+  return { quarter: Math.min(4, Math.ceil(monthsInto / 3)), fy };
 }
 
 /** Newest balance-sheet figure, e.g. cash or debt. */
