@@ -1,5 +1,5 @@
 import { and, eq } from "drizzle-orm";
-import { buildValuation, dcfInputsFromAnchors } from "@mystockjournal/shared";
+import { G7_TICKERS, buildValuation, dcfInputsFromAnchors } from "@mystockjournal/shared";
 import { env } from "../env";
 import { getAnchors } from "../market/fundamentals";
 import { getQuotes } from "../market/quotes";
@@ -11,17 +11,18 @@ import { journalEntries, stocks, valuationModels } from "./schema";
  * Magnificent 7 — the default G7 watch-list names. Only these get a starter
  * DCF and a journal prompt; everything else stays empty.
  */
-const G7: { ticker: string; name: string }[] = [
-  { ticker: "AAPL", name: "Apple Inc." },
-  { ticker: "MSFT", name: "Microsoft Corp." },
-  { ticker: "GOOGL", name: "Alphabet Inc." },
-  { ticker: "AMZN", name: "Amazon.com Inc." },
-  { ticker: "NVDA", name: "NVIDIA Corp." },
-  { ticker: "META", name: "Meta Platforms Inc." },
-  { ticker: "TSLA", name: "Tesla Inc." },
-];
+const G7_NAMES: Record<(typeof G7_TICKERS)[number], string> = {
+  AAPL: "Apple Inc.",
+  MSFT: "Microsoft Corp.",
+  GOOGL: "Alphabet Inc.",
+  AMZN: "Amazon.com Inc.",
+  NVDA: "NVIDIA Corp.",
+  META: "Meta Platforms Inc.",
+  TSLA: "Tesla Inc.",
+};
 
-const G7_TICKERS = new Set(G7.map((row) => row.ticker));
+const G7 = G7_TICKERS.map((ticker) => ({ ticker, name: G7_NAMES[ticker] }));
+const G7_SET = new Set<string>(G7_TICKERS);
 const HOT_COUNT = 3;
 
 function todayNyDate() {
@@ -142,7 +143,7 @@ export async function seedWatchlist() {
     .where(and(eq(stocks.userId, userId), eq(stocks.watched, true)));
   const isNewUser = watched.length === 0;
 
-  const hot = isNewUser ? await fetchHottestTickers(HOT_COUNT, G7_TICKERS) : [];
+  const hot = isNewUser ? await fetchHottestTickers(HOT_COUNT, G7_SET) : [];
 
   for (const row of G7) {
     const stock = await ensureWatchedStock(userId, row.ticker, row.name);

@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import {
   DRIVER_LIMITS,
+  dcfModelReady,
   valueRdcf,
   type DcfInputs,
   type DcfYearRow,
@@ -73,7 +74,8 @@ export function RdcfView({
   actions,
 }: RdcfViewProps) {
   const result = useMemo(() => valueRdcf(assumptions, currentPrice), [assumptions, currentPrice]);
-  const implied = result.impliedGrowthY1_5;
+  const ready = dcfModelReady(assumptions);
+  const implied = ready ? result.impliedGrowthY1_5 : null;
   const challenges = useRdcfChallenges(implied, dcfBaseline.growthY1_5, ticker);
 
   function setField<K extends keyof RdcfInputs>(key: K, value: RdcfInputs[K]) {
@@ -87,8 +89,9 @@ export function RdcfView({
         implied={implied}
         assumptions={assumptions}
         currentPrice={currentPrice}
-        targetEv={result.targetEv}
+        targetEv={ready ? result.targetEv : 0}
         baselineGrowth={dcfBaseline.growthY1_5}
+        ready={ready}
       />
 
       <ComparisonSection
@@ -134,7 +137,7 @@ export function RdcfView({
         <button
           type="button"
           onClick={actions.onSave}
-          disabled={actions.saving}
+          disabled={actions.saving || !ready}
           className="rounded-[9px] bg-slate-900 px-3.5 py-2 text-[12px] font-bold text-white hover:bg-slate-800 disabled:opacity-60"
         >
           {actions.saved ? "Saved ✓" : actions.saving ? "Saving…" : "Save this model"}
@@ -209,12 +212,14 @@ function HeroSection({
   currentPrice,
   targetEv,
   baselineGrowth,
+  ready,
 }: {
   implied: number | null;
   assumptions: RdcfInputs;
   currentPrice: number;
   targetEv: number;
   baselineGrowth: number;
+  ready: boolean;
 }) {
   const faster = implied != null && implied > baselineGrowth;
 
@@ -266,7 +271,7 @@ function HeroSection({
                 Target EV
               </p>
               <span className="font-mono text-[18px] font-bold text-slate-700 tabular-nums">
-                {fmtMoneyM(targetEv)}
+                {ready ? fmtMoneyM(targetEv) : "—"}
               </span>
             </div>
           </div>

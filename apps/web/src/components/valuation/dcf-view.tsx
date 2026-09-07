@@ -7,6 +7,7 @@ import {
   DCF_REVIEW_FIELDS,
   DRIVER_LIMITS,
   MOS_PERCENT_LIMITS,
+  dcfModelReady,
   scenarioDrivers,
   valueDcf,
   type DcfAssumptionReview,
@@ -71,10 +72,15 @@ export function DcfView({
     () => valueDcf(assumptions, currentPrice),
     [assumptions, currentPrice],
   );
+  const ready = dcfModelReady(assumptions);
+  const scenariosEnabled = anchors.drivers.wacc >= DRIVER_LIMITS.wacc.min;
 
   const challenges = useDcfChallenges(assumptions, anchors.past5YCagr);
 
   const scenarioFairValues = useMemo(() => {
+    if (!scenariosEnabled) {
+      return { bear: 0, base: 0, bull: 0 } as Record<DcfScenario, number>;
+    }
     const entries = SCENARIOS.map((name) => {
       const drivers = scenarioDrivers(anchors.drivers, name);
       // Filing-derived Y1 margin stays fixed across bear/base/bull.
@@ -85,7 +91,7 @@ export function DcfView({
       return [name, scenarioBridge.fv] as const;
     });
     return Object.fromEntries(entries) as Record<DcfScenario, number>;
-  }, [anchors.drivers, anchors.fcfMarginY1FromFilings, assumptions, currentPrice]);
+  }, [anchors.drivers, anchors.fcfMarginY1FromFilings, assumptions, currentPrice, scenariosEnabled]);
 
   function setField<K extends keyof DcfInputs>(key: K, value: DcfInputs[K]) {
     if (key === "fcfMarginY1" && anchors.fcfMarginY1FromFilings) return;
@@ -95,6 +101,7 @@ export function DcfView({
   }
 
   function applyScenario(name: DcfScenario) {
+    if (anchors.drivers.wacc < DRIVER_LIMITS.wacc.min) return;
     const drivers = scenarioDrivers(anchors.drivers, name);
     if (anchors.fcfMarginY1FromFilings) {
       drivers.fcfMarginY1 = anchors.drivers.fcfMarginY1;
@@ -109,6 +116,7 @@ export function DcfView({
         <ResultsSection
           bridge={bridge}
           assumptions={assumptions}
+          ready={ready}
           currentPrice={currentPrice}
           priceAsOf={priceAsOf}
           ticker={ticker}
@@ -126,6 +134,7 @@ export function DcfView({
           past5YCagr={anchors.past5YCagr}
           scenario={scenario}
           scenarioFairValues={scenarioFairValues}
+          scenariosEnabled={scenariosEnabled}
           onScenario={applyScenario}
           onField={setField}
           ticker={ticker}
@@ -135,10 +144,11 @@ export function DcfView({
         <BridgeSection
           bridge={bridge}
           assumptions={assumptions}
+          ready={ready}
           currentPrice={currentPrice}
           onField={setField}
         />
-        <ForecastSection rows={rows} bridge={bridge} />
+        {ready ? <ForecastSection rows={rows} bridge={bridge} /> : null}
       </div>
 
       <div className="w-full md:sticky md:top-[120px] md:w-[228px] md:shrink-0">
@@ -179,7 +189,7 @@ function useDcfChallenges(assumptions: DcfInputs, past5YCagr: number | null): Ch
       });
     }
 
-    if (assumptions.wacc < 7) {
+    if (assumptions.wacc >= DRIVER_LIMITS.wacc.min && assumptions.wacc < 7) {
       out.push({
         field: "WACC",
         note: `${fmt1(assumptions.wacc)}% is a low cost of capital for equities`,
@@ -203,7 +213,7 @@ function useDcfChallenges(assumptions: DcfInputs, past5YCagr: number | null): Ch
       });
     }
 
-    if (assumptions.wacc <= assumptions.termGrowth) {
+    if (assumptions.wacc >= DRIVER_LIMITS.wacc.min && assumptions.wacc <= assumptions.termGrowth) {
       out.push({
         field: "Terminal value undefined",
         note: "Terminal growth is at or above WACC",
@@ -219,6 +229,7 @@ function useDcfChallenges(assumptions: DcfInputs, past5YCagr: number | null): Ch
 function ResultsSection({
   bridge,
   assumptions,
+  ready,
   currentPrice,
   priceAsOf,
   ticker,
@@ -228,6 +239,7 @@ function ResultsSection({
 }: {
   bridge: DcfBridge;
   assumptions: DcfInputs;
+  ready: boolean;
   currentPrice: number;
   priceAsOf: string | null;
   ticker: string;
@@ -237,28 +249,30 @@ function ResultsSection({
 }) {
   const priceGap =
     currentPrice > 0 ? ((bridge.fv - currentPrice) / currentPrice) * 100 : 0;
-  const undervalued = bridge.fv >= currentPrice;
+  const undervalued = ready && bridge.fv >= currentPrice;
 
   return (
     <Card>
-      <div
-        className={`flex items-center gap-2.5 border-b px-[22px] py-2.5 ${
-          undervalued ? "border-emerald-100 bg-emerald-50" : "border-red-100 bg-red-50"
-        }`}
-      >
+      {ready ? (
         <div
-          className={`size-[7px] shrink-0 rounded-full ${undervalued ? "bg-emerald-500" : "bg-red-400"}`}
-        />
-        <p
-          className={`text-[12px] leading-snug font-semibold ${
-            undervalued ? "text-emerald-800" : "text-red-700"
+          className={`flex items-center gap-2.5 border-b px-[22px] py-2.5 ${
+            undervalued ? "border-emerald-100 bg-emerald-50" : "border-red-100 bg-red-50"
           }`}
         >
-          {undervalued
-            ? `Price is ${fmt1(priceGap)}% below your fair value — $${fmt2(bridge.fv - currentPrice)} per share of cushion`
-            : `Price is ${fmt1(Math.abs(priceGap))}% above your fair value — no cushion at this price`}
-        </p>
-      </div>
+          <div
+            className={`size-[7px] shrink-0 rounded-full ${undervalued ? "bg-emerald-500" : "bg-red-400"}`}
+          />
+          <p
+            className={`text-[12px] leading-snug font-semibold ${
+              undervalued ? "text-emerald-800" : "text-red-700"
+            }`}
+          >
+            {undervalued
+              ? `Price is ${fmt1(priceGap)}% below your fair value — $${fmt2(bridge.fv - currentPrice)} per share of cushion`
+              : `Price is ${fmt1(Math.abs(priceGap))}% above your fair value — no cushion at this price`}
+          </p>
+        </div>
+      ) : null}
 
       <div className="grid grid-cols-1 divide-y divide-slate-100 md:grid-cols-2 md:divide-x md:divide-y-0">
         <div className="flex flex-col gap-2.5 px-[18px] py-[18px] md:gap-3 md:px-6 md:py-5">
@@ -283,7 +297,7 @@ function ResultsSection({
             <span className="text-[18px] font-semibold text-slate-400">%</span>
           </div>
           <p className="text-[11px] text-slate-400">
-            Haircut on intrinsic ${fmt2(bridge.intrinsic)} → fair value
+            Haircut on intrinsic {ready ? `$${fmt2(bridge.intrinsic)}` : "—"} → fair value
           </p>
 
           <div className="mt-1 border-t border-slate-100 pt-2.5">
@@ -292,23 +306,25 @@ function ResultsSection({
             </span>
             <span
               className={`mt-1 block font-mono text-[40px] leading-none font-bold tabular-nums md:text-[52px] ${
-                undervalued ? "text-emerald-600" : "text-red-500"
+                !ready ? "text-slate-300" : undervalued ? "text-emerald-600" : "text-red-500"
               }`}
             >
-              ${fmt2(bridge.fv)}
+              {ready ? `$${fmt2(bridge.fv)}` : "—"}
             </span>
-            <span
-              className={`mt-1 block text-[12px] font-semibold ${
-                undervalued ? "text-emerald-600" : "text-red-500"
-              }`}
-            >
-              {fmtSigned(priceGap)} vs. current price
-            </span>
+            {ready ? (
+              <span
+                className={`mt-1 block text-[12px] font-semibold ${
+                  undervalued ? "text-emerald-600" : "text-red-500"
+                }`}
+              >
+                {fmtSigned(priceGap)} vs. current price
+              </span>
+            ) : null}
           </div>
           <button
             type="button"
             onClick={actions.onSetFairValue}
-            disabled={actions.saving || bridge.fv <= 0}
+            disabled={actions.saving || !ready || bridge.fv <= 0}
             className="self-start rounded-lg bg-emerald-600 px-3.5 py-[7px] text-[11px] font-bold text-white hover:bg-emerald-700 disabled:opacity-50"
           >
             Set as My Fair Value
@@ -334,14 +350,14 @@ function ResultsSection({
       <div className="flex items-center gap-2 overflow-x-auto border-t border-slate-100 bg-slate-50 px-[18px] py-2.5 md:px-[22px]">
         <span className="shrink-0 text-[10px] font-semibold text-slate-400">Inside the model →</span>
         {[
-          { label: "Intrinsic / share", value: `$${fmt2(bridge.intrinsic)}` },
-          { label: "Terminal value", value: fmtMoneyM(bridge.tv) },
-          { label: "PV of terminal value", value: fmtMoneyM(bridge.pvTv) },
+          { label: "Intrinsic / share", value: ready ? `$${fmt2(bridge.intrinsic)}` : "—" },
+          { label: "Terminal value", value: ready ? fmtMoneyM(bridge.tv) : "—" },
+          { label: "PV of terminal value", value: ready ? fmtMoneyM(bridge.pvTv) : "—" },
           {
             label: "Terminal share of EV",
-            value: bridge.ev > 0 ? fmtPct((bridge.pvTv / bridge.ev) * 100) : "—",
+            value: ready && bridge.ev > 0 ? fmtPct((bridge.pvTv / bridge.ev) * 100) : "—",
           },
-          { label: "Sum of PV of FCFs", value: fmtMoneyM(bridge.pvFcfs) },
+          { label: "Sum of PV of FCFs", value: ready ? fmtMoneyM(bridge.pvFcfs) : "—" },
         ].map((chip) => (
           <div
             key={chip.label}
@@ -368,6 +384,7 @@ function AssumptionsSection({
   past5YCagr,
   scenario,
   scenarioFairValues,
+  scenariosEnabled,
   onScenario,
   onField,
   ticker,
@@ -383,6 +400,7 @@ function AssumptionsSection({
   past5YCagr: number | null;
   scenario: DcfScenario | "custom";
   scenarioFairValues: Record<DcfScenario, number>;
+  scenariosEnabled: boolean;
   onScenario: (scenario: DcfScenario) => void;
   onField: <K extends keyof DcfInputs>(key: K, value: DcfInputs[K]) => void;
   ticker: string;
@@ -398,23 +416,25 @@ function AssumptionsSection({
         title="Assumptions"
         subtitle="Edit the drivers — fair value updates as you type"
         right={
-          <div className="flex items-center gap-1 overflow-x-auto rounded-lg bg-slate-100 p-[3px]">
-            {SCENARIOS.map((name) => (
-              <button
-                key={name}
-                type="button"
-                onClick={() => onScenario(name)}
-                className={`shrink-0 rounded-md px-2.5 py-1 text-center ${
-                  scenario === name ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"
-                }`}
-              >
-                <span className="block text-[10px] font-semibold capitalize">{name}</span>
-                <span className="block font-mono text-[10px] font-bold">
-                  ${fmt2(scenarioFairValues[name])}
-                </span>
-              </button>
-            ))}
-          </div>
+          scenariosEnabled ? (
+            <div className="flex items-center gap-1 overflow-x-auto rounded-lg bg-slate-100 p-[3px]">
+              {SCENARIOS.map((name) => (
+                <button
+                  key={name}
+                  type="button"
+                  onClick={() => onScenario(name)}
+                  className={`shrink-0 rounded-md px-2.5 py-1 text-center ${
+                    scenario === name ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"
+                  }`}
+                >
+                  <span className="block text-[10px] font-semibold capitalize">{name}</span>
+                  <span className="block font-mono text-[10px] font-bold">
+                    ${fmt2(scenarioFairValues[name])}
+                  </span>
+                </button>
+              ))}
+            </div>
+          ) : undefined
         }
       />
 
@@ -589,6 +609,7 @@ function DcfAssumptionReviewBar({
   review: DcfAssumptionReview | null;
   onReview: (review: DcfAssumptionReview) => void;
 }) {
+  const ready = dcfModelReady(assumptions);
   const rateMutation = useMutation({
     mutationFn: () =>
       api<{ review: DcfAssumptionReview }>(`/stocks/${ticker}/valuation/dcf/ai-review`, {
@@ -617,7 +638,7 @@ function DcfAssumptionReviewBar({
         </div>
         <button
           type="button"
-          disabled={analyzing}
+          disabled={analyzing || !ready}
           onClick={() => rateMutation.mutate()}
           className="flex shrink-0 items-center gap-2 rounded-[10px] px-4 py-[9px] text-white disabled:opacity-60"
           style={{
@@ -668,7 +689,7 @@ function DcfAssumptionReviewBar({
         <button
           type="button"
           title="Re-analyze"
-          disabled={analyzing}
+          disabled={analyzing || !ready}
           onClick={() => rateMutation.mutate()}
           className="flex shrink-0 items-center gap-1.5 rounded-[7px] border border-[#e2e8f0] px-2.5 py-1.5 text-[#94a3b8] hover:border-[#93c5fd] hover:bg-[#eff6ff] hover:text-[#2563eb] disabled:opacity-50"
         >
@@ -683,18 +704,20 @@ function DcfAssumptionReviewBar({
 function BridgeSection({
   bridge,
   assumptions,
+  ready,
   currentPrice,
   onField,
 }: {
   bridge: DcfBridge;
   assumptions: DcfInputs;
+  ready: boolean;
   currentPrice: number;
   onField: <K extends keyof DcfInputs>(key: K, value: DcfInputs[K]) => void;
 }) {
   const [evOpen, setEvOpen] = useState(false);
   const priceGap =
     currentPrice > 0 ? ((bridge.fv - currentPrice) / currentPrice) * 100 : 0;
-  const undervalued = bridge.fv >= currentPrice;
+  const undervalued = ready && bridge.fv >= currentPrice;
 
   return (
     <Card>
@@ -702,7 +725,7 @@ function BridgeSection({
         <div className="flex items-baseline gap-2.5">
           <p className="text-[14px] font-bold text-slate-900">Valuation bridge</p>
           <span className="text-[11px] text-slate-400">
-            Terminal value {fmtMoneyM(bridge.tv)} · PV {fmtMoneyM(bridge.pvTv)}
+            Terminal value {ready ? fmtMoneyM(bridge.tv) : "—"} · PV {ready ? fmtMoneyM(bridge.pvTv) : "—"}
           </span>
         </div>
         <p className="mt-px text-[11px] text-slate-400">
@@ -725,17 +748,17 @@ function BridgeSection({
               </span>
             </div>
             <span className="font-mono text-[14px] font-bold text-slate-900 tabular-nums">
-              {fmtMoneyM(bridge.ev)}
+              {ready ? fmtMoneyM(bridge.ev) : "—"}
             </span>
           </button>
 
           {evOpen && (
             <div className="mt-0.5 ml-[22px] flex flex-col border-l-2 border-slate-100 pl-3.5">
               {[
-                { label: "Sum of PV of FCFs (10 years)", value: fmtMoneyM(bridge.pvFcfs) },
+                { label: "Sum of PV of FCFs (10 years)", value: ready ? fmtMoneyM(bridge.pvFcfs) : "—" },
                 {
                   label: "PV of terminal value, FCF₁₀ × (1+g) / (WACC−g)",
-                  value: fmtMoneyM(bridge.pvTv),
+                  value: ready ? fmtMoneyM(bridge.pvTv) : "—",
                 },
               ].map((row) => (
                 <div key={row.label} className="flex items-center justify-between gap-3 py-1.5">
@@ -775,7 +798,7 @@ function BridgeSection({
           <div className="mt-1 flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2.5">
             <span className="text-[12px] font-bold text-slate-800">Equity value</span>
             <span className="font-mono text-[14px] font-bold text-slate-900 tabular-nums">
-              {fmtMoneyM(bridge.equity)}
+              {ready ? fmtMoneyM(bridge.equity) : "—"}
             </span>
           </div>
 
@@ -797,7 +820,7 @@ function BridgeSection({
               <span className="ml-2 text-[10px] text-slate-400">equity ÷ shares</span>
             </div>
             <span className="font-mono text-[18px] font-bold text-slate-900 tabular-nums">
-              ${fmt2(bridge.intrinsic)}
+              {ready ? `$${fmt2(bridge.intrinsic)}` : "—"}
             </span>
           </div>
 
@@ -822,12 +845,18 @@ function BridgeSection({
 
           <div
             className={`mt-1.5 flex items-center justify-between gap-3 rounded-[9px] border px-3.5 py-2.5 ${
-              undervalued ? "border-emerald-200 bg-emerald-50" : "border-red-200 bg-red-50"
+              !ready
+                ? "border-slate-200 bg-slate-50"
+                : undervalued
+                  ? "border-emerald-200 bg-emerald-50"
+                  : "border-red-200 bg-red-50"
             }`}
           >
             <div>
               <span
-                className={`text-[12px] font-bold ${undervalued ? "text-emerald-700" : "text-red-600"}`}
+                className={`text-[12px] font-bold ${
+                  !ready ? "text-slate-700" : undervalued ? "text-emerald-700" : "text-red-600"
+                }`}
               >
                 = Fair value per share
               </span>
@@ -837,10 +866,10 @@ function BridgeSection({
             </div>
             <span
               className={`font-mono text-[22px] font-bold tabular-nums ${
-                undervalued ? "text-emerald-700" : "text-red-500"
+                !ready ? "text-slate-300" : undervalued ? "text-emerald-700" : "text-red-500"
               }`}
             >
-              ${fmt2(bridge.fv)}
+              {ready ? `$${fmt2(bridge.fv)}` : "—"}
             </span>
           </div>
 
@@ -853,20 +882,22 @@ function BridgeSection({
             </div>
             <div
               className={`flex items-center justify-between rounded-[7px] px-3.5 py-2 ${
-                undervalued ? "bg-emerald-50" : "bg-red-50"
+                !ready ? "bg-slate-50" : undervalued ? "bg-emerald-50" : "bg-red-50"
               }`}
             >
               <span
-                className={`text-[12px] font-bold ${undervalued ? "text-emerald-700" : "text-red-600"}`}
+                className={`text-[12px] font-bold ${
+                  !ready ? "text-slate-500" : undervalued ? "text-emerald-700" : "text-red-600"
+                }`}
               >
                 vs. current price
               </span>
               <span
                 className={`font-mono text-[16px] font-bold tabular-nums ${
-                  undervalued ? "text-emerald-600" : "text-red-500"
+                  !ready ? "text-slate-300" : undervalued ? "text-emerald-600" : "text-red-500"
                 }`}
               >
-                {fmtSigned(priceGap)}
+                {ready ? fmtSigned(priceGap) : "—"}
               </span>
             </div>
           </div>

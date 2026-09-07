@@ -1,11 +1,13 @@
 import { eq } from "drizzle-orm";
-import type {
-  AnchorSourceRef,
-  DcfDrivers,
-  EvEbitdaAnnualPoint,
-  FilingRef,
-  PePoint,
-  ValuationAnchors,
+import {
+  EMPTY_DRIVERS,
+  isG7Ticker,
+  type AnchorSourceRef,
+  type DcfDrivers,
+  type EvEbitdaAnnualPoint,
+  type FilingRef,
+  type PePoint,
+  type ValuationAnchors,
 } from "@mystockjournal/shared";
 import { db } from "../db";
 import { fundamentalsCache } from "../db/schema";
@@ -14,9 +16,9 @@ import { fetchYahooFwdEps, yahooAnalysisUrl, type YahooForecast } from "./yahoo-
 
 /**
  * Valuation anchors, resolved in order: `fundamentals_cache`, then SEC EDGAR,
- * then a small bundled dataset. Statement figures come from filings; forward EPS
- * comes only from a live Yahoo earningsTrend fetch — never a curated fallback.
- * P/E history stays bundled.
+ * then a small bundled dataset for G7 only. Statement figures come from filings;
+ * forward EPS comes only from a live Yahoo earningsTrend fetch — never a curated
+ * fallback. P/E history and driver prefills stay G7-only.
  */
 type BundledAnchors = Omit<
   ValuationAnchors,
@@ -37,9 +39,9 @@ const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
  * Bump when the cached payload shape or merge rules change so stale rows are
  * refetched instead of serving week-old driver prefills.
  */
-const CACHE_VERSION = 9;
+const CACHE_VERSION = 10;
 
-/** Neutral drivers for a ticker we have no estimate for. The user must review them. */
+/** Neutral drivers for G7 tickers we have no estimate for. The user must review them. */
 const FALLBACK_DRIVERS: DcfDrivers = {
   growthY1_5: 10,
   growthY6_10: 6,
@@ -87,14 +89,6 @@ const NVDA_PE_HISTORY: PePoint[] = [
   { year: 2023, pe: 61.5, growth: 288 },
   { year: 2024, pe: 44.3, growth: 145 },
   { year: 2025, pe: 33.8, growth: 42 },
-];
-
-const DDOG_PE_HISTORY: PePoint[] = [
-  { year: 2021, pe: 148.0, growth: 60 },
-  { year: 2022, pe: 96.4, growth: 48 },
-  { year: 2023, pe: 74.2, growth: 35 },
-  { year: 2024, pe: 68.5, growth: 28 },
-  { year: 2025, pe: 61.3, growth: 22 },
 ];
 
 /** Revenue, cash, and debt in $M; share counts in millions, as filings report them. */
@@ -213,29 +207,15 @@ const BUNDLED: Record<string, BundledAnchors> = {
       fcfMarginTerm: 38,
     },
   },
-  // The figures the design spec's DCF walkthrough reconciles against.
-  DDOG: {
-    period: "TTM Q2 FY2026",
-    ttmRevenue: 3966.7,
-    cash: 3200,
-    debt: 800,
-    shares: 325,
-    past5YCagr: 39.2,
-    ttmEps: 1.2,
-    fwdEps: null,
-    peHistory: DDOG_PE_HISTORY,
-    drivers: {
-      growthY1_5: 20,
-      growthY6_10: 12,
-      termGrowth: 4,
-      wacc: 9,
-      fcfMarginY1: 25,
-      fcfMarginTerm: 33,
-    },
-  },
 };
 
-function unavailableAnchors(): ValuationAnchors {
+function unavailableAnchors(
+  ticker: string,
+  fwd?: {
+    fwdEps: number | null;
+    fwdEpsSource: AnchorSourceRef | null;
+  },
+): ValuationAnchors {
   return {
     available: false,
     period: null,
@@ -246,12 +226,12 @@ function unavailableAnchors(): ValuationAnchors {
     shares: 0,
     past5YCagr: null,
     ttmEps: null,
-    fwdEps: null,
-    fwdEpsSource: null,
+    fwdEps: fwd?.fwdEps ?? null,
+    fwdEpsSource: fwd?.fwdEpsSource ?? null,
     ttmEbitda: null,
     ebitdaHistory: [],
     peHistory: [],
-    drivers: FALLBACK_DRIVERS,
+    drivers: isG7Ticker(ticker) ? { ...FALLBACK_DRIVERS } : { ...EMPTY_DRIVERS },
     fcfMarginY1FromFilings: false,
   };
 }
@@ -295,7 +275,7 @@ function asEbitdaHistory(value: unknown): EvEbitdaAnnualPoint[] {
 
 function asDrivers(value: unknown): DcfDrivers {
   const row = (value && typeof value === "object" ? value : {}) as Record<string, unknown>;
-  const pick = (key: keyof DcfDrivers) => num(row[key]) ?? FALLBACK_DRIVERS[key];
+  const pick = (key: keyof DcfDrivers) => num(row[key]) ?? 0;
   return {
     growthY1_5: pick("growthY1_5"),
     growthY6_10: pick("growthY6_10"),
@@ -413,17 +393,19 @@ async function writeCache(ticker: string, anchors: Omit<ValuationAnchors, "avail
 
 /**
  * Merge filing figures with the parts EDGAR cannot supply. Forward EPS is only
- * the live Yahoo current-year consensus; P/E history still comes from the bundled set.
+ * the live Yahoo current-year consensus; P/E history and driver prefills are
+ * G7-only.
  *
- * Driver merge order: neutral default → curated judgment → filing-observed.
- * Observed keys today are only `fcfMarginY1` and `growthY1_5`; when present they
- * must win so Assumptions prefill from the statements, not the curated guess.
+ * G7 driver merge: neutral default → curated judgment → filing-observed.
+ * Everyone else: empty drivers, then filing-observed (`fcfMarginY1`, `growthY1_5`).
  */
 function anchorsFromEdgar(
+  ticker: string,
   edgar: NonNullable<Awaited<ReturnType<typeof fetchEdgarFundamentals>>>,
   bundled: BundledAnchors | undefined,
   fwd: { fwdEps: number | null; fwdEpsSource: AnchorSourceRef | null },
 ): ValuationAnchors {
+  const g7 = isG7Ticker(ticker);
   return {
     available: true,
     period: edgar.asOf ? `TTM through ${edgar.asOf}` : (bundled?.period ?? null),
@@ -432,24 +414,29 @@ function anchorsFromEdgar(
     cash: edgar.cash,
     debt: edgar.debt,
     shares: edgar.shares,
-    past5YCagr: edgar.past5YCagr ?? bundled?.past5YCagr ?? null,
-    ttmEps: edgar.ttmEps ?? bundled?.ttmEps ?? null,
+    past5YCagr: edgar.past5YCagr ?? (g7 ? bundled?.past5YCagr ?? null : null),
+    ttmEps: edgar.ttmEps ?? (g7 ? bundled?.ttmEps ?? null : null),
     fwdEps: fwd.fwdEps,
     fwdEpsSource: fwd.fwdEpsSource,
-    ttmEbitda: edgar.ttmEbitda ?? bundled?.ttmEbitda ?? null,
-    ebitdaHistory: edgar.ebitdaHistory.length > 0 ? edgar.ebitdaHistory : (bundled?.ebitdaHistory ?? []),
-    peHistory: bundled?.peHistory ?? [],
-    drivers: {
-      ...FALLBACK_DRIVERS,
-      ...bundled?.drivers,
-      ...edgar.observedDrivers,
-    },
+    ttmEbitda: edgar.ttmEbitda ?? (g7 ? bundled?.ttmEbitda ?? null : null),
+    ebitdaHistory: edgar.ebitdaHistory.length > 0 ? edgar.ebitdaHistory : g7 ? (bundled?.ebitdaHistory ?? []) : [],
+    peHistory: g7 ? (bundled?.peHistory ?? []) : [],
+    drivers: g7
+      ? {
+          ...FALLBACK_DRIVERS,
+          ...bundled?.drivers,
+          ...edgar.observedDrivers,
+        }
+      : {
+          ...EMPTY_DRIVERS,
+          ...edgar.observedDrivers,
+        },
     fcfMarginY1FromFilings: edgar.observedDrivers.fcfMarginY1 != null,
   };
 }
 
 /**
- * Anchors for a ticker. Returns `available: false` when no filing or bundled
+ * Anchors for a ticker. Returns `available: false` when no filing or G7 bundled
  * figures exist, which tells the valuation page to accept manual entry instead.
  */
 export async function getAnchors(rawTicker: string): Promise<ValuationAnchors> {
@@ -458,7 +445,7 @@ export async function getAnchors(rawTicker: string): Promise<ValuationAnchors> {
   const cached = await readCache(ticker);
   if (cached?.fresh && cached.anchors.fwdEps != null) return cached.anchors;
 
-  const bundled = BUNDLED[ticker];
+  const bundled = isG7Ticker(ticker) ? BUNDLED[ticker] : undefined;
   const [edgar, forecast] = await Promise.all([
     cached?.fresh ? Promise.resolve(null) : fetchEdgarFundamentals(ticker),
     fetchYahooFwdEps(ticker),
@@ -472,7 +459,7 @@ export async function getAnchors(rawTicker: string): Promise<ValuationAnchors> {
   }
 
   if (edgar) {
-    const anchors = anchorsFromEdgar(edgar, bundled, fwd);
+    const anchors = anchorsFromEdgar(ticker, edgar, bundled, fwd);
     await writeCache(ticker, anchors);
     return anchors;
   }
@@ -482,7 +469,7 @@ export async function getAnchors(rawTicker: string): Promise<ValuationAnchors> {
   if (cached) {
     return { ...cached.anchors, fwdEps: fwd.fwdEps, fwdEpsSource: fwd.fwdEpsSource };
   }
-  if (!bundled) return unavailableAnchors();
+  if (!bundled) return unavailableAnchors(ticker, fwd);
 
   const anchors: ValuationAnchors = {
     available: true,

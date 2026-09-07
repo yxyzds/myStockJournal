@@ -61,6 +61,8 @@ export function NumberInput({
   readOnly?: boolean;
 }) {
   const [draft, setDraft] = useState<string | null>(null);
+  // 0 below the floor is "not set" (WACC, revenue, shares) — show blank, don't clamp up.
+  const unset = value === 0 && limits.min > 0;
 
   return (
     <input
@@ -68,7 +70,7 @@ export function NumberInput({
       inputMode="decimal"
       aria-label={ariaLabel}
       readOnly={readOnly}
-      value={draft ?? String(value)}
+      value={draft ?? (unset ? "" : String(value))}
       step={limits.step}
       min={limits.min}
       max={limits.max}
@@ -91,10 +93,17 @@ export function NumberInput({
           return;
         }
         setDraft(null);
-        const parsed = Number(event.target.value);
-        if (Number.isFinite(parsed)) {
-          onCommit(Math.min(limits.max, Math.max(limits.min, parsed)));
+        if (event.target.value === "") {
+          onCommit(0);
+          return;
         }
+        const parsed = Number(event.target.value);
+        if (!Number.isFinite(parsed)) return;
+        if (parsed === 0 && limits.min > 0) {
+          onCommit(0);
+          return;
+        }
+        onCommit(Math.min(limits.max, Math.max(limits.min, parsed)));
       }}
       className={`bg-transparent p-0 font-mono tabular-nums outline-none ${
         readOnly ? "cursor-default text-slate-700" : ""
@@ -131,7 +140,7 @@ export function DriverField({
 }) {
   const [hintOpen, setHintOpen] = useState(false);
   const threshold = Math.max(Math.abs(reference * 0.12), 0.3);
-  const diverges = !readOnly && Math.abs(value - reference) > threshold;
+  const diverges = !readOnly && reference !== 0 && Math.abs(value - reference) > threshold;
 
   return (
     <div className="flex flex-col gap-1">
@@ -179,7 +188,11 @@ export function DriverField({
                 : "text-slate-300"
           }`}
         >
-          {readOnly ? `From filings · ${reference}${suffix}` : `Estimate: ${reference}${suffix}`}
+          {readOnly
+            ? `From filings · ${reference}${suffix}`
+            : reference !== 0
+              ? `Estimate: ${reference}${suffix}`
+              : ""}
         </span>
         {diverges && (
           <span className="rounded-[4px] border border-amber-200 bg-amber-50 px-[5px] py-px text-[9px] font-bold text-amber-600">

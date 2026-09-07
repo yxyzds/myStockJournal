@@ -80,7 +80,7 @@ export function calcDcfBridge(
   currentPrice: number,
 ): DcfBridge {
   void currentPrice; // Kept for call-site compatibility; price vs FV is a UI concern.
-  if (inp.wacc <= inp.termGrowth) {
+  if (inp.wacc <= inp.termGrowth || inp.ttmRevenue <= 0 || inp.shares <= 0) {
     return { pvFcfs: 0, tv: 0, pvTv: 0, ev: 0, equity: 0, intrinsic: 0, fv: 0, mos: inp.mosPercent };
   }
   const pvFcfs = rows.reduce((sum, row) => sum + row.pvFcf, 0);

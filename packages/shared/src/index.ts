@@ -1,4 +1,5 @@
 export * from "./types";
+export * from "./stocks";
 export * from "./market";
 export * from "./valuation/dcf";
 export * from "./valuation/rdcf";

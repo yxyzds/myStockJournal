@@ -7,6 +7,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   METHOD_LABELS,
   dcfInputsFromAnchors,
+  dcfModelReady,
   defaultAssumptions,
   evEbitdaInputsFromAnchors,
   isImplementedMethod,
@@ -244,7 +245,15 @@ export function ValuationWorkbenchPage({ ticker }: { ticker: string }) {
         myFairValue={data.myFairValue}
         myFairValueMethod={myFairValueMethod}
         actions={actions}
-        canAct={isImplementedMethod(method) && currentPrice > 0}
+        canAct={
+          isImplementedMethod(method) &&
+          currentPrice > 0 &&
+          (method === "dcf"
+            ? dcfModelReady(drafts.dcf)
+            : method === "rdcf"
+              ? dcfModelReady(drafts.rdcf)
+              : true)
+        }
       />
 
       <div className="mx-auto w-full max-w-[1440px] flex-1 px-4 py-4 md:px-7 md:py-[22px]">
