@@ -17,9 +17,11 @@ import {
   type DcfScenario,
   type DcfYearRow,
   type FilingRef,
+  type QuarterlyActual,
 } from "@mystockjournal/shared";
 import { ApiError, api } from "@/lib/api";
 import type { MethodViewProps } from "./actions";
+import { ActualsStrip } from "./actuals-strip";
 import {
   AnchorRow,
   Card,
@@ -127,6 +129,7 @@ export function DcfView({
         anchorPeriod={anchors.period}
         sourceFilings={anchors.sourceFilings}
         past5YCagr={anchors.past5YCagr}
+        quarterlyActuals={anchors.quarterlyActuals ?? []}
         scenario={scenario}
         scenarioFairValues={scenarioFairValues}
         scenariosEnabled={scenariosEnabled}
@@ -304,6 +307,7 @@ function AssumptionsSection({
   anchorPeriod,
   sourceFilings,
   past5YCagr,
+  quarterlyActuals,
   scenario,
   scenarioFairValues,
   scenariosEnabled,
@@ -320,6 +324,7 @@ function AssumptionsSection({
   anchorPeriod: string | null;
   sourceFilings: FilingRef[];
   past5YCagr: number | null;
+  quarterlyActuals: QuarterlyActual[];
   scenario: DcfScenario | "custom";
   scenarioFairValues: Record<DcfScenario, number>;
   scenariosEnabled: boolean;
@@ -375,6 +380,10 @@ function AssumptionsSection({
               terminal value into enterprise value.
             </p>
           </div>
+
+          {quarterlyActuals.length > 0 ? (
+            <ActualsStrip key={quarterlyActuals.at(-1)?.end} actuals={quarterlyActuals} />
+          ) : null}
 
           <div className="grid grid-cols-2 gap-2.5 md:grid-cols-3 md:gap-3">
             <DriverField

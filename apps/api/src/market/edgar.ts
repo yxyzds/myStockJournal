@@ -2,12 +2,18 @@ import {
   DRIVER_LIMITS,
   annualCagr,
   annualValues,
+  daySpan,
+  fiscalQuarterLabel,
+  latestAnnual,
   latestInstant,
   latestQuarter,
+  quarterlySeriesWithQ4,
   ttmFromFacts,
   type DcfDrivers,
   type EvEbitdaAnnualPoint,
   type FilingRef,
+  type QuarterlyActual,
+  type PeriodValue,
   type XbrlFact,
 } from "@mystockjournal/shared";
 import { env } from "../env";
@@ -105,6 +111,7 @@ export type EdgarFundamentals = {
   /** Drivers we can ground in history. Judgment calls like WACC are left out. */
   observedDrivers: Partial<DcfDrivers>;
   sourceFilings: FilingRef[];
+  quarterlyActuals: QuarterlyActual[];
 };
 
 let lastRequestAt = 0;
@@ -264,6 +271,49 @@ function observedDrivers(companyFacts: CompanyFacts, ttmRevenue: number, past5YC
   return drivers;
 }
 
+function pickNear(series: PeriodValue[], end: string, days = 10): number | null {
+  const exact = series.find((row) => row.end === end);
+  if (exact) return exact.value;
+  const near = series.find((row) => Math.abs(daySpan(row.end, end)) <= days);
+  return near?.value ?? null;
+}
+
+function yoyGrowth(series: PeriodValue[], end: string, value: number): number | null {
+  const prior = series.find((row) => Math.abs(daySpan(row.end, end) - 365) <= 20);
+  if (!prior || prior.value <= 0) return null;
+  return round1(((value - prior.value) / prior.value) * 100);
+}
+
+function quarterlyActualsFromFacts(companyFacts: CompanyFacts): QuarterlyActual[] {
+  const revenueFacts = factsFor(companyFacts, REVENUE_TAGS, "USD");
+  const revenue = quarterlySeriesWithQ4(revenueFacts);
+  if (revenue.length === 0) return [];
+
+  const ocf = quarterlySeriesWithQ4(factsFor(companyFacts, OPERATING_CASH_FLOW_TAGS, "USD"));
+  const capex = quarterlySeriesWithQ4(factsFor(companyFacts, CAPEX_TAGS, "USD"));
+  const opInc = quarterlySeriesWithQ4(factsFor(companyFacts, OPERATING_INCOME_TAGS, "USD"));
+  const fyEndMonth = Number((latestAnnual(revenueFacts)?.end ?? revenue.at(-1)!.end).slice(5, 7));
+
+  return revenue.slice(-8).map((row) => {
+    const { quarter, fy } = fiscalQuarterLabel(row.end, fyEndMonth);
+    const ocfVal = pickNear(ocf, row.end);
+    const capexVal = pickNear(capex, row.end) ?? 0;
+    const fcf = ocfVal == null ? null : toMillions(ocfVal - capexVal);
+    const revM = toMillions(row.value);
+    const op = pickNear(opInc, row.end);
+    return {
+      end: row.end,
+      quarter,
+      fy,
+      revenue: revM,
+      yoyGrowth: yoyGrowth(revenue, row.end, row.value),
+      fcf,
+      fcfMargin: fcf != null && revM > 0 ? round1((fcf / revM) * 100) : null,
+      opMargin: op != null && row.value > 0 ? round1((op / row.value) * 100) : null,
+    };
+  });
+}
+
 function clamp(value: number, limits: { min: number; max: number }) {
   return Math.min(limits.max, Math.max(limits.min, value));
 }
@@ -365,5 +415,6 @@ export async function fetchEdgarFundamentals(ticker: string): Promise<EdgarFunda
     past5YCagr: past5YCagr == null ? null : round1(past5YCagr),
     observedDrivers: observedDrivers(companyFacts, ttmRevenue, past5YCagr),
     sourceFilings: submissions ? recentFilings(submissions, cik) : [],
+    quarterlyActuals: quarterlyActualsFromFacts(companyFacts),
   };
 }

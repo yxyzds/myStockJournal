@@ -7,6 +7,7 @@ import {
   type EvEbitdaAnnualPoint,
   type FilingRef,
   type PePoint,
+  type QuarterlyActual,
   type ValuationAnchors,
 } from "@mystockjournal/shared";
 import { db } from "../db";
@@ -28,6 +29,7 @@ type BundledAnchors = Omit<
   | "ttmEbitda"
   | "ebitdaHistory"
   | "fwdEpsSource"
+  | "quarterlyActuals"
 > & {
   ttmEbitda?: number | null;
   ebitdaHistory?: EvEbitdaAnnualPoint[];
@@ -39,7 +41,7 @@ const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
  * Bump when the cached payload shape or merge rules change so stale rows are
  * refetched instead of serving week-old driver prefills.
  */
-const CACHE_VERSION = 11;
+const CACHE_VERSION = 12;
 
 /** Neutral drivers for G7 tickers we have no estimate for. The user must review them. */
 const FALLBACK_DRIVERS: DcfDrivers = {
@@ -231,6 +233,7 @@ function unavailableAnchors(
     ttmEbitda: null,
     ebitdaHistory: [],
     peHistory: [],
+    quarterlyActuals: [],
     drivers: isG7Ticker(ticker) ? { ...FALLBACK_DRIVERS } : { ...EMPTY_DRIVERS },
     fcfMarginY1FromFilings: false,
   };
@@ -271,6 +274,32 @@ function asEbitdaHistory(value: unknown): EvEbitdaAnnualPoint[] {
     })
     .filter((point): point is EvEbitdaAnnualPoint => point != null)
     .sort((a, b) => a.year - b.year);
+}
+
+function asQuarterlyActuals(value: unknown): QuarterlyActual[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((row) => {
+      if (!row || typeof row !== "object") return null;
+      const point = row as Record<string, unknown>;
+      const end = typeof point.end === "string" ? point.end : "";
+      const quarter = num(point.quarter);
+      const fy = num(point.fy);
+      const revenue = num(point.revenue);
+      if (!end || quarter == null || fy == null || revenue == null) return null;
+      return {
+        end,
+        quarter,
+        fy,
+        revenue,
+        yoyGrowth: num(point.yoyGrowth),
+        fcf: num(point.fcf),
+        fcfMargin: num(point.fcfMargin),
+        opMargin: num(point.opMargin),
+      };
+    })
+    .filter((point): point is QuarterlyActual => point != null)
+    .sort((a, b) => a.end.localeCompare(b.end));
 }
 
 function asDrivers(value: unknown): DcfDrivers {
@@ -348,6 +377,7 @@ function asAnchors(payload: unknown, period: string | null): ValuationAnchors | 
     ttmEbitda: num(row.ttmEbitda),
     ebitdaHistory: asEbitdaHistory(row.ebitdaHistory),
     peHistory: asPeHistory(row.peHistory),
+    quarterlyActuals: asQuarterlyActuals(row.quarterlyActuals),
     drivers: asDrivers(row.drivers),
     fcfMarginY1FromFilings: row.fcfMarginY1FromFilings === true,
   };
@@ -421,6 +451,7 @@ function anchorsFromEdgar(
     ttmEbitda: edgar.ttmEbitda ?? (g7 ? bundled?.ttmEbitda ?? null : null),
     ebitdaHistory: edgar.ebitdaHistory.length > 0 ? edgar.ebitdaHistory : g7 ? (bundled?.ebitdaHistory ?? []) : [],
     peHistory: g7 ? (bundled?.peHistory ?? []) : [],
+    quarterlyActuals: edgar.quarterlyActuals,
     drivers: g7
       ? {
           ...FALLBACK_DRIVERS,
@@ -480,6 +511,7 @@ export async function getAnchors(rawTicker: string): Promise<ValuationAnchors> {
     fwdEpsSource: fwd.fwdEpsSource,
     ttmEbitda: bundled.ttmEbitda ?? null,
     ebitdaHistory: bundled.ebitdaHistory ?? [],
+    quarterlyActuals: [],
   };
   await writeCache(ticker, anchors);
   return anchors;
