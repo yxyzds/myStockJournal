@@ -1,6 +1,5 @@
 import { and, eq } from "drizzle-orm";
 import { G7_TICKERS, buildValuation, dcfInputsFromAnchors } from "@mystockjournal/shared";
-import { env } from "../env";
 import { getAnchors } from "../market/fundamentals";
 import { getQuotes } from "../market/quotes";
 import { fetchHottestTickers } from "../market/trending";
@@ -134,9 +133,7 @@ async function ensureG7Dcf(userId: string, stockId: string, ticker: string) {
  * Later starts: add any missing G7, never reshuffle the hot names.
  * Only G7 get a starter DCF and journal tip.
  */
-export async function seedWatchlist() {
-  const userId = env.localUserId;
-
+export async function seedWatchlist(userId: string) {
   const watched = await db
     .select({ ticker: stocks.ticker })
     .from(stocks)

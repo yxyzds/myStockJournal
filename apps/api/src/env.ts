@@ -12,10 +12,17 @@ function required(name: string): string {
   return value;
 }
 
+const clerkSecretKey = process.env.CLERK_SECRET_KEY ?? "";
+const localUserId = process.env.DEV_USER_ID ?? "";
+if (!clerkSecretKey && !localUserId) {
+  throw new Error("Missing CLERK_SECRET_KEY or DEV_USER_ID");
+}
+
 export const env = {
   databaseUrl: required("DATABASE_URL"),
   apiPort: Number(process.env.API_PORT ?? 3001),
-  localUserId: required("DEV_USER_ID"),
+  clerkSecretKey,
+  localUserId,
   localUserEmail: process.env.DEV_USER_EMAIL ?? "dev@localhost",
   localUserName: process.env.DEV_USER_NAME ?? "Dev",
   /** SEC rejects requests without a contact address. See https://www.sec.gov/os/webmaster-faq. */

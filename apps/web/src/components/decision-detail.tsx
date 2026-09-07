@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { AccountAvatar } from "@/components/account-avatar";
 import {
   AAPL_LIVE,
   journalSeedFor,
@@ -659,6 +660,7 @@ export function DecisionDetail({ decision }: { decision: MockDecision }) {
             >
               Edit
             </button>
+            <AccountAvatar />
           </div>
         </div>
       </header>

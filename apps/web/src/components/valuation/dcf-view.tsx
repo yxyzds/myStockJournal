@@ -24,7 +24,6 @@ import {
   AnchorRow,
   Card,
   CardHeader,
-  ChallengeCard,
   Chevron,
   DriverField,
   FilingSourceNote,
@@ -34,7 +33,6 @@ import {
   fmtMoneyM,
   fmtPct,
   fmtSigned,
-  type Challenge,
   type NumberLimits,
 } from "./primitives";
 
@@ -75,8 +73,6 @@ export function DcfView({
   const ready = dcfModelReady(assumptions);
   const scenariosEnabled = anchors.drivers.wacc >= DRIVER_LIMITS.wacc.min;
 
-  const challenges = useDcfChallenges(assumptions, anchors.past5YCagr);
-
   const scenarioFairValues = useMemo(() => {
     if (!scenariosEnabled) {
       return { bear: 0, base: 0, bull: 0 } as Record<DcfScenario, number>;
@@ -111,119 +107,45 @@ export function DcfView({
   }
 
   return (
-    <div className="flex flex-col items-start gap-3 md:flex-row md:gap-4">
-      <div className="flex w-full min-w-0 flex-col gap-3 md:flex-1">
-        <ResultsSection
-          bridge={bridge}
-          assumptions={assumptions}
-          ready={ready}
-          currentPrice={currentPrice}
-          priceAsOf={priceAsOf}
-          ticker={ticker}
-          myFairValue={myFairValue}
-          actions={actions}
-          onField={setField}
-        />
-        <AssumptionsSection
-          assumptions={assumptions}
-          anchorDrivers={anchors.drivers}
-          anchorsAvailable={anchors.available}
-          fcfMarginY1FromFilings={anchors.fcfMarginY1FromFilings}
-          anchorPeriod={anchors.period}
-          sourceFilings={anchors.sourceFilings}
-          past5YCagr={anchors.past5YCagr}
-          scenario={scenario}
-          scenarioFairValues={scenarioFairValues}
-          scenariosEnabled={scenariosEnabled}
-          onScenario={applyScenario}
-          onField={setField}
-          ticker={ticker}
-          review={review}
-          onReview={onReview}
-        />
-        <BridgeSection
-          bridge={bridge}
-          assumptions={assumptions}
-          ready={ready}
-          currentPrice={currentPrice}
-          onField={setField}
-        />
-        {ready ? <ForecastSection rows={rows} bridge={bridge} /> : null}
-      </div>
-
-      <div className="w-full md:sticky md:top-[120px] md:w-[228px] md:shrink-0">
-        <ChallengeCard challenges={challenges} />
-      </div>
+    <div className="flex w-full min-w-0 flex-col gap-3">
+      <ResultsSection
+        bridge={bridge}
+        assumptions={assumptions}
+        ready={ready}
+        currentPrice={currentPrice}
+        priceAsOf={priceAsOf}
+        ticker={ticker}
+        myFairValue={myFairValue}
+        actions={actions}
+        onField={setField}
+      />
+      <AssumptionsSection
+        assumptions={assumptions}
+        anchorDrivers={anchors.drivers}
+        anchorsAvailable={anchors.available}
+        fcfMarginY1FromFilings={anchors.fcfMarginY1FromFilings}
+        anchorPeriod={anchors.period}
+        sourceFilings={anchors.sourceFilings}
+        past5YCagr={anchors.past5YCagr}
+        scenario={scenario}
+        scenarioFairValues={scenarioFairValues}
+        scenariosEnabled={scenariosEnabled}
+        onScenario={applyScenario}
+        onField={setField}
+        ticker={ticker}
+        review={review}
+        onReview={onReview}
+      />
+      <BridgeSection
+        bridge={bridge}
+        assumptions={assumptions}
+        ready={ready}
+        currentPrice={currentPrice}
+        onField={setField}
+      />
+      {ready ? <ForecastSection rows={rows} bridge={bridge} /> : null}
     </div>
   );
-}
-
-/** Threshold-based critiques of the drivers most likely to flatter a valuation. */
-function useDcfChallenges(assumptions: DcfInputs, past5YCagr: number | null): Challenge[] {
-  return useMemo(() => {
-    const out: Challenge[] = [];
-
-    if (assumptions.growthY1_5 > 30) {
-      out.push({
-        field: "Revenue Growth Y1–5",
-        note: `${fmt1(assumptions.growthY1_5)}% sustained for five straight years`,
-        bullets: [
-          past5YCagr != null
-            ? `Past five years compounded at ${fmt1(past5YCagr)}%, including deceleration`
-            : "No historical CAGR on file to compare against",
-          "Growth above 30% at scale is rare and rarely durable",
-        ],
-        question: "What durable advantage sustains this growth for the full five years?",
-      });
-    }
-
-    if (assumptions.termGrowth > 4) {
-      out.push({
-        field: "Terminal Growth",
-        note: `${fmt1(assumptions.termGrowth)}% forever, above long-run global GDP`,
-        bullets: [
-          "Implies the company outgrows the world economy in perpetuity",
-          "Enterprise value is highly sensitive to g as it approaches WACC",
-        ],
-        question: "What structural moat sustains above-GDP growth forever?",
-      });
-    }
-
-    if (assumptions.wacc >= DRIVER_LIMITS.wacc.min && assumptions.wacc < 7) {
-      out.push({
-        field: "WACC",
-        note: `${fmt1(assumptions.wacc)}% is a low cost of capital for equities`,
-        bullets: [
-          "A lower discount rate raises fair value more than it may deserve",
-          "Most listed equities are discounted at 8–11%",
-        ],
-        question: "What justifies a near risk-free cost of capital here?",
-      });
-    }
-
-    if (assumptions.fcfMarginTerm > assumptions.fcfMarginY1 + 15) {
-      out.push({
-        field: "FCF Margin",
-        note: `Expanding ${fmt1(assumptions.fcfMarginY1)}% → ${fmt1(assumptions.fcfMarginTerm)}%`,
-        bullets: [
-          "More than 15 points of margin expansion is a large operating bet",
-          "Competition usually captures part of any scale benefit",
-        ],
-        question: "Which costs fall, and why can competitors not do the same?",
-      });
-    }
-
-    if (assumptions.wacc >= DRIVER_LIMITS.wacc.min && assumptions.wacc <= assumptions.termGrowth) {
-      out.push({
-        field: "Terminal value undefined",
-        note: "Terminal growth is at or above WACC",
-        bullets: ["The Gordon growth formula diverges, so no terminal value exists"],
-        question: "Which is wrong — the discount rate or the perpetual growth rate?",
-      });
-    }
-
-    return out;
-  }, [assumptions, past5YCagr]);
 }
 
 function ResultsSection({
@@ -459,7 +381,6 @@ function AssumptionsSection({
               label="Revenue growth Y1–5"
               hint="Expected annual revenue growth for forecast years 1–5. When filings are available this is prefilled from the past 5-year revenue CAGR; edit it to set your own outlook."
               value={assumptions.growthY1_5}
-              reference={anchorDrivers.growthY1_5}
               suffix="%"
               limits={DRIVER_LIMITS.growthY1_5}
               onChange={(v) => onField("growthY1_5", v)}
@@ -468,7 +389,6 @@ function AssumptionsSection({
               label="Revenue growth Y6–10"
               hint="Expected annual revenue growth for years 6–10 as the business matures. This is a forward judgment, not read from filings."
               value={assumptions.growthY6_10}
-              reference={anchorDrivers.growthY6_10}
               suffix="%"
               limits={DRIVER_LIMITS.growthY6_10}
               onChange={(v) => onField("growthY6_10", v)}
@@ -477,7 +397,6 @@ function AssumptionsSection({
               label="Terminal growth (g)"
               hint="Perpetual growth after year 10 in the Gordon growth terminal value. Must stay below WACC or the terminal value is undefined."
               value={assumptions.termGrowth}
-              reference={anchorDrivers.termGrowth}
               suffix="%"
               limits={DRIVER_LIMITS.termGrowth}
               onChange={(v) => onField("termGrowth", v)}
@@ -486,7 +405,6 @@ function AssumptionsSection({
               label="WACC"
               hint="Weighted average cost of capital — the discount rate applied to each year's free cash flow and to the terminal value."
               value={assumptions.wacc}
-              reference={anchorDrivers.wacc}
               suffix="%"
               limits={DRIVER_LIMITS.wacc}
               onChange={(v) => onField("wacc", v)}
@@ -495,7 +413,6 @@ function AssumptionsSection({
               label="FCF margin Y1"
               hint="Free cash flow as a % of revenue in year 1. Each year: FCF = revenue × margin. Prefill from filings: (TTM operating cash flow − TTM CapEx) ÷ TTM revenue. CapEx is an outflow, so it subtracts; if CapEx exceeds OCF the prefill floors at 0%. When prefilled from filings this field is locked."
               value={assumptions.fcfMarginY1}
-              reference={anchorDrivers.fcfMarginY1}
               suffix="%"
               limits={DRIVER_LIMITS.fcfMarginY1}
               onChange={(v) => onField("fcfMarginY1", v)}
@@ -505,7 +422,6 @@ function AssumptionsSection({
               label="FCF margin terminal"
               hint="Assumed FCF / revenue in year 10. Margin fades linearly from Y1 to this terminal rate over the 10-year forecast; year-10 FCF also feeds the terminal value."
               value={assumptions.fcfMarginTerm}
-              reference={anchorDrivers.fcfMarginTerm}
               suffix="%"
               limits={DRIVER_LIMITS.fcfMarginTerm}
               onChange={(v) => onField("fcfMarginTerm", v)}

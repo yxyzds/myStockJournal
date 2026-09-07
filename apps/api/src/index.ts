@@ -5,8 +5,10 @@ import { seedWatchlist } from "./db/seed-watchlist";
 import { env } from "./env";
 
 try {
-  await seedLocalUser();
-  await seedWatchlist();
+  if (!env.clerkSecretKey) {
+    await seedLocalUser();
+    await seedWatchlist(env.localUserId);
+  }
 } catch (error) {
   console.warn("Could not seed local data (is Postgres up?)", error);
 }

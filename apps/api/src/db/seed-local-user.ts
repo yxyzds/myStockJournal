@@ -3,6 +3,7 @@ import { db } from "./index";
 import { users } from "./schema";
 
 export async function seedLocalUser() {
+  if (!env.localUserId) return;
   await db
     .insert(users)
     .values({

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
+import { AccountAvatar } from "@/components/account-avatar";
 import { LogoMark } from "@/components/logo-mark";
 import { Input } from "@/components/ui/input";
 import { DECISIONS, WATCH_ROWS, decisionHref } from "@/lib/mock-journal";
@@ -79,9 +80,7 @@ export function SiteNav({ showSearch = true }: { showSearch?: boolean }) {
               <SearchIcon />
             </button>
           )}
-          <div className="flex size-8 items-center justify-center rounded-full bg-slate-900">
-            <span className="text-[11px] font-semibold tracking-wide text-white">AM</span>
-          </div>
+          <AccountAvatar />
         </div>
       </div>
       {searchOpen && showSearch && (

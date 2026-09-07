@@ -14,6 +14,7 @@ import {
   type ValuationMethod,
   type ValuationWorkbench,
 } from "@mystockjournal/shared";
+import { AccountAvatar } from "@/components/account-avatar";
 import { ApiError, api } from "@/lib/api";
 import { formatEntryDate, formatPrice, isCalendarDate, todayNyDate } from "@/lib/format";
 
@@ -1043,6 +1044,7 @@ export function StockDetail({ ticker }: { ticker: string }) {
             {headerDate && (
               <span className="text-[13px] text-slate-500 md:text-[14px]">{formatEntryDate(headerDate)}</span>
             )}
+            <AccountAvatar />
           </div>
         </div>
       </header>

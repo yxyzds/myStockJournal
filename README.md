@@ -61,7 +61,8 @@ curl http://localhost:3001/health
 |------|------|
 | `DATABASE_URL` | Postgres 连接串 |
 | `API_PORT` | API 端口，默认 `3001` |
-| `DEV_USER_ID` / `DEV_USER_EMAIL` / `DEV_USER_NAME` | 本地开发用户（暂无正式登录） |
+| `DEV_USER_ID` / `DEV_USER_EMAIL` / `DEV_USER_NAME` | 未配置 Clerk 时的本地开发用户 |
+| `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` / `CLERK_SECRET_KEY` | Clerk 登录（Google / Facebook / 邮箱）。配好后首页头像进入 `/settings` |
 | `SEC_USER_AGENT` | 访问 SEC EDGAR 时的 User-Agent（建议带联系邮箱） |
 | `AI_BASE_URL` | AI 中转站 Base，例如 `https://www.micuapi.ai/v1`（实际请求 `${AI_BASE_URL}/chat/completions`） |
 | `AI_API_KEY` | 中转站 Bearer Token |
@@ -92,4 +93,5 @@ pnpm test         # packages/shared 单测
 ## 开发提示
 
 - API 使用 `tsx watch`，改代码会热重载；**改 `.env` 后需重启 API** 才会生效。
-- 本地用户由 `DEV_USER_*` 注入，所有数据挂在该用户下。
+- 未配置 Clerk 时，本地用户由 `DEV_USER_*` 注入，所有数据挂在该用户下。
+- 配好 Clerk 后：未登录会进 `/sign-in`；已登录点头像进入 `/settings`（Account 可改姓名/邮箱，没有换头像）。
