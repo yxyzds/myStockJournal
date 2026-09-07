@@ -113,15 +113,12 @@ export function NumberInput({
 }
 
 /**
- * An editable model driver. When the value drifts far from the prefetched
- * estimate the field turns amber — the user is overriding the reference, which
- * is allowed but worth seeing.
+ * An editable model driver. Filing-derived fields can be locked read-only.
  */
 export function DriverField({
   label,
   hint,
   value,
-  reference,
   suffix,
   limits,
   onChange,
@@ -131,7 +128,6 @@ export function DriverField({
   /** Shown when the user opens the ? affordance. */
   hint?: string;
   value: number;
-  reference: number;
   suffix: string;
   limits: NumberLimits;
   onChange: (value: number) => void;
@@ -139,8 +135,6 @@ export function DriverField({
   readOnly?: boolean;
 }) {
   const [hintOpen, setHintOpen] = useState(false);
-  const threshold = Math.max(Math.abs(reference * 0.12), 0.3);
-  const diverges = !readOnly && reference !== 0 && Math.abs(value - reference) > threshold;
 
   return (
     <div className="flex flex-col gap-1">
@@ -163,9 +157,7 @@ export function DriverField({
         className={`flex items-center gap-[3px] rounded-[7px] border px-2.5 py-[7px] transition-colors ${
           readOnly
             ? "border-slate-100 bg-slate-50"
-            : diverges
-              ? "border-amber-300 bg-amber-50"
-              : "border-slate-200 bg-white focus-within:border-blue-400 focus-within:ring-1 focus-within:ring-blue-100 hover:border-blue-300"
+            : "border-slate-200 bg-white focus-within:border-blue-400 focus-within:ring-1 focus-within:ring-blue-100 hover:border-blue-300"
         }`}
       >
         <NumberInput
@@ -177,28 +169,6 @@ export function DriverField({
           className="w-full text-[14px] font-bold text-slate-900"
         />
         <span className="shrink-0 text-[11px] text-slate-400 select-none">{suffix}</span>
-      </div>
-      <div className="flex h-3.5 items-center justify-between">
-        <span
-          className={`text-[10px] ${
-            readOnly
-              ? "text-slate-400"
-              : diverges
-                ? "font-semibold text-amber-600"
-                : "text-slate-300"
-          }`}
-        >
-          {readOnly
-            ? `From filings · ${reference}${suffix}`
-            : reference !== 0
-              ? `Estimate: ${reference}${suffix}`
-              : ""}
-        </span>
-        {diverges && (
-          <span className="rounded-[4px] border border-amber-200 bg-amber-50 px-[5px] py-px text-[9px] font-bold text-amber-600">
-            overridden
-          </span>
-        )}
       </div>
     </div>
   );
@@ -354,54 +324,6 @@ function ExternalLinkIcon() {
         strokeLinejoin="round"
       />
     </svg>
-  );
-}
-
-/** Amber critique of a single assumption. Never a buy or sell call. */
-export type Challenge = {
-  field: string;
-  note: string;
-  bullets: string[];
-  question: string;
-};
-
-export function ChallengeCard({ challenges }: { challenges: Challenge[] }) {
-  return (
-    <Card>
-      <div className="border-b border-slate-50 px-3.5 py-3">
-        <p className="text-[12px] font-bold text-slate-900">Challenge your assumptions</p>
-        <p className="mt-px text-[10px] text-slate-400">Critiques inputs · never trade advice</p>
-      </div>
-      <div className="flex flex-col gap-[7px] px-2.5 py-2.5">
-        {challenges.length === 0 ? (
-          <p className="text-[11px] leading-snug text-slate-400">
-            Assumptions sit within normal bounds. Challenges appear when an input diverges sharply
-            from history.
-          </p>
-        ) : (
-          challenges.map((challenge) => (
-            <div
-              key={challenge.field}
-              className="flex flex-col gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-2"
-            >
-              <span className="text-[10px] font-bold text-amber-700">{challenge.field}</span>
-              <p className="text-[10px] text-amber-600">{challenge.note}</p>
-              <ul className="flex flex-col gap-0.5">
-                {challenge.bullets.map((bullet) => (
-                  <li key={bullet} className="flex gap-1">
-                    <span className="mt-0.5 shrink-0 text-[8px] text-amber-300">•</span>
-                    <span className="text-[10px] leading-snug text-amber-800">{bullet}</span>
-                  </li>
-                ))}
-              </ul>
-              <p className="rounded-[5px] bg-amber-100 px-[7px] py-[5px] text-[10px] leading-snug text-amber-900 italic">
-                “{challenge.question}”
-              </p>
-            </div>
-          ))
-        )}
-      </div>
-    </Card>
   );
 }
 

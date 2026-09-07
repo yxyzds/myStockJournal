@@ -118,10 +118,26 @@ export function ValuationWorkbenchPage({ ticker }: { ticker: string }) {
       setDrafts(draftsFrom(data));
       return;
     }
-    // Repair a stale Multiples draft left over from before evebitda seeding existed.
     setDrafts((current) => {
-      if (!current || typeof current.evebitda?.shares === "number") return current;
-      return { ...current, evebitda: draftsFrom(data).evebitda };
+      if (!current) return draftsFrom(data);
+      let next = current;
+      // Filing FCF Y1 is a fact: stamp it onto the draft whenever anchors have it,
+      // including after a refetch that arrived after the first seed.
+      if (data.anchors.fcfMarginY1FromFilings) {
+        const y1 = data.anchors.drivers.fcfMarginY1;
+        if (next.dcf.fcfMarginY1 !== y1 || next.rdcf.fcfMarginY1 !== y1) {
+          next = {
+            ...next,
+            dcf: { ...next.dcf, fcfMarginY1: y1 },
+            rdcf: { ...next.rdcf, fcfMarginY1: y1 },
+          };
+        }
+      }
+      // Repair a stale Multiples draft left over from before evebitda seeding existed.
+      if (typeof next.evebitda?.shares !== "number") {
+        next = { ...next, evebitda: draftsFrom(data).evebitda };
+      }
+      return next;
     });
   }, [data]);
 

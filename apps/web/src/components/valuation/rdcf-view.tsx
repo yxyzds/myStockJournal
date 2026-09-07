@@ -15,16 +15,13 @@ import {
   AnchorRow,
   Card,
   CardHeader,
-  ChallengeCard,
   Chevron,
   FieldHint,
   FilingSourceNote,
   NumberInput,
-  fmt1,
   fmt2,
   fmtMoneyM,
   fmtPct,
-  type Challenge,
 } from "./primitives";
 
 const HELD_DRIVERS = [
@@ -66,7 +63,6 @@ export type RdcfViewProps = MethodViewProps & {
 export function RdcfView({
   anchors,
   currentPrice,
-  ticker,
   assumptions,
   onChange,
   dcfBaseline,
@@ -76,7 +72,6 @@ export function RdcfView({
   const result = useMemo(() => valueRdcf(assumptions, currentPrice), [assumptions, currentPrice]);
   const ready = dcfModelReady(assumptions);
   const implied = ready ? result.impliedGrowthY1_5 : null;
-  const challenges = useRdcfChallenges(implied, dcfBaseline.growthY1_5, ticker);
 
   function setField<K extends keyof RdcfInputs>(key: K, value: RdcfInputs[K]) {
     if (key === "fcfMarginY1" && anchors.fcfMarginY1FromFilings) return;
@@ -124,8 +119,6 @@ export function RdcfView({
 
       {result.rows.length > 0 && <ForecastSection rows={result.rows} tv={result.tv} />}
 
-      <ChallengeCard challenges={challenges} />
-
       <div className="flex flex-wrap justify-end gap-2 pb-2">
         <button
           type="button"
@@ -145,65 +138,6 @@ export function RdcfView({
       </div>
     </div>
   );
-}
-
-/** Reverse DCF has no fair value, so the critique is about the growth gap itself. */
-function useRdcfChallenges(
-  implied: number | null,
-  baselineGrowth: number,
-  ticker: string,
-): Challenge[] {
-  return useMemo(() => {
-    if (implied == null) {
-      return [
-        {
-          field: "No solution",
-          note: "No growth rate reconciles this price to your held-constant inputs",
-          bullets: [
-            "Terminal growth may be at or above WACC, leaving terminal value undefined",
-            "Or the price implies growth beyond any plausible range",
-          ],
-          question: "Which held-constant input is doing the damage?",
-        },
-      ];
-    }
-
-    const gap = implied - baselineGrowth;
-    if (Math.abs(gap) < 1) {
-      return [
-        {
-          field: "Aligned with your base case",
-          note: `Market implies ${fmtPct(implied)} against your ${fmtPct(baselineGrowth)}`,
-          bullets: ["Price and your model agree on the growth path, within a percentage point"],
-          question: "If you and the market agree, where is your edge?",
-        },
-      ];
-    }
-
-    return gap > 0
-      ? [
-          {
-            field: "Market implies faster growth",
-            note: `${fmtPct(implied)} vs. your ${fmtPct(baselineGrowth)} — ${fmt1(gap)}pp higher`,
-            bullets: [
-              `Buying here means underwriting growth you do not currently forecast for ${ticker}`,
-              "The gap is optimism you are paying for, not margin of safety",
-            ],
-            question: "What would have to be true for the market's path to happen?",
-          },
-        ]
-      : [
-          {
-            field: "Market implies slower growth",
-            note: `${fmtPct(implied)} vs. your ${fmtPct(baselineGrowth)} — ${fmt1(Math.abs(gap))}pp lower`,
-            bullets: [
-              "Either the market is discounting a risk your model omits, or this is your margin of safety",
-              "Reverse DCF cannot tell the two apart — only evidence can",
-            ],
-            question: "Which risk might the market see that your model does not?",
-          },
-        ];
-  }, [implied, baselineGrowth, ticker]);
 }
 
 function HeroSection({
