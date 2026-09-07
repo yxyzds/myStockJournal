@@ -7,13 +7,23 @@ export class ApiError extends Error {
   }
 }
 
+type TokenGetter = () => Promise<string | null>;
+
+let tokenGetter: TokenGetter | null = null;
+
+export function setApiTokenGetter(getter: TokenGetter | null) {
+  tokenGetter = getter;
+}
+
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
+  const token = tokenGetter ? await tokenGetter() : null;
+  const headers = new Headers(init?.headers);
+  if (!headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+
   const res = await fetch(`/api${path}`, {
     ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...init?.headers,
-    },
+    headers,
   });
   if (!res.ok) {
     let message = `Request failed (${res.status})`;

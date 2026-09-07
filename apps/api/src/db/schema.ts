@@ -30,9 +30,10 @@ export const valuationMethodEnum = pgEnum("valuation_method", [
   "sotp",
 ]);
 
-/** App accounts. V1 has no login UI; we seed one local Dev user. */
+/** App accounts. `id` is our uuid; `clerkId` maps to Clerk when auth is on. */
 export const users = pgTable("users", {
-  id: uuid("id").primaryKey(),
+  id: uuid("id").primaryKey().defaultRandom(),
+  clerkId: text("clerk_id").unique(),
   email: text("email").notNull().unique(),
   name: text("name").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

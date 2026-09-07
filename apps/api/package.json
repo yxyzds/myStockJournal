@@ -12,6 +12,7 @@
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
+    "@clerk/backend": "^3.17.1",
     "@hono/node-server": "^1.19.0",
     "@mystockjournal/shared": "workspace:*",
     "dotenv": "^17.2.0",

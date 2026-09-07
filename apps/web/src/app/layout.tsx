@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next";
+import { ClerkProvider } from "@clerk/nextjs";
 import { Inter, JetBrains_Mono, Playfair_Display } from "next/font/google";
 import { QueryProvider } from "@/components/query-provider";
+import { isClerkEnabled } from "@/lib/clerk";
 import { cn } from "@/lib/utils";
 import "./globals.css";
 
@@ -30,6 +32,26 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
+function Providers({ children }: { children: React.ReactNode }) {
+  const inner = <QueryProvider>{children}</QueryProvider>;
+  if (!isClerkEnabled) return inner;
+  return (
+    <ClerkProvider
+      signInUrl="/sign-in"
+      signUpUrl="/sign-up"
+      afterSignOutUrl="/sign-in"
+      appearance={{
+        variables: {
+          colorPrimary: "#0f172a",
+          borderRadius: "0.6rem",
+        },
+      }}
+    >
+      {inner}
+    </ClerkProvider>
+  );
+}
+
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
@@ -37,7 +59,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={cn("h-full antialiased font-sans", inter.variable, playfair.variable, jetbrains.variable)}
     >
       <body className="min-h-full flex flex-col bg-background text-foreground">
-        <QueryProvider>{children}</QueryProvider>
+        <Providers>{children}</Providers>
       </body>
     </html>
   );

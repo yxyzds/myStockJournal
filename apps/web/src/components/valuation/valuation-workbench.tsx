@@ -25,6 +25,7 @@ import {
 } from "@mystockjournal/shared";
 import { api } from "@/lib/api";
 import { formatEntryDate } from "@/lib/format";
+import { AccountAvatar } from "@/components/account-avatar";
 import type { ValuationActions } from "./actions";
 import { DcfView } from "./dcf-view";
 import { PeView } from "./pe-view";
@@ -417,6 +418,7 @@ function TopBar({
               Set Fair Value
             </button>
           )}
+          <AccountAvatar />
         </div>
       </div>
 
