@@ -1,6 +1,9 @@
 import { config } from "dotenv";
 import { resolve } from "node:path";
 
+// Also loaded via `node --env-file` in package.json so NODE_USE_ENV_PROXY
+// sees HTTP(S)_PROXY at process start. dotenv here is for anything imported
+// after that (and does not override vars already in the environment).
 config({ path: resolve(import.meta.dirname, "../../../.env") });
 
 function required(name: string): string {

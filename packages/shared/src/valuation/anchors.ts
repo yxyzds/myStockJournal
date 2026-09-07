@@ -105,13 +105,42 @@ export const DRIVER_LIMITS: Record<keyof DcfDrivers, { min: number; max: number;
 
 export const EXPECTED_PE_LIMITS = { min: 0, max: 200, step: 0.5 };
 export const EXPECTED_EV_EBITDA_LIMITS = { min: 0, max: 80, step: 0.5 };
-export const EXPECTED_GROWTH_LIMITS = { min: 0.1, max: 100, step: 0.5 };
+export const EXPECTED_GROWTH_LIMITS = { min: 0, max: 100, step: 0.5 };
 /** Haircut applied to DCF intrinsic value to produce fair value. */
 export const MOS_PERCENT_LIMITS = { min: 0, max: 90, step: 1 };
+
+/** Drivers with no curated estimate — the user has to type them in. */
+export const EMPTY_DRIVERS: DcfDrivers = {
+  growthY1_5: 0,
+  growthY6_10: 0,
+  termGrowth: 0,
+  wacc: 0,
+  fcfMarginY1: 0,
+  fcfMarginTerm: 0,
+};
 
 function clampDriver(key: keyof DcfDrivers, value: number) {
   const { min, max } = DRIVER_LIMITS[key];
   return Math.min(max, Math.max(min, value));
+}
+
+/**
+ * Enough inputs to produce a finite DCF / reverse DCF. Missing filings (revenue
+ * or shares at 0) or an unset WACC must not render as a $0.00 fair value.
+ */
+export function dcfModelReady(
+  inp: Pick<DcfInputs, "ttmRevenue" | "shares" | "wacc" | "termGrowth">,
+): boolean {
+  return (
+    Number.isFinite(inp.ttmRevenue) &&
+    inp.ttmRevenue > 0 &&
+    Number.isFinite(inp.shares) &&
+    inp.shares > 0 &&
+    Number.isFinite(inp.wacc) &&
+    inp.wacc >= DRIVER_LIMITS.wacc.min &&
+    Number.isFinite(inp.termGrowth) &&
+    inp.termGrowth < inp.wacc
+  );
 }
 
 export function dcfInputsFromAnchors(anchors: ValuationAnchors, drivers?: DcfDrivers): DcfInputs {
@@ -137,15 +166,16 @@ export function dcfInputsFromAnchors(anchors: ValuationAnchors, drivers?: DcfDri
  */
 export function scenarioDrivers(base: DcfDrivers, scenario: DcfScenario): DcfDrivers {
   const factors = SCENARIO_FACTORS[scenario];
+  const waccUnset = base.wacc < DRIVER_LIMITS.wacc.min;
   const scaled = {
     growthY1_5: clampDriver("growthY1_5", round1(base.growthY1_5 * factors.growthY1_5)),
     growthY6_10: clampDriver("growthY6_10", round1(base.growthY6_10 * factors.growthY6_10)),
     termGrowth: clampDriver("termGrowth", round1(base.termGrowth * factors.termGrowth)),
-    wacc: clampDriver("wacc", round1(base.wacc * factors.wacc)),
+    wacc: waccUnset ? base.wacc : clampDriver("wacc", round1(base.wacc * factors.wacc)),
     fcfMarginY1: clampDriver("fcfMarginY1", round1(base.fcfMarginY1 * factors.fcfMarginY1)),
     fcfMarginTerm: clampDriver("fcfMarginTerm", round1(base.fcfMarginTerm * factors.fcfMarginTerm)),
   };
-  if (scaled.termGrowth >= scaled.wacc) {
+  if (!waccUnset && scaled.termGrowth >= scaled.wacc) {
     scaled.termGrowth = clampDriver("termGrowth", round1(scaled.wacc - 1));
   }
   return scaled;
@@ -175,7 +205,7 @@ export function peInputsFromAnchors(anchors: ValuationAnchors, expectedPe: numbe
     epsBasis: "fwd",
     ttmEps: anchors.ttmEps ?? 0,
     fwdEps: anchors.fwdEps ?? 0,
-    expectedGrowth: 10,
+    expectedGrowth: 0,
   };
 }
 
