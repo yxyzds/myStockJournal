@@ -17,6 +17,8 @@ import { db } from "../db";
 import { decisions, journalEntries, stocks, valuationModels } from "../db/schema";
 import { recordDecision } from "../lib/decisions";
 import { getOrCreateStock, num } from "../lib/stocks";
+import { getQuotes } from "../market/quotes";
+import { fetchTencentKline } from "../market/tencent";
 
 function todayNyDate() {
   return new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
@@ -401,12 +403,21 @@ stockRoutes.post("/:ticker/ai/trade-review", async (c) => {
     return c.json({ error: "Set a fair value before asking for a review" }, 400);
   }
 
+  const [quotes, kline] = await Promise.all([
+    getQuotes([stock.ticker]).catch(() => []),
+    fetchTencentKline(stock.ticker, "day", 640).catch(() => []),
+  ]);
+
   try {
     const review = await reviewTradeJournal({
       ticker: stock.ticker,
       name: stock.name,
       journal,
       transactions,
+      lastClose: quotes[0]?.price ?? null,
+      sessionCloses: kline
+        .filter((bar) => bar.close > 0)
+        .map((bar) => ({ date: bar.date, close: bar.close })),
     });
     await db
       .update(stocks)
