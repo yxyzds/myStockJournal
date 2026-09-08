@@ -20,9 +20,23 @@ if (isProduction) {
 /** True only for local `pnpm dev` without Clerk — never in production. */
 export const allowDevUser = Boolean(!isProduction && !clerkSecretKey && localUserId);
 
+function listenPort() {
+  const apiPort = process.env.API_PORT;
+  const hostPort = process.env.PORT;
+  const raw = isProduction ? hostPort || apiPort || "3001" : apiPort || hostPort || "3001";
+  const port = Number(raw);
+  if (!Number.isFinite(port) || port <= 0) {
+    throw new Error(`Invalid listen port: ${raw}`);
+  }
+  return port;
+}
+
 export const env = {
   databaseUrl: required("DATABASE_URL"),
-  apiPort: Number(process.env.API_PORT ?? 3001),
+  /** Local: `API_PORT` (default 3001). Production: platform `PORT`, then `API_PORT`. */
+  apiPort: listenPort(),
+  /** Railway / containers need 0.0.0.0; localhost still works on 127.0.0.1. */
+  apiHost: "0.0.0.0" as const,
   clerkSecretKey,
   localUserId,
   localUserEmail: process.env.DEV_USER_EMAIL ?? "dev@localhost",

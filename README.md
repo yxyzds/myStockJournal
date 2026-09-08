@@ -61,7 +61,7 @@ curl http://localhost:3001/health
 | 变量 | 放哪 | 说明 |
 |------|------|------|
 | `DATABASE_URL` | `.env` / 平台 | Postgres 连接串 |
-| `API_PORT` | `.env` / 平台 | API 端口，默认 `3001` |
+| `API_PORT` | `.env` / 本地 | 本地 API 端口，默认 `3001`。生产优先用平台注入的 `PORT` |
 | `API_ORIGIN` | 平台（可选） | Next 把 `/api` 转到该地址；本地默认 `http://localhost:3001` |
 | `DEV_USER_ID` / `DEV_USER_EMAIL` / `DEV_USER_NAME` | `.env.development` | 仅本地、且未配 Clerk 时的开发用户。生产禁止 |
 | `HTTP_PROXY` / `HTTPS_PROXY` / `NO_PROXY` | `.env.development` | 仅 `pnpm dev`（`NODE_USE_ENV_PROXY=1`）。生产默认忽略 |
