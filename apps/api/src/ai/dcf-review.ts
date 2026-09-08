@@ -8,20 +8,23 @@ import {
   type DcfReviewField,
   type ValuationAnchors,
 } from "@mystockjournal/shared";
+import { reviewLanguageName, type AppLocale } from "../lib/locale";
 import { chatJson } from "./chat";
 
-const SYSTEM = `You are a sharp valuation coach reviewing a user's DCF assumptions.
+function systemPrompt(language: AppLocale) {
+  const lang = reviewLanguageName(language);
+  return `You are a sharp valuation coach reviewing a user's DCF assumptions.
 Judge whether each driver is internally consistent and grounded in the provided anchors. Do not decide if the stock is a buy.
 
 Respond with JSON only:
 {
   "grade": <one of: ${TRADE_REVIEW_GRADES.join(" | ")}>,
   "comments": {
-    "growthY1_5": "<one English sentence>",
-    "growthY6_10": "<one English sentence>",
-    "termGrowth": "<one English sentence>",
-    "wacc": "<one English sentence>",
-    "fcfMarginTerm": "<one English sentence>"
+    "growthY1_5": "<one ${lang} sentence>",
+    "growthY6_10": "<one ${lang} sentence>",
+    "termGrowth": "<one ${lang} sentence>",
+    "wacc": "<one ${lang} sentence>",
+    "fcfMarginTerm": "<one ${lang} sentence>"
   }
 }
 
@@ -33,8 +36,9 @@ Rules:
 - Cover these fields only: ${DCF_REVIEW_FIELDS.map((key) => DCF_REVIEW_FIELD_LABELS[key]).join(", ")}.
 - Do not review FCF margin Y1 — it comes from filings and is locked.
 - Compare each driver to the anchors / past 5Y CAGR when provided.
-- English only. No markdown. No emoji.
+- ${lang} only. No markdown. No emoji.
 - Do not invent facts that are not in the payload.`;
+}
 
 export async function reviewDcfAssumptions(input: {
   ticker: string;
@@ -42,9 +46,11 @@ export async function reviewDcfAssumptions(input: {
   assumptions: DcfInputs;
   anchors: ValuationAnchors;
   currentPrice: number;
+  language?: AppLocale;
 }): Promise<DcfAssumptionReview> {
+  const language = input.language ?? "en";
   const raw = await chatJson([
-    { role: "system", content: SYSTEM },
+    { role: "system", content: systemPrompt(language) },
     {
       role: "user",
       content: JSON.stringify({

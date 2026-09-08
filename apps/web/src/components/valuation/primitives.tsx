@@ -1,9 +1,14 @@
 "use client";
 
-import type { AnchorSourceRef, FilingRef } from "@mystockjournal/shared";
+import type { AnchorSourceRef, FilingRef, ValuationMethod } from "@mystockjournal/shared";
 import { useState, type ReactNode } from "react";
+import { useI18n, type Translate } from "@/i18n";
 
-export const fmtMoneyM = (v: number) => `$${Math.round(v).toLocaleString()}M`;
+export function methodLabel(method: ValuationMethod, t: Translate) {
+  return t(`methods.${method}`);
+}
+
+export const fmtMoneyM = (v: number) => `$${Math.round(v).toLocaleString("en-US")}M`;
 export const fmt1 = (v: number) => v.toFixed(1);
 export const fmt2 = (v: number) => v.toFixed(2);
 export const fmtPct = (v: number) => `${v.toFixed(1)}%`;
@@ -184,13 +189,14 @@ export function FieldHint({
   open?: boolean;
   onToggle?: () => void;
 }) {
+  const { t } = useI18n();
   const isOpen = open ?? false;
   const toggle = onToggle ?? (() => undefined);
 
   return (
     <button
       type="button"
-      aria-label="What this field means"
+      aria-label={t("valuation.fieldHintAria")}
       aria-expanded={isOpen}
       aria-description={text}
       onClick={toggle}
@@ -262,10 +268,11 @@ export function FilingSourceNote({
   period: string | null;
   filings: FilingRef[];
 }) {
+  const { t } = useI18n();
   return (
     <div className="flex flex-col gap-1.5">
       <p className="text-[10px] leading-snug text-slate-400">
-        Read from SEC filings — not editable{period ? ` · ${period}` : ""}
+        {period ? t("valuation.readFromFilingsPeriod", { period }) : t("valuation.readFromFilings")}
       </p>
       {filings.length > 0 && (
         <div className="flex flex-wrap gap-1">
@@ -275,7 +282,10 @@ export function FilingSourceNote({
               href={filing.url}
               target="_blank"
               rel="noopener noreferrer"
-              title={`${filing.form} for the period ending ${filing.reportDate || "unknown"}`}
+              title={t("valuation.filingTitle", {
+                form: filing.form,
+                date: filing.reportDate || t("valuation.filingUnknownPeriod"),
+              })}
               className="flex items-center gap-1 rounded-[5px] border border-slate-200 bg-white px-1.5 py-[3px] text-[9px] font-semibold text-slate-500 hover:border-blue-300 hover:text-blue-600"
             >
               <span>{filing.form}</span>
@@ -291,13 +301,14 @@ export function FilingSourceNote({
 
 /** Source line under a figure: “?” plus a link to the public page. */
 export function SourceHint({ source }: { source: AnchorSourceRef }) {
+  const { t } = useI18n();
   return (
     <p className="mt-1.5 flex items-start gap-1 text-[10px] leading-snug text-slate-400">
       <span className="mt-px flex size-3.5 shrink-0 items-center justify-center rounded-full border border-slate-300 text-[8px] font-bold leading-none text-slate-400">
         ?
       </span>
       <span>
-        Source:{" "}
+        {t("valuation.source")}{" "}
         <a
           href={source.url}
           target="_blank"
@@ -307,7 +318,8 @@ export function SourceHint({ source }: { source: AnchorSourceRef }) {
           {source.label}
           <ExternalLinkIcon />
         </a>
-        {" · "}consensus this-year EPS
+        {" "}
+        {t("valuation.consensusEps")}
       </span>
     </p>
   );

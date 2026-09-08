@@ -57,6 +57,7 @@ function copyFor(ticker: string, filing: FilingRef) {
 function toItem(
   row: typeof judgmentItems.$inferSelect,
   ticker: string,
+  filing?: FilingRef,
 ): JudgmentItem {
   return {
     id: row.id,
@@ -66,7 +67,9 @@ function toItem(
     detail: bodyOf(row.detail),
     actionLabel: row.actionLabel,
     actionHref: row.actionHref ?? `/stock/${ticker}/valuation`,
-    form: tickerForm(row.title),
+    form: tickerForm(row.title) || filing?.form || "",
+    filingDate: filing?.filingDate ?? null,
+    reportDate: filing?.reportDate ?? null,
   };
 }
 
@@ -119,7 +122,7 @@ judgmentRoutes.get("/", async (c) => {
 
     const open = openByStock.get(stock.id);
     if (open && keyOf(open.detail) === key) {
-      items.push(toItem(open, stock.ticker));
+      items.push(toItem(open, stock.ticker, latest));
       continue;
     }
 
@@ -129,7 +132,7 @@ judgmentRoutes.get("/", async (c) => {
         .set(values)
         .where(and(eq(judgmentItems.id, open.id), eq(judgmentItems.userId, userId)))
         .returning();
-      if (updated[0]) items.push(toItem(updated[0], stock.ticker));
+      if (updated[0]) items.push(toItem(updated[0], stock.ticker, latest));
       continue;
     }
 
@@ -141,7 +144,7 @@ judgmentRoutes.get("/", async (c) => {
         ...values,
       })
       .returning();
-    if (inserted[0]) items.push(toItem(inserted[0], stock.ticker));
+    if (inserted[0]) items.push(toItem(inserted[0], stock.ticker, latest));
   }
 
   return c.json({ items });

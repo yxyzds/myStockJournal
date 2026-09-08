@@ -90,4 +90,6 @@ export type JudgmentItem = {
   actionLabel: string;
   actionHref: string;
   form: string;
+  filingDate: string | null;
+  reportDate: string | null;
 };

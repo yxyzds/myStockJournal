@@ -21,6 +21,7 @@ import {
 import { reviewDcfAssumptions } from "../ai/dcf-review";
 import { env } from "../env";
 import type { AppEnv } from "../types";
+import { requestLocale } from "../lib/locale";
 import { db } from "../db";
 import { stocks, valuationModels, valuationSnapshots } from "../db/schema";
 import { recordDecision } from "../lib/decisions";
@@ -214,6 +215,7 @@ valuationRoutes.post("/:ticker/valuation/dcf/ai-review", async (c) => {
       assumptions: parsed.value,
       anchors: loaded.anchors,
       currentPrice: loaded.ctx.currentPrice,
+      language: requestLocale(c.req.header("accept-language")),
     });
     await db
       .update(stocks)

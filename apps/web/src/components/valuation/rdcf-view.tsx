@@ -10,6 +10,7 @@ import {
   type FilingRef,
   type RdcfInputs,
 } from "@mystockjournal/shared";
+import { useI18n, type MessageKey } from "@/i18n";
 import type { MethodViewProps } from "./actions";
 import {
   AnchorRow,
@@ -25,32 +26,12 @@ import {
 } from "./primitives";
 
 const HELD_DRIVERS = [
-  {
-    key: "wacc",
-    label: "WACC (discount rate)",
-    hint: "Discount rate applied to free cash flows and the terminal value while solving for implied Y1–5 growth.",
-  },
-  {
-    key: "termGrowth",
-    label: "Terminal growth (g)",
-    hint: "Perpetual growth after year 10. Must stay below WACC or the reverse DCF cannot solve.",
-  },
-  {
-    key: "fcfMarginY1",
-    label: "FCF margin Y1",
-    hint: "FCF / revenue in year 1. Prefill: (TTM operating cash flow − TTM CapEx) ÷ TTM revenue from filings. Held constant while growth is solved.",
-  },
-  {
-    key: "fcfMarginTerm",
-    label: "FCF margin terminal",
-    hint: "FCF / revenue in year 10; margin fades from Y1 to this rate. Held constant in the reverse DCF.",
-  },
-  {
-    key: "growthY6_10",
-    label: "Revenue growth Y6–10 (rule)",
-    hint: "Growth assumed for years 6–10 while the model solves only for the Y1–5 CAGR implied by today's price.",
-  },
-] as const satisfies readonly { key: keyof RdcfInputs; label: string; hint: string }[];
+  { key: "wacc", label: "rdcf.wacc", hint: "rdcf.waccHint" },
+  { key: "termGrowth", label: "rdcf.termGrowth", hint: "rdcf.termGrowthHint" },
+  { key: "fcfMarginY1", label: "rdcf.fcfMarginY1", hint: "rdcf.fcfMarginY1Hint" },
+  { key: "fcfMarginTerm", label: "rdcf.fcfMarginTerm", hint: "rdcf.fcfMarginTermHint" },
+  { key: "growthY6_10", label: "rdcf.growthY610", hint: "rdcf.growthY610Hint" },
+] as const satisfies readonly { key: keyof RdcfInputs; label: MessageKey; hint: MessageKey }[];
 
 export type RdcfViewProps = MethodViewProps & {
   assumptions: RdcfInputs;
@@ -69,6 +50,7 @@ export function RdcfView({
   onOpenDcf,
   actions,
 }: RdcfViewProps) {
+  const { t } = useI18n();
   const result = useMemo(() => valueRdcf(assumptions, currentPrice), [assumptions, currentPrice]);
   const ready = dcfModelReady(assumptions);
   const implied = ready ? result.impliedGrowthY1_5 : null;
@@ -125,7 +107,7 @@ export function RdcfView({
           onClick={onOpenDcf}
           className="rounded-[9px] bg-slate-100 px-3.5 py-2 text-[12px] font-bold text-slate-700 hover:bg-slate-200"
         >
-          Open in DCF →
+          {t("rdcf.openInDcf")}
         </button>
         <button
           type="button"
@@ -133,7 +115,7 @@ export function RdcfView({
           disabled={actions.saving || !ready}
           className="rounded-[9px] bg-slate-900 px-3.5 py-2 text-[12px] font-bold text-white hover:bg-slate-800 disabled:opacity-60"
         >
-          {actions.saved ? "Saved ✓" : actions.saving ? "Saving…" : "Save this model"}
+          {actions.saved ? t("common.saved") : actions.saving ? t("common.saving") : t("valuation.saveModel")}
         </button>
       </div>
     </div>
@@ -155,13 +137,14 @@ function HeroSection({
   baselineGrowth: number;
   ready: boolean;
 }) {
+  const { t } = useI18n();
   const faster = implied != null && implied > baselineGrowth;
 
   return (
     <Card className="rounded-[16px]">
       <div className="bg-slate-900 px-6 py-2.5">
         <span className="text-[11px] font-bold tracking-wider text-slate-400 uppercase">
-          What is the market pricing in?
+          {t("rdcf.marketPricing")}
         </span>
       </div>
 
@@ -169,7 +152,7 @@ function HeroSection({
         <div className="flex flex-wrap items-start gap-6 md:gap-8">
           <div>
             <p className="mb-1 text-[10px] font-bold tracking-wide text-slate-400 uppercase">
-              Current price
+              {t("rdcf.currentPrice")}
             </p>
             <span className="font-mono text-[32px] font-bold text-slate-800 tabular-nums">
               ${fmt2(currentPrice)}
@@ -180,7 +163,7 @@ function HeroSection({
 
           <div>
             <p className="mb-1 text-[10px] font-bold tracking-wide text-slate-400 uppercase">
-              Implied revenue CAGR · Y1–5
+              {t("rdcf.impliedCagr")}
             </p>
             <span
               className={`font-mono text-[44px] leading-none font-bold tabular-nums md:text-[56px] ${
@@ -194,7 +177,7 @@ function HeroSection({
           <div className="flex flex-col gap-2.5 pt-1 md:ml-auto">
             <div className="rounded-[10px] border border-slate-100 bg-slate-50 px-4 py-2.5">
               <p className="mb-[3px] text-[9px] font-bold tracking-wide text-slate-400 uppercase">
-                Y6–10 rule (held)
+                {t("rdcf.y610Held")}
               </p>
               <span className="font-mono text-[18px] font-bold text-slate-700 tabular-nums">
                 {fmtPct(assumptions.growthY6_10)}
@@ -202,7 +185,7 @@ function HeroSection({
             </div>
             <div className="rounded-[10px] border border-slate-100 bg-slate-50 px-4 py-2.5">
               <p className="mb-[3px] text-[9px] font-bold tracking-wide text-slate-400 uppercase">
-                Target EV
+                {t("rdcf.targetEv")}
               </p>
               <span className="font-mono text-[18px] font-bold text-slate-700 tabular-nums">
                 {ready ? fmtMoneyM(targetEv) : "—"}
@@ -222,21 +205,21 @@ function HeroSection({
         >
           {implied == null ? (
             <p className="text-[13px] leading-relaxed text-slate-600">
-              No growth rate reconciles ${fmt2(currentPrice)} to these held-constant inputs. Check
-              that WACC comfortably exceeds terminal growth.
+              {t("rdcf.noSolve", { price: fmt2(currentPrice) })}
             </p>
           ) : (
             <p
               className={`text-[13px] leading-relaxed ${faster ? "text-amber-800" : "text-blue-800"}`}
             >
-              At <strong>${fmt2(currentPrice)}</strong>, the market is implying approximately{" "}
-              <strong>{fmtPct(implied)}</strong> revenue growth over the next five years — given your
-              held-constant FCF margins ({fmtPct(assumptions.fcfMarginY1)} →{" "}
-              {fmtPct(assumptions.fcfMarginTerm)}), WACC {fmtPct(assumptions.wacc)}, and terminal
-              growth {fmtPct(assumptions.termGrowth)}.
-              {faster
-                ? " That is faster than your DCF base assumption."
-                : " That is slower than your DCF base assumption."}
+              {t("rdcf.imply", {
+                price: fmt2(currentPrice),
+                implied: fmtPct(implied),
+                y1: fmtPct(assumptions.fcfMarginY1),
+                term: fmtPct(assumptions.fcfMarginTerm),
+                wacc: fmtPct(assumptions.wacc),
+                g: fmtPct(assumptions.termGrowth),
+              })}
+              {faster ? t("rdcf.faster") : t("rdcf.slower")}
             </p>
           )}
         </div>
@@ -256,38 +239,39 @@ function ComparisonSection({
   dcfBaseline: DcfInputs;
   onOpenDcf: () => void;
 }) {
+  const { t } = useI18n();
   const faster = implied != null && implied > dcfBaseline.growthY1_5;
 
   const rows = [
     {
-      label: "Revenue CAGR Y1–5",
+      label: t("rdcf.cagrY15"),
       market: implied == null ? "—" : fmtPct(implied),
       yours: fmtPct(dcfBaseline.growthY1_5),
       solved: true,
     },
     {
-      label: "Revenue growth Y6–10",
-      market: `${fmtPct(assumptions.growthY6_10)} (rule)`,
+      label: t("rdcf.growthY610Row"),
+      market: `${fmtPct(assumptions.growthY6_10)} ${t("rdcf.rule")}`,
       yours: fmtPct(dcfBaseline.growthY6_10),
     },
     {
-      label: "FCF margin Y1",
-      market: `${fmtPct(assumptions.fcfMarginY1)} (held)`,
+      label: t("rdcf.fcfMarginY1"),
+      market: `${fmtPct(assumptions.fcfMarginY1)} ${t("rdcf.held")}`,
       yours: fmtPct(dcfBaseline.fcfMarginY1),
     },
     {
-      label: "FCF margin terminal",
-      market: `${fmtPct(assumptions.fcfMarginTerm)} (held)`,
+      label: t("rdcf.fcfMarginTerm"),
+      market: `${fmtPct(assumptions.fcfMarginTerm)} ${t("rdcf.held")}`,
       yours: fmtPct(dcfBaseline.fcfMarginTerm),
     },
     {
-      label: "WACC",
-      market: `${fmtPct(assumptions.wacc)} (held)`,
+      label: t("rdcf.wacc"),
+      market: `${fmtPct(assumptions.wacc)} ${t("rdcf.held")}`,
       yours: fmtPct(dcfBaseline.wacc),
     },
     {
-      label: "Terminal growth",
-      market: `${fmtPct(assumptions.termGrowth)} (held)`,
+      label: t("rdcf.termGrowth"),
+      market: `${fmtPct(assumptions.termGrowth)} ${t("rdcf.held")}`,
       yours: fmtPct(dcfBaseline.termGrowth),
     },
   ];
@@ -295,8 +279,8 @@ function ComparisonSection({
   return (
     <Card>
       <CardHeader
-        title="Market-implied vs. my DCF base"
-        subtitle="Only growth differs — every other input is held constant"
+        title={t("rdcf.compareTitle")}
+        subtitle={t("rdcf.compareSub")}
         right={
           implied == null ? null : (
             <div
@@ -306,7 +290,7 @@ function ComparisonSection({
               <span
                 className={`text-[11px] font-semibold ${faster ? "text-amber-700" : "text-blue-700"}`}
               >
-                {faster ? "Market implies faster growth" : "Market implies slower growth"}
+                {faster ? t("rdcf.marketFaster") : t("rdcf.marketSlower")}
               </span>
             </div>
           )
@@ -317,7 +301,7 @@ function ComparisonSection({
         <table className="w-full min-w-[420px] border-collapse">
           <thead>
             <tr className="bg-slate-50">
-              {["", "Market-implied", "My DCF base"].map((heading, index) => (
+              {["", t("rdcf.colMarket"), t("rdcf.colMine")].map((heading, index) => (
                 <th key={index} className="px-5 py-2 text-left">
                   <span className="text-[10px] font-bold tracking-wide text-slate-400 uppercase">
                     {heading}
@@ -366,7 +350,7 @@ function ComparisonSection({
           onClick={onOpenDcf}
           className="rounded-[7px] bg-blue-600 px-3 py-1.5 text-[11px] font-bold text-white hover:bg-blue-700"
         >
-          Edit my assumptions in DCF
+          {t("rdcf.editInDcf")}
         </button>
       </div>
     </Card>
@@ -443,26 +427,27 @@ function HeldConstantsSection({
   currentPrice: number;
   onField: <K extends keyof RdcfInputs>(key: K, value: RdcfInputs[K]) => void;
 }) {
+  const { t } = useI18n();
   // Filed figures are facts, so they are only typed in when no filing covered the ticker.
   const manualEntry = !anchorsAvailable;
 
   return (
     <Card>
       <CardHeader
-        title="Held-constant inputs"
-        subtitle="Changing these changes the growth needed to justify today's price"
+        title={t("rdcf.heldTitle")}
+        subtitle={t("rdcf.heldSub")}
       />
 
       <div className="flex flex-col gap-4 p-5 md:flex-row">
         <div className="flex-1 rounded-[10px] border border-slate-100 bg-slate-50 p-3.5">
           <div className="mb-2.5">
             <span className="text-[11px] font-bold tracking-wide text-slate-500 uppercase">
-              Anchors
+              {t("dcf.anchors")}
             </span>
             <div className="mt-px">
               {manualEntry ? (
                 <p className="text-[10px] text-slate-400">
-                  No filing data — enter the figures yourself
+                  {t("rdcf.noFiling")}
                 </p>
               ) : (
                 <FilingSourceNote period={anchorPeriod} filings={sourceFilings} />
@@ -472,72 +457,71 @@ function HeldConstantsSection({
 
           <div className="flex flex-col">
             <AnchorRow
-              label="TTM revenue"
-              display={`$${assumptions.ttmRevenue.toLocaleString()}M`}
+              label={t("dcf.ttmRevenue")}
+              display={`$${assumptions.ttmRevenue.toLocaleString("en-US")}M`}
               editable={manualEntry}
               value={assumptions.ttmRevenue}
               limits={{ min: 0.01, max: 1e7, step: 1 }}
               onChange={(v) => onField("ttmRevenue", v)}
             />
             <AnchorRow
-              label="Cash & investments"
-              display={`$${assumptions.cash.toLocaleString()}M`}
+              label={t("dcf.cash")}
+              display={`$${assumptions.cash.toLocaleString("en-US")}M`}
               editable={manualEntry}
               value={assumptions.cash}
               limits={{ min: 0, max: 1e7, step: 1 }}
               onChange={(v) => onField("cash", v)}
             />
             <AnchorRow
-              label="Total debt"
-              display={`$${assumptions.debt.toLocaleString()}M`}
+              label={t("dcf.debt")}
+              display={`$${assumptions.debt.toLocaleString("en-US")}M`}
               editable={manualEntry}
               value={assumptions.debt}
               limits={{ min: 0, max: 1e7, step: 1 }}
               onChange={(v) => onField("debt", v)}
             />
             <AnchorRow
-              label="Diluted shares"
-              display={`${assumptions.shares.toLocaleString()}M`}
+              label={t("dcf.shares")}
+              display={`${assumptions.shares.toLocaleString("en-US")}M`}
               editable={manualEntry}
               value={assumptions.shares}
               limits={{ min: 0.0001, max: 1e6, step: 1 }}
               onChange={(v) => onField("shares", v)}
             />
             <AnchorRow
-              label="Current market price"
+              label={t("rdcf.currentMarketPrice")}
               display={`$${fmt2(currentPrice)}`}
-              note="Locked — this is what the model solves from"
+              note={t("rdcf.lockedPrice")}
             />
             {past5YCagr != null && (
               <AnchorRow
-                label="Past 5Y revenue CAGR"
+                label={t("rdcf.past5y")}
                 display={fmtPct(past5YCagr)}
-                note="Reference only · not used in the model"
+                note={t("valuation.referenceOnly")}
               />
             )}
           </div>
 
           <p className="mt-2.5 border-t border-slate-200 pt-2 text-[10px] leading-snug text-slate-400 italic">
-            Cash and debt are not part of yearly FCF. They convert enterprise value into equity
-            value.
+            {t("rdcf.cashDebtHelp")}
           </p>
         </div>
 
         <div className="flex-1 rounded-[10px] border border-blue-100 bg-white p-3.5">
           <div className="mb-2.5">
             <span className="text-[11px] font-bold tracking-wide text-blue-700 uppercase">
-              Held-constant drivers
+              {t("rdcf.heldDrivers")}
             </span>
             <p className="mt-px text-[10px] text-blue-400">
-              Edit to see how the implied growth moves
+              {t("rdcf.heldDriversSub")}
             </p>
           </div>
           <div className="flex flex-col gap-2">
             {HELD_DRIVERS.map((driver) => (
               <HeldDriverRow
                 key={driver.key}
-                label={driver.label}
-                hint={driver.hint}
+                label={t(driver.label)}
+                hint={t(driver.hint)}
                 value={assumptions[driver.key]}
                 limits={DRIVER_LIMITS[driver.key]}
                 onChange={(value) => onField(driver.key, value)}
@@ -568,23 +552,24 @@ function MarketBridgeSection({
   pvFcfs: number;
   pvTv: number;
 }) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
 
   const chain = [
     {
-      label: "Current price",
+      label: t("rdcf.currentPrice"),
       value: `$${fmt2(currentPrice)}`,
-      note: `× ${assumptions.shares.toLocaleString()}M shares`,
+      note: t("rdcf.timesShares", { shares: assumptions.shares.toLocaleString("en-US") }),
     },
-    { label: "= Market cap", value: fmtMoneyM(marketCap) },
-    { label: "− Cash & investments", value: `(${fmtMoneyM(assumptions.cash)})`, negative: true },
-    { label: "+ Total debt", value: fmtMoneyM(assumptions.debt) },
-    { label: "= Target EV", value: fmtMoneyM(targetEv), strong: true },
+    { label: t("rdcf.eqMarketCap"), value: fmtMoneyM(marketCap) },
+    { label: t("rdcf.minusCash"), value: `(${fmtMoneyM(assumptions.cash)})`, negative: true },
+    { label: t("rdcf.plusDebt"), value: fmtMoneyM(assumptions.debt) },
+    { label: t("rdcf.eqTargetEv"), value: fmtMoneyM(targetEv), strong: true },
   ];
 
   return (
     <Card>
-      <CardHeader title="Market-price bridge" subtitle="How today's price maps to an implied EV" />
+      <CardHeader title={t("rdcf.priceBridge")} subtitle={t("rdcf.priceBridgeSub")} />
 
       <div className="px-5 py-4 md:px-6">
         {chain.map((row, index) => (
@@ -620,14 +605,14 @@ function MarketBridgeSection({
               className="mt-2 flex w-full items-center gap-1.5 border-t border-dashed border-slate-200 pt-2 text-[11px] font-semibold text-slate-400 hover:text-blue-600"
             >
               <Chevron open={open} />
-              {open ? "Hide EV breakdown" : "Show EV breakdown (PV FCFs + PV terminal value)"}
+              {open ? t("rdcf.hideEv") : t("rdcf.showEv")}
             </button>
 
             {open && (
               <div className="mt-2 flex flex-col gap-1 pl-3">
                 {[
-                  { label: "PV of projected FCFs (Y1–10)", value: pvFcfs },
-                  { label: "PV of terminal value", value: pvTv, highlight: true },
+                  { label: t("rdcf.pvFcfsY110"), value: pvFcfs },
+                  { label: t("dcf.pvTerminal"), value: pvTv, highlight: true },
                 ].map((row) => (
                   <div
                     key={row.label}
@@ -638,7 +623,7 @@ function MarketBridgeSection({
                     <div>
                       <span className="text-[11px] text-slate-600">{row.label}</span>
                       <p className="text-[10px] text-slate-400">
-                        {fmtPct((row.value / ev) * 100)} of EV
+                        {t("rdcf.ofEv", { pct: fmtPct((row.value / ev) * 100) })}
                       </p>
                     </div>
                     <span className="font-mono text-[13px] font-semibold text-slate-700 tabular-nums">
@@ -647,7 +632,7 @@ function MarketBridgeSection({
                   </div>
                 ))}
                 <div className="mt-0.5 flex items-center justify-between border-t-2 border-slate-200 px-3 py-[7px]">
-                  <span className="text-[12px] font-bold text-slate-800">= EV (implied)</span>
+                  <span className="text-[12px] font-bold text-slate-800">{t("rdcf.eqEvImplied")}</span>
                   <span className="font-mono text-[14px] font-bold text-slate-900 tabular-nums">
                     {fmtMoneyM(ev)}
                   </span>
@@ -662,6 +647,7 @@ function MarketBridgeSection({
 }
 
 function ForecastSection({ rows, tv }: { rows: DcfYearRow[]; tv: number }) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const lastIndex = rows.length - 1;
 
@@ -674,10 +660,10 @@ function ForecastSection({ rows, tv }: { rows: DcfYearRow[]; tv: number }) {
       >
         <div>
           <p className="text-[13px] font-bold text-slate-900">
-            10-year path under market-implied growth
+            {t("rdcf.forecastTitle")}
           </p>
           <p className="mt-px text-[11px] text-slate-400">
-            Terminal value {fmtMoneyM(tv)} · open to verify the year-by-year path behind EV
+            {t("rdcf.forecastSub", { tv: fmtMoneyM(tv) })}
           </p>
         </div>
         <Chevron open={open} className="text-slate-400" />
@@ -688,15 +674,20 @@ function ForecastSection({ rows, tv }: { rows: DcfYearRow[]; tv: number }) {
           <table className="w-full min-w-[700px] border-collapse text-left">
             <thead>
               <tr className="border-b border-slate-100 bg-slate-50">
-                {["Year", "Revenue $M", "Growth", "FCF margin", "FCF $M", "Terminal value"].map(
-                  (heading) => (
-                    <th key={heading} className="px-3.5 py-2">
-                      <span className="text-[10px] font-bold tracking-wide whitespace-nowrap text-slate-400 uppercase">
-                        {heading}
-                      </span>
-                    </th>
-                  ),
-                )}
+                {[
+                  t("rdcf.colYear"),
+                  t("rdcf.colRevenue"),
+                  t("rdcf.colGrowth"),
+                  t("dcf.fcfMargin"),
+                  t("rdcf.colFcf"),
+                  t("dcf.terminalValue"),
+                ].map((heading) => (
+                  <th key={heading} className="px-3.5 py-2">
+                    <span className="text-[10px] font-bold tracking-wide whitespace-nowrap text-slate-400 uppercase">
+                      {heading}
+                    </span>
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
@@ -714,14 +705,14 @@ function ForecastSection({ rows, tv }: { rows: DcfYearRow[]; tv: number }) {
                         </span>
                         {terminal && (
                           <span className="rounded-[4px] bg-blue-100 px-[5px] py-px text-[9px] font-bold text-blue-500">
-                            Terminal
+                            {t("rdcf.terminal")}
                           </span>
                         )}
                       </div>
                     </td>
                     <td className="px-3.5 py-[7px]">
                       <span className="font-mono text-[12px] text-slate-700 tabular-nums">
-                        {Math.round(row.revenue).toLocaleString()}
+                        {Math.round(row.revenue).toLocaleString("en-US")}
                       </span>
                     </td>
                     <td className="px-3.5 py-[7px]">
@@ -730,7 +721,7 @@ function ForecastSection({ rows, tv }: { rows: DcfYearRow[]; tv: number }) {
                           {fmtPct(row.growthPct)}
                         </span>
                         {index < 5 && (
-                          <span className="text-[9px] font-semibold text-amber-500">(implied)</span>
+                          <span className="text-[9px] font-semibold text-amber-500">{t("rdcf.implied")}</span>
                         )}
                       </div>
                     </td>
@@ -741,13 +732,13 @@ function ForecastSection({ rows, tv }: { rows: DcfYearRow[]; tv: number }) {
                     </td>
                     <td className="px-3.5 py-[7px]">
                       <span className="font-mono text-[12px] font-semibold text-slate-700 tabular-nums">
-                        {Math.round(row.fcf).toLocaleString()}
+                        {Math.round(row.fcf).toLocaleString("en-US")}
                       </span>
                     </td>
                     <td className="px-3.5 py-[7px]">
                       {terminal ? (
                         <span className="font-mono text-[12px] font-bold text-blue-600 tabular-nums">
-                          {Math.round(tv).toLocaleString()}
+                          {Math.round(tv).toLocaleString("en-US")}
                         </span>
                       ) : (
                         <span className="text-[11px] text-slate-300">—</span>

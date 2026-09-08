@@ -3,17 +3,23 @@
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
-import {
-  METHOD_LABELS,
-  type Quote,
-  type ValuationMethod,
-  type WatchlistItem,
-} from "@mystockjournal/shared";
+import { type Quote, type ValuationMethod, type WatchlistItem } from "@mystockjournal/shared";
 import { Input } from "@/components/ui/input";
 import { useDebounced } from "@/hooks/use-debounced";
+import { useI18n } from "@/i18n";
 import { api } from "@/lib/api";
 import { formatPercent, formatPrice, formatQuoteAsOf } from "@/lib/format";
 import { stockHref } from "@/lib/mock-journal";
+
+const METHOD_KEYS = {
+  dcf: "methods.dcf",
+  rdcf: "methods.rdcf",
+  pe: "methods.pe",
+  evebitda: "methods.evebitda",
+  sotp: "methods.sotp",
+} as const satisfies Record<ValuationMethod, string>;
+
+type ColId = "ticker" | "close" | "name" | "change" | "fv" | "vs";
 
 type Row = {
   ticker: string;
@@ -87,9 +93,9 @@ function FairValueLink({
   row: Row;
   layout: "desktop" | "mobile";
 }) {
+  const { t } = useI18n();
   const href = valuationHref(row.ticker);
-  const methodLabel =
-    row.fairValueMethod != null ? METHOD_LABELS[row.fairValueMethod] : null;
+  const methodLabel = row.fairValueMethod != null ? t(METHOD_KEYS[row.fairValueMethod]) : null;
 
   if (row.fairValue == null) {
     return (
@@ -102,7 +108,7 @@ function FairValueLink({
             : "relative z-10 inline-flex items-center rounded-md border border-dashed border-slate-300 px-2 py-0.5 text-[11px] font-semibold text-slate-500 hover:border-blue-400 hover:text-blue-700"
         }
       >
-        +Valuation
+        {t("watchList.addValuation")}
       </Link>
     );
   }
@@ -115,7 +121,7 @@ function FairValueLink({
         className="relative z-10 flex flex-col items-center gap-0.5 rounded-md px-1 hover:bg-slate-50"
       >
         <span className="font-mono text-[13px] font-semibold tabular-nums text-slate-700">
-          {formatPrice(row.fairValue, row.currency)}
+          {formatPrice(row.fairValue)}
         </span>
         {methodLabel && (
           <span className="text-[9px] font-bold tracking-wide text-blue-600 uppercase">
@@ -133,7 +139,7 @@ function FairValueLink({
       className="relative z-10 inline-flex w-fit flex-col items-start gap-0.5 rounded-md hover:bg-slate-50"
     >
       <span className="font-mono text-[14px] tabular-nums text-slate-700">
-        {formatPrice(row.fairValue, row.currency)}
+        {formatPrice(row.fairValue)}
       </span>
       {methodLabel && (
         <span className="text-[10px] font-semibold tracking-wide text-blue-600 uppercase">
@@ -155,6 +161,7 @@ function RowAction({
   pending: boolean;
   onClick: (ticker: string) => void;
 }) {
+  const { t } = useI18n();
   const isAdd = kind === "add";
   return (
     <button
@@ -165,14 +172,14 @@ function RowAction({
         e.stopPropagation();
         onClick(ticker);
       }}
-      aria-label={isAdd ? `Add ${ticker} to watch list` : `Remove ${ticker} from watch list`}
+      aria-label={isAdd ? t("watchList.addAria", { ticker }) : t("watchList.removeAria", { ticker })}
       className={
         isAdd
           ? "rounded-md border border-blue-200 px-2 py-1 text-[11px] font-semibold text-blue-600 hover:bg-blue-50 disabled:opacity-50"
           : "flex size-7 items-center justify-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50"
       }
     >
-      {isAdd ? (pending ? "…" : "Add") : pending ? "…" : "×"}
+      {isAdd ? (pending ? "…" : t("common.add")) : pending ? "…" : "×"}
     </button>
   );
 }
@@ -190,6 +197,8 @@ function RemoveConfirmDialog({
   onCancel: () => void;
   onConfirm: () => void;
 }) {
+  const { t } = useI18n();
+
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape" && !pending) onCancel();
@@ -202,7 +211,7 @@ function RemoveConfirmDialog({
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <button
         type="button"
-        aria-label="Dismiss"
+        aria-label={t("common.dismiss")}
         disabled={pending}
         className="absolute inset-0 bg-slate-900/30"
         onClick={onCancel}
@@ -214,10 +223,10 @@ function RemoveConfirmDialog({
         className="relative w-full max-w-[360px] rounded-2xl border border-slate-100 bg-white p-5 shadow-[0_8px_40px_rgba(15,23,42,0.12)]"
       >
         <h3 id="remove-watch-title" className="font-heading text-[18px] font-bold text-slate-900">
-          Remove {ticker}?
+          {t("watchList.removeTitle", { ticker })}
         </h3>
         <p className="mt-2 text-[13px] leading-relaxed text-slate-500">
-          {name} will leave your Watch List. Journal entries stay.
+          {t("watchList.removeBody", { name })}
         </p>
         <div className="mt-5 flex justify-end gap-2">
           <button
@@ -226,7 +235,7 @@ function RemoveConfirmDialog({
             onClick={onCancel}
             className="rounded-lg border border-slate-200 px-3 py-1.5 text-[13px] font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"
           >
-            Cancel
+            {t("common.cancel")}
           </button>
           <button
             type="button"
@@ -234,7 +243,7 @@ function RemoveConfirmDialog({
             onClick={onConfirm}
             className="rounded-lg bg-red-50 px-3 py-1.5 text-[13px] font-semibold text-red-600 hover:bg-red-100 disabled:opacity-50"
           >
-            {pending ? "Removing…" : "Remove"}
+            {pending ? t("common.removing") : t("common.remove")}
           </button>
         </div>
       </div>
@@ -249,7 +258,7 @@ function StockRowDesktop({ row }: { row: Row }) {
     <>
       <span className="font-mono text-[15px] font-bold text-slate-900">{row.ticker}</span>
       <span className="font-mono text-[14px] tabular-nums text-slate-700">
-        {formatPrice(row.price, row.currency)}
+        {formatPrice(row.price)}
       </span>
       <FairValueLink row={row} layout="desktop" />
       <span
@@ -274,6 +283,7 @@ function StockRowMobile({
   onAdd: (ticker: string) => void;
   onRemove: (ticker: string) => void;
 }) {
+  const { t } = useI18n();
   const href = stockHref(row.ticker);
   const gap = row.mosPercent;
   const undervalued = (gap ?? 0) >= 0;
@@ -283,26 +293,26 @@ function StockRowMobile({
       <Link
         href={href}
         className="absolute inset-0 z-0 rounded-xl"
-        aria-label={`Open ${row.ticker}`}
+        aria-label={t("watchList.openAria", { ticker: row.ticker })}
       />
       <div className="relative z-10 flex min-w-0 flex-1 items-center justify-between gap-2 pointer-events-none">
         <div className="flex min-w-0 flex-col gap-1">
           <span className="font-mono text-[15px] leading-none font-bold text-slate-900">{row.ticker}</span>
           <div className="flex items-baseline gap-1.5">
             <span className="font-mono text-[13px] tabular-nums text-slate-600">
-              {formatPrice(row.price, row.currency)}
+              {formatPrice(row.price)}
             </span>
-            <span className="text-[10px] text-slate-400">close</span>
+            <span className="text-[10px] text-slate-400">{t("watchList.close")}</span>
           </div>
         </div>
         <div className="pointer-events-auto flex flex-col items-center gap-1">
-          <span className="text-[9px] font-bold tracking-wide text-slate-400 uppercase">Fair Value</span>
+          <span className="text-[9px] font-bold tracking-wide text-slate-400 uppercase">{t("watchList.fairValue")}</span>
           <FairValueLink row={row} layout="mobile" />
         </div>
         <div className="flex flex-col items-end gap-1">
           {row.inWatchlist ? (
             <>
-              <span className="text-[9px] font-bold tracking-wide text-slate-400 uppercase">vs FV</span>
+              <span className="text-[9px] font-bold tracking-wide text-slate-400 uppercase">{t("watchList.vsFv")}</span>
               <span
                 className={`font-mono text-[16px] font-bold tabular-nums ${
                   gap == null ? "text-slate-400" : undervalued ? "text-emerald-600" : "text-red-500"
@@ -327,6 +337,7 @@ function StockRowMobile({
 }
 
 export function WatchList() {
+  const { t } = useI18n();
   const queryClient = useQueryClient();
   const [query, setQuery] = useState("");
   const [removeTarget, setRemoveTarget] = useState<{ ticker: string; name: string } | null>(null);
@@ -376,9 +387,21 @@ export function WatchList() {
 
   const marketSearchRows = (searchQuery.data?.items ?? []).map(toSearchRow);
   const displayedRows = showingMarketSearch ? marketSearchRows : watchlistMatches;
-  const colsHeader = showingMarketSearch
-    ? ["Ticker", "Close Price", "Name", "% Change", ""]
-    : ["Ticker", "Close Price", "My Fair Value", "vs Fair Value", ""];
+  const colsHeader: { id: ColId | ""; label: string }[] = showingMarketSearch
+    ? [
+        { id: "ticker", label: t("watchList.ticker") },
+        { id: "close", label: t("watchList.closePrice") },
+        { id: "name", label: t("watchList.name") },
+        { id: "change", label: t("watchList.pctChange") },
+        { id: "", label: "" },
+      ]
+    : [
+        { id: "ticker", label: t("watchList.ticker") },
+        { id: "close", label: t("watchList.closePrice") },
+        { id: "fv", label: t("watchList.myFairValue") },
+        { id: "vs", label: t("watchList.vsFairValue") },
+        { id: "", label: "" },
+      ];
   const asOfIso = latestFetchedAt(showingMarketSearch ? marketSearchRows : watchRows);
   const asOfLabel = formatQuoteAsOf(asOfIso);
   const busyTicker = addMutation.isPending
@@ -393,7 +416,7 @@ export function WatchList() {
         <div className="mb-4 flex flex-wrap items-end justify-between gap-4 md:mb-5">
           <div>
             <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
-              <h2 className="font-heading text-[20px] font-bold text-slate-900 md:text-2xl">Watch List</h2>
+              <h2 className="font-heading text-[20px] font-bold text-slate-900 md:text-2xl">{t("watchList.title")}</h2>
               {asOfLabel && asOfIso && (
                 <time dateTime={asOfIso} className="font-mono text-[11px] text-slate-400 md:text-[12px]">
                   {asOfLabel}
@@ -401,9 +424,7 @@ export function WatchList() {
               )}
             </div>
             <p className="mt-1 text-[12px] text-slate-400 md:text-[13px]">
-              {showingMarketSearch
-                ? "Not in your list — tap Add to track a ticker."
-                : "vs Fair Value = (fair value − close) ÷ close."}
+              {showingMarketSearch ? t("watchList.hintSearch") : t("watchList.hintWatch")}
             </p>
           </div>
           <div className="relative w-full md:w-[260px]">
@@ -415,7 +436,7 @@ export function WatchList() {
               type="search"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search ticker…"
+              placeholder={t("watchList.searchPlaceholder")}
               className="h-[38px] rounded-[9px] bg-white pr-8 pl-[34px] font-mono text-[13px] [&::-webkit-search-cancel-button]:hidden [&::-webkit-search-decoration]:hidden"
             />
             {query && (
@@ -423,7 +444,7 @@ export function WatchList() {
                 type="button"
                 onClick={() => setQuery("")}
                 className="absolute top-1/2 right-2.5 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                aria-label="Clear search"
+                aria-label={t("common.clearSearch")}
               >
                 <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
                   <path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
@@ -434,24 +455,26 @@ export function WatchList() {
         </div>
 
         {watchQuery.isError && (
-          <p className="mb-4 text-[13px] text-red-500">Couldn’t load quotes. Is the API running?</p>
+          <p className="mb-4 text-[13px] text-red-500">{t("watchList.loadError")}</p>
         )}
         {addMutation.isError && (
-          <p className="mb-4 text-[13px] text-red-500">Couldn’t add that ticker. Try another symbol.</p>
+          <p className="mb-4 text-[13px] text-red-500">{t("watchList.addError")}</p>
         )}
         {removeMutation.isError && (
-          <p className="mb-4 text-[13px] text-red-500">Couldn’t remove that ticker. Try again.</p>
+          <p className="mb-4 text-[13px] text-red-500">{t("watchList.removeError")}</p>
         )}
 
         {/* Mobile layout */}
         <div className="flex flex-col gap-2 md:hidden">
-          {watchQuery.isLoading && <p className="py-6 text-center text-[13px] text-slate-400">Loading quotes…</p>}
+          {watchQuery.isLoading && (
+            <p className="py-6 text-center text-[13px] text-slate-400">{t("watchList.loadingQuotes")}</p>
+          )}
           {showingMarketSearch && searchQuery.isFetching && (
-            <p className="py-6 text-center text-[13px] text-slate-400">Searching market…</p>
+            <p className="py-6 text-center text-[13px] text-slate-400">{t("watchList.searchingMarket")}</p>
           )}
           {!watchQuery.isLoading && !(showingMarketSearch && searchQuery.isFetching) && displayedRows.length === 0 && (
             <p className="py-6 text-center text-[13px] text-slate-400">
-              {q ? `No tickers match “${query}”` : "Your watch list is empty."}
+              {q ? t("watchList.noMatch", { query }) : t("watchList.empty")}
             </p>
           )}
           {!(showingMarketSearch && searchQuery.isFetching) &&
@@ -471,25 +494,23 @@ export function WatchList() {
           <div
             className={`grid ${cols} gap-4 border-b border-slate-100 pb-2 text-[11px] font-semibold tracking-[0.07em] text-slate-400 uppercase`}
           >
-            {colsHeader.map((label, i) => (
+            {colsHeader.map((col, i) => (
               <span
-                key={`${label}-${i}`}
-                className={
-                  label === "% Change" || label === "vs Fair Value" || !label ? "text-right" : undefined
-                }
+                key={`${col.id}-${i}`}
+                className={col.id === "change" || col.id === "vs" || !col.id ? "text-right" : undefined}
               >
-                {label}
+                {col.label}
               </span>
             ))}
           </div>
           <div className="divide-y divide-slate-50">
-            {watchQuery.isLoading && <p className="py-6 text-[13px] text-slate-400">Loading quotes…</p>}
+            {watchQuery.isLoading && <p className="py-6 text-[13px] text-slate-400">{t("watchList.loadingQuotes")}</p>}
             {showingMarketSearch && searchQuery.isFetching && (
-              <p className="py-6 text-[13px] text-slate-400">Searching market…</p>
+              <p className="py-6 text-[13px] text-slate-400">{t("watchList.searchingMarket")}</p>
             )}
             {!watchQuery.isLoading && !(showingMarketSearch && searchQuery.isFetching) && displayedRows.length === 0 && (
               <p className="py-6 text-[13px] text-slate-400">
-                {q ? `No tickers match “${query}”` : "Your watch list is empty."}
+                {q ? t("watchList.noMatch", { query }) : t("watchList.empty")}
               </p>
             )}
             {!(showingMarketSearch && searchQuery.isFetching) &&
@@ -501,14 +522,14 @@ export function WatchList() {
                   <Link
                     href={stockHref(row.ticker)}
                     className="absolute inset-0 z-0 rounded-lg"
-                    aria-label={`Open ${row.ticker}`}
+                    aria-label={t("watchList.openAria", { ticker: row.ticker })}
                   />
                   <div className={`grid ${cols} items-center gap-4 px-3 py-4`}>
                     {showingMarketSearch ? (
                       <>
                         <span className="font-mono text-[15px] font-bold text-slate-900">{row.ticker}</span>
                         <span className="font-mono text-[14px] tabular-nums text-slate-700">
-                          {formatPrice(row.price, row.currency)}
+                          {formatPrice(row.price)}
                         </span>
                         <span className="truncate text-[13px] text-slate-500">{row.name}</span>
                         <span
@@ -531,8 +552,8 @@ export function WatchList() {
                         pending={busyTicker === row.ticker}
                         onClick={
                           row.inWatchlist
-                            ? (t) => setRemoveTarget({ ticker: t, name: row.name })
-                            : (t) => addMutation.mutate(t)
+                            ? (symbol) => setRemoveTarget({ ticker: symbol, name: row.name })
+                            : (symbol) => addMutation.mutate(symbol)
                         }
                       />
                     </div>

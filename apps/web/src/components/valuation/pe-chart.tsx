@@ -2,6 +2,7 @@
 
 import { useCallback, useMemo, useRef, useState } from "react";
 import type { PeSeriesPoint } from "@mystockjournal/shared";
+import { useI18n } from "@/i18n";
 
 const VIEW_W = 600;
 const VIEW_H = 220;
@@ -67,6 +68,7 @@ export function PeChart({
   label: string;
   emptyReason?: string | null;
 }) {
+  const { t } = useI18n();
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
 
@@ -166,8 +168,7 @@ export function PeChart({
           </p>
         ) : (
           <p className="text-[12px] text-slate-400">
-            No multiple history on file for this ticker yet, so there is nothing to compare your
-            expected multiple against.
+            {t("pe.emptyChart")}
           </p>
         )}
       </div>
@@ -187,7 +188,13 @@ export function PeChart({
       viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
       className="w-full"
       role="img"
-      aria-label={`${label} ${mode === "peg" ? "PEG" : mode === "evebitda" ? "EV/EBITDA" : "P/E"} history`}
+      aria-label={
+        mode === "peg"
+          ? t("pe.historyAriaPeg", { ticker: label })
+          : mode === "evebitda"
+            ? t("pe.historyAriaEvebitda", { ticker: label })
+            : t("pe.historyAriaPe", { ticker: label })
+      }
       onMouseMove={handleMouseMove}
       onMouseLeave={() => setHoverIndex(null)}
     >

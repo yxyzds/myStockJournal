@@ -2,14 +2,29 @@
 
 import { useState } from "react";
 import type { QuarterlyActual } from "@mystockjournal/shared";
+import { useI18n, type MessageKey } from "@/i18n";
 import { fmtSigned } from "./primitives";
 
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const MONTH_KEYS = [
+  "actuals.months.1",
+  "actuals.months.2",
+  "actuals.months.3",
+  "actuals.months.4",
+  "actuals.months.5",
+  "actuals.months.6",
+  "actuals.months.7",
+  "actuals.months.8",
+  "actuals.months.9",
+  "actuals.months.10",
+  "actuals.months.11",
+  "actuals.months.12",
+] as const satisfies readonly MessageKey[];
 
-function monthLabel(end: string) {
+function monthLabel(end: string, t: (key: MessageKey) => string) {
   const month = Number(end.slice(5, 7));
   const year = end.slice(0, 4);
-  return `${MONTHS[month - 1] ?? end.slice(5, 7)} ${year}`;
+  const key = MONTH_KEYS[month - 1];
+  return `${key ? t(key) : end.slice(5, 7)} ${year}`;
 }
 
 function fmtActualMoney(value: number) {
@@ -19,7 +34,7 @@ function fmtActualMoney(value: number) {
     const billions = abs / 1000;
     return `${sign}$${billions >= 10 ? billions.toFixed(0) : billions.toFixed(1)}B`;
   }
-  if (abs >= 100) return `${sign}$${Math.round(abs).toLocaleString()}M`;
+  if (abs >= 100) return `${sign}$${Math.round(abs).toLocaleString("en-US")}M`;
   return `${sign}$${abs.toFixed(1)}M`;
 }
 
@@ -29,28 +44,33 @@ function fmtMargin(value: number | null) {
 }
 
 export function ActualsStrip({ actuals }: { actuals: QuarterlyActual[] }) {
+  const { t } = useI18n();
   const tabs = [...actuals].reverse();
   const [end, setEnd] = useState(tabs[0]?.end ?? "");
   const selected = tabs.find((row) => row.end === end) ?? tabs[0];
   if (!selected) return null;
 
   const metrics = [
-    { label: "Revenue", value: fmtActualMoney(selected.revenue), note: "actual" },
+    { label: t("actuals.revenue"), value: fmtActualMoney(selected.revenue), note: t("actuals.actual") },
     {
-      label: "YoY growth",
+      label: t("actuals.yoy"),
       value: selected.yoyGrowth == null ? "—" : fmtSigned(selected.yoyGrowth),
-      note: "vs prior yr",
+      note: t("actuals.vsPrior"),
     },
-    { label: "FCF margin", value: fmtMargin(selected.fcfMargin), note: "of revenue" },
-    { label: "FCF", value: selected.fcf == null ? "—" : fmtActualMoney(selected.fcf), note: "free cash flow" },
-    { label: "Op. margin", value: fmtMargin(selected.opMargin), note: "GAAP" },
+    { label: t("actuals.fcfMargin"), value: fmtMargin(selected.fcfMargin), note: t("actuals.ofRevenue") },
+    {
+      label: t("actuals.fcf"),
+      value: selected.fcf == null ? "—" : fmtActualMoney(selected.fcf),
+      note: t("actuals.freeCashFlow"),
+    },
+    { label: t("actuals.opMargin"), value: fmtMargin(selected.opMargin), note: t("actuals.gaap") },
   ];
 
   return (
     <div className="overflow-hidden rounded-[10px] border border-slate-200 bg-white">
       <div className="flex items-end gap-3 overflow-x-auto border-b border-slate-100 px-3 pt-2">
         <span className="mb-1.5 shrink-0 text-[9px] font-bold tracking-[0.12em] text-slate-400 uppercase">
-          Actuals
+          {t("actuals.title")}
         </span>
         {tabs.map((row) => {
           const active = row.end === selected.end;
@@ -64,10 +84,10 @@ export function ActualsStrip({ actuals }: { actuals: QuarterlyActual[] }) {
               }`}
             >
               <span className={`block text-[11px] font-bold ${active ? "text-blue-600" : "text-slate-700"}`}>
-                Q{row.quarter} FY{String(row.fy).slice(-2)}
+                {t("actuals.quarter", { q: row.quarter, yy: String(row.fy).slice(-2) })}
               </span>
               <span className={`block text-[9px] ${active ? "text-blue-500" : "text-slate-400"}`}>
-                {monthLabel(row.end)}
+                {monthLabel(row.end, t)}
               </span>
             </button>
           );

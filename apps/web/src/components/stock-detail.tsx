@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import {
-  METHOD_LABELS as VALUATION_METHOD_LABELS,
   fairValueFromOutputs,
   type JournalEntry,
   type StockDetail,
@@ -15,8 +14,26 @@ import {
   type ValuationWorkbench,
 } from "@mystockjournal/shared";
 import { AccountAvatar } from "@/components/account-avatar";
+import { NavLocaleToggle } from "@/components/language-switcher";
+import { useI18n, type Translate } from "@/i18n";
 import { ApiError, api } from "@/lib/api";
-import { formatEntryDate, formatPrice, isCalendarDate, todayNyDate } from "@/lib/format";
+import { formatEntryDate, formatPrice, formatShortDate, isCalendarDate, todayNyDate } from "@/lib/format";
+
+const GRADE_KEYS = {
+  Clownery: "grades.Clownery",
+  Copeium: "grades.Copeium",
+  Midtake: "grades.Midtake",
+  Based: "grades.Based",
+  Oracle: "grades.Oracle",
+} as const;
+
+const METHOD_KEYS = {
+  dcf: "methods.dcf",
+  rdcf: "methods.rdcf",
+  pe: "methods.pe",
+  evebitda: "methods.evebitda",
+  sotp: "methods.sotp",
+} as const;
 
 function parseMoney(raw: string) {
   const cleaned = raw.replace(/[$,\s]/g, "");
@@ -39,15 +56,18 @@ type TxnFormErrors = {
   rationale?: string;
 };
 
-function validateTxnForm(input: { price: string; qty: string; date: string; rationale: string }): TxnFormErrors {
+function validateTxnForm(
+  input: { price: string; qty: string; date: string; rationale: string },
+  t: Translate,
+): TxnFormErrors {
   const errors: TxnFormErrors = {};
   const price = parseMoney(input.price);
-  if (price == null || price <= 0) errors.price = "Enter a price greater than 0";
+  if (price == null || price <= 0) errors.price = t("transaction.errPrice");
   const qty = parseQty(input.qty);
-  if (qty == null || qty <= 0) errors.qty = "Enter a share quantity greater than 0";
-  if (!isCalendarDate(input.date)) errors.date = "Pick a valid date";
-  else if (input.date > todayNyDate()) errors.date = "Date can’t be in the future";
-  if (!input.rationale.trim()) errors.rationale = "Write a reason for this trade";
+  if (qty == null || qty <= 0) errors.qty = t("transaction.errQty");
+  if (!isCalendarDate(input.date)) errors.date = t("transaction.errDate");
+  else if (input.date > todayNyDate()) errors.date = t("transaction.errFuture");
+  if (!input.rationale.trim()) errors.rationale = t("transaction.errReason");
   return errors;
 }
 
@@ -117,6 +137,7 @@ function JournalCard({
   onDelete: () => void;
   onSave: (text: string) => Promise<unknown>;
 }) {
+  const { t } = useI18n();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(entry.text);
   const [saving, setSaving] = useState(false);
@@ -170,7 +191,7 @@ function JournalCard({
               }}
               className="rounded-md bg-white px-2.5 py-1 text-[12px] font-semibold text-slate-600"
             >
-              Cancel
+              {t("journal.cancel")}
             </button>
             <button
               type="button"
@@ -178,7 +199,7 @@ function JournalCard({
               onClick={() => void saveEdit()}
               className="rounded-md bg-slate-900 px-2.5 py-1 text-[12px] font-semibold text-white disabled:opacity-40"
             >
-              Save
+              {t("journal.save")}
             </button>
           </div>
         ) : (
@@ -186,7 +207,7 @@ function JournalCard({
             <button
               type="button"
               className="rounded-md p-1.5 text-slate-300 hover:bg-slate-100 hover:text-slate-600"
-              aria-label="Edit entry"
+              aria-label={t("journal.editAria")}
               onClick={startEdit}
             >
               <PencilIcon />
@@ -194,7 +215,7 @@ function JournalCard({
             <button
               type="button"
               className="rounded-md p-1.5 text-slate-300 hover:bg-red-50 hover:text-red-500"
-              aria-label="Delete entry"
+              aria-label={t("journal.deleteAria")}
               onClick={onDelete}
             >
               <TrashIcon />
@@ -224,21 +245,21 @@ function JournalCard({
               onClick={() => setExpanded((v) => !v)}
               className="mt-2 text-[12px] font-semibold text-blue-600 hover:underline"
             >
-              {expanded ? "Show less" : "Read more"}
+              {expanded ? t("journal.showLess") : t("journal.readMore")}
             </button>
           )}
         </div>
       )}
       {entry.snapshot && (
         <div className="flex flex-wrap items-center gap-2 border-t border-[#ebf0f5] bg-slate-50 px-4 py-2.5 md:gap-3 md:px-[18px]">
-          <span className="text-[10px] font-bold tracking-wide text-slate-400 uppercase">At entry</span>
+          <span className="text-[10px] font-bold tracking-wide text-slate-400 uppercase">{t("journal.atEntry")}</span>
           <span className="font-mono text-[12px] font-semibold tabular-nums text-slate-600">
-            {formatPrice(entry.snapshot.price, entry.snapshot.currency)}
+            {formatPrice(entry.snapshot.price)}
           </span>
           {entry.snapshot.pe && (
             <>
               <span className="text-[11px] text-slate-300">·</span>
-              <span className="text-[10px] font-bold tracking-wide text-slate-400 uppercase">Fwd P/E</span>
+              <span className="text-[10px] font-bold tracking-wide text-slate-400 uppercase">{t("journal.fwdPe")}</span>
               <span className="font-mono text-[12px] font-semibold tabular-nums text-slate-600">
                 {entry.snapshot.pe}
               </span>
@@ -297,6 +318,7 @@ function JournalStack({
   onDelete: (id: string) => void;
   onSave: (id: string, text: string) => Promise<unknown>;
 }) {
+  const { t } = useI18n();
   const [expanded, setExpanded] = useState(false);
 
   if (entries.length === 0) return null;
@@ -322,7 +344,7 @@ function JournalStack({
       <>
         {entries.map((entry, i) => renderCard(entry, i))}
         <div className="flex justify-center">
-          <JournalFoldPill label="Collapse" pointing="up" onClick={() => setExpanded(false)} />
+          <JournalFoldPill label={t("journal.collapse")} pointing="up" onClick={() => setExpanded(false)} />
         </div>
       </>
     );
@@ -338,7 +360,7 @@ function JournalStack({
       <button
         type="button"
         onClick={() => setExpanded(true)}
-        title="Show all entries"
+        title={t("journal.showAll")}
         className="relative w-full cursor-pointer border-0 bg-transparent p-0 text-left"
         style={{ height: peekHeight }}
       >
@@ -368,7 +390,11 @@ function JournalStack({
           );
         })}
         <JournalFoldPill
-          label={`${hidden.length} more ${hidden.length === 1 ? "entry" : "entries"}`}
+          label={
+            hidden.length === 1
+              ? t("journal.moreOne", { count: hidden.length })
+              : t("journal.moreMany", { count: hidden.length })
+          }
           pointing="down"
           className="absolute bottom-0 left-1/2 z-10 -translate-x-1/2"
         />
@@ -391,6 +417,7 @@ function NewEntryComposer({
   pending: boolean;
   onSave: (text: string) => void;
 }) {
+  const { t } = useI18n();
   const [text, setText] = useState("");
   const [focused, setFocused] = useState(false);
   const hasText = text.trim().length > 0;
@@ -405,17 +432,21 @@ function NewEntryComposer({
       <div className="flex items-center justify-between gap-2 border-b border-[#ebf0f5] bg-slate-50 px-3 py-2 md:px-4">
         <div className="flex items-center gap-1.5">
           <span className="size-[7px] rounded-full bg-emerald-500" />
-          <span className="text-[11px] font-semibold text-slate-600">New entry</span>
+          <span className="text-[11px] font-semibold text-slate-600">{t("journal.newEntry")}</span>
         </div>
         <div className="flex min-w-0 items-center gap-1.5 overflow-hidden font-mono text-[11px] tabular-nums text-slate-600">
-          <span className="hidden text-[10px] font-bold tracking-wide text-slate-400 uppercase sm:inline">Today</span>
+          <span className="hidden text-[10px] font-bold tracking-wide text-slate-400 uppercase sm:inline">
+            {t("journal.today")}
+          </span>
           <span className="truncate">
             {ticker} {priceLabel}
           </span>
           {peLabel && (
             <>
               <span className="text-slate-300">·</span>
-              <span className="hidden sm:inline">Fwd P/E {peLabel}</span>
+              <span className="hidden sm:inline">
+                {t("journal.fwdPe")} {peLabel}
+              </span>
             </>
           )}
         </div>
@@ -425,13 +456,17 @@ function NewEntryComposer({
         onChange={(e) => setText(e.target.value)}
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
-        placeholder="What's your thesis? What are you watching? What would change your mind?"
+        placeholder={t("journal.placeholder")}
         rows={4}
         className="w-full resize-none border-0 bg-white px-4 pt-3.5 pb-2.5 text-[14px] leading-[1.7] text-slate-700 outline-none placeholder:text-slate-300 md:px-[18px]"
       />
       <div className="flex items-center justify-between gap-2 border-t border-[#ebf0f5] bg-slate-50 px-3 py-2.5 md:px-4">
         <span className="min-w-0 truncate text-[11px] text-slate-300">
-          {hasText ? `${words} word${words === 1 ? "" : "s"}` : "Snapshots price on save"}
+          {hasText
+            ? words === 1
+              ? t("journal.wordOne", { count: words })
+              : t("journal.wordMany", { count: words })
+            : t("journal.snapshotHint")}
         </span>
         <div className="flex shrink-0 items-center gap-1.5">
           {hasText && (
@@ -440,7 +475,7 @@ function NewEntryComposer({
               onClick={() => setText("")}
               className="rounded-md px-2.5 py-1 text-[12px] font-medium text-slate-400 hover:bg-slate-100 hover:text-slate-600"
             >
-              Clear
+              {t("journal.clear")}
             </button>
           )}
           <button
@@ -456,7 +491,7 @@ function NewEntryComposer({
               hasText ? "bg-slate-900 text-white" : "cursor-not-allowed bg-slate-100 text-slate-300"
             }`}
           >
-            Save entry
+            {t("journal.saveEntry")}
           </button>
         </div>
       </div>
@@ -474,6 +509,7 @@ function txnFormValues(txn: StockTransaction) {
 }
 
 function SavedTransaction({ txn, onEdit }: { txn: StockTransaction; onEdit: () => void }) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(true);
   const isBuy = txn.type === "buy";
   return (
@@ -490,15 +526,15 @@ function SavedTransaction({ txn, onEdit }: { txn: StockTransaction; onEdit: () =
               isBuy ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700"
             }`}
           >
-            Transaction · {isBuy ? "Buy" : "Sell"}
+            {t("transaction.label", { side: isBuy ? t("transaction.buy") : t("transaction.sell") })}
           </span>
           {!open && (
             <span
               className={`truncate font-mono text-[13px] font-bold ${isBuy ? "text-slate-800" : "text-rose-700"}`}
             >
               {formatPrice(txn.price)}
-              {txn.qty != null ? ` · ${txn.qty} shares` : ""}
-              {` · ${formatEntryDate(txn.date).replace(", 2026", "")}`}
+              {txn.qty != null ? ` · ${t("transaction.shares", { qty: txn.qty })}` : ""}
+              {` · ${formatShortDate(txn.date)}`}
             </span>
           )}
         </div>
@@ -507,7 +543,7 @@ function SavedTransaction({ txn, onEdit }: { txn: StockTransaction; onEdit: () =
             type="button"
             onClick={onEdit}
             className="rounded-md p-1.5 text-slate-300 hover:bg-white/70 hover:text-slate-600"
-            aria-label="Edit transaction"
+            aria-label={t("transaction.editAria")}
           >
             <PencilIcon />
           </button>
@@ -519,7 +555,7 @@ function SavedTransaction({ txn, onEdit }: { txn: StockTransaction; onEdit: () =
             }}
             className="rounded-md p-1.5 text-slate-300 hover:bg-white/70 hover:text-slate-600"
             aria-expanded={open}
-            aria-label={open ? "Collapse transaction" : "Expand transaction"}
+            aria-label={open ? t("transaction.collapseAria") : t("transaction.expandAria")}
           >
             <svg
               width="13"
@@ -537,9 +573,9 @@ function SavedTransaction({ txn, onEdit }: { txn: StockTransaction; onEdit: () =
         <>
           <div className="grid grid-cols-3 gap-2">
             {[
-              ["PRICE", formatPrice(txn.price)],
-              ["QUANTITY", txn.qty == null ? "—" : `${txn.qty} shares`],
-              ["DATE", formatEntryDate(txn.date).replace(", 2026", "")],
+              [t("transaction.price"), formatPrice(txn.price)],
+              [t("transaction.quantity"), txn.qty == null ? t("common.dash") : t("transaction.shares", { qty: txn.qty })],
+              [t("transaction.date"), formatShortDate(txn.date)],
             ].map(([label, val]) => (
               <div key={label} className="min-w-0">
                 <p className="text-[10px] font-bold text-slate-400 uppercase md:text-[11px]">{label}</p>
@@ -554,7 +590,9 @@ function SavedTransaction({ txn, onEdit }: { txn: StockTransaction; onEdit: () =
             ))}
           </div>
           <div className={`border-t pt-3 ${isBuy ? "border-emerald-200" : "border-rose-200"}`}>
-            <p className={`mb-1 text-[11px] font-bold uppercase ${isBuy ? "text-slate-400" : "text-rose-300"}`}>Reason</p>
+            <p className={`mb-1 text-[11px] font-bold uppercase ${isBuy ? "text-slate-400" : "text-rose-300"}`}>
+              {t("transaction.reason")}
+            </p>
             <p className={`text-[13px] leading-relaxed ${isBuy ? "text-slate-600" : "text-rose-700"}`}>{txn.rationale}</p>
           </div>
         </>
@@ -580,12 +618,13 @@ function EditingTransactionForm({
   onCancel: () => void;
   onSave: (input: { type: "buy" | "sell"; price: string; qty: string; date: string; rationale: string }) => void;
 }) {
+  const { t } = useI18n();
   const [price, setPrice] = useState(initial?.price ?? "");
   const [qty, setQty] = useState(initial?.qty ?? "");
   const [date, setDate] = useState(initial?.date || todayNyDate());
   const [reason, setReason] = useState(initial?.rationale ?? "");
   const [showErrors, setShowErrors] = useState(false);
-  const errors = validateTxnForm({ price, qty, date, rationale: reason });
+  const errors = validateTxnForm({ price, qty, date, rationale: reason }, t);
   const today = todayNyDate();
 
   function submit() {
@@ -610,7 +649,7 @@ function EditingTransactionForm({
             onClick={onCancel}
             className="rounded-md bg-[#f4f6f9] px-3 py-1.5 text-[12px] font-semibold text-slate-600"
           >
-            Cancel
+            {t("common.cancel")}
           </button>
           <button
             type="button"
@@ -618,7 +657,7 @@ function EditingTransactionForm({
             onClick={submit}
             className="rounded-md bg-blue-600 px-3 py-1.5 text-[12px] font-bold text-white disabled:opacity-50"
           >
-            Save
+            {t("common.save")}
           </button>
         </div>
       </div>
@@ -630,7 +669,7 @@ function EditingTransactionForm({
             side === "buy" ? "bg-[#def7ec] text-[#03543f]" : "bg-[#f4f6f9] text-slate-600 opacity-50"
           }`}
         >
-          + Buy
+          {t("transaction.plusBuy")}
         </button>
         <button
           type="button"
@@ -639,36 +678,36 @@ function EditingTransactionForm({
             side === "sell" ? "bg-[#fde8e8] text-[#9b1c1c]" : "bg-[#f4f6f9] text-slate-600 opacity-50"
           }`}
         >
-          − Sell
+          {t("transaction.minusSell")}
         </button>
       </div>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <label className="flex min-w-0 flex-col gap-1.5">
-          <span className="text-[11px] font-bold text-slate-400 uppercase">Price</span>
+          <span className="text-[11px] font-bold text-slate-400 uppercase">{t("transaction.price")}</span>
           <input
             value={price}
             inputMode="decimal"
             autoComplete="off"
-            placeholder="$—"
+            placeholder={t("transaction.pricePlaceholder")}
             onChange={(e) => setPrice(e.target.value)}
             className={fieldClass(showErrors && !!errors.price, true)}
           />
           {showErrors && <FieldHint message={errors.price} />}
         </label>
         <label className="flex min-w-0 flex-col gap-1.5">
-          <span className="text-[11px] font-bold text-slate-400 uppercase">Quantity</span>
+          <span className="text-[11px] font-bold text-slate-400 uppercase">{t("transaction.quantity")}</span>
           <input
             value={qty}
             inputMode="decimal"
             autoComplete="off"
-            placeholder="0 shares"
+            placeholder={t("transaction.qtyPlaceholder")}
             onChange={(e) => setQty(e.target.value)}
             className={fieldClass(showErrors && !!errors.qty)}
           />
           {showErrors && <FieldHint message={errors.qty} />}
         </label>
         <label className="flex min-w-0 flex-col gap-1.5">
-          <span className="text-[11px] font-bold text-slate-400 uppercase">Date</span>
+          <span className="text-[11px] font-bold text-slate-400 uppercase">{t("transaction.date")}</span>
           <input
             type="date"
             value={date}
@@ -681,11 +720,11 @@ function EditingTransactionForm({
         </label>
       </div>
       <label className="flex flex-col gap-1.5">
-        <span className="text-[11px] font-bold text-slate-400 uppercase">Reason</span>
+        <span className="text-[11px] font-bold text-slate-400 uppercase">{t("transaction.reason")}</span>
         <textarea
           value={reason}
           onChange={(e) => setReason(e.target.value)}
-          placeholder="Describe why you're making this trade…"
+          placeholder={t("transaction.reasonPlaceholder")}
           rows={3}
           className={`w-full resize-none rounded-lg bg-white px-3 py-2.5 text-[13px] leading-relaxed text-slate-700 outline-none placeholder:text-slate-400 ${
             showErrors && errors.rationale
@@ -706,6 +745,7 @@ function BuySellToggle({
   side: "buy" | "sell" | null;
   onSelect: (side: "buy" | "sell") => void;
 }) {
+  const { t } = useI18n();
   return (
     <div className="flex items-center gap-2">
       <button
@@ -715,7 +755,7 @@ function BuySellToggle({
           side === "sell" ? "bg-[#def7ec] text-[#03543f] opacity-50" : "bg-[#def7ec] text-[#03543f]"
         }`}
       >
-        + Buy
+        {t("transaction.plusBuy")}
       </button>
       <button
         type="button"
@@ -724,7 +764,7 @@ function BuySellToggle({
           side === "buy" ? "bg-[#fde8e8] text-[#9b1c1c] opacity-50" : "bg-[#fde8e8] text-[#9b1c1c]"
         }`}
       >
-        − Sell
+        {t("transaction.minusSell")}
       </button>
     </div>
   );
@@ -736,6 +776,7 @@ function BuySellToggle({
  * reverse DCF never appears here.
  */
 function FairValueControl({ symbol }: { symbol: string }) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
@@ -783,13 +824,15 @@ function FairValueControl({ symbol }: { symbol: string }) {
           aria-haspopup="listbox"
         >
           <div className="min-w-0">
-            <p className="text-[9px] leading-none font-semibold tracking-wide text-slate-400">my fair value</p>
+            <p className="text-[9px] leading-none font-semibold tracking-wide text-slate-400">
+              {t("transaction.myFairValue")}
+            </p>
             <div className="mt-1 flex items-baseline gap-1.5">
               <span className="text-[18px] leading-none font-bold text-blue-700">
-                {activeValue == null ? "—" : formatPrice(activeValue)}
+                {activeValue == null ? t("common.dash") : formatPrice(activeValue)}
               </span>
               <span className="text-[10px] font-bold tracking-wide text-slate-400 uppercase">
-                {active ? VALUATION_METHOD_LABELS[active.method] : "not set"}
+                {active ? t(METHOD_KEYS[active.method]) : t("transaction.notSet")}
               </span>
             </div>
           </div>
@@ -803,7 +846,7 @@ function FairValueControl({ symbol }: { symbol: string }) {
           href={`/stock/${symbol}/valuation`}
           className="flex items-center gap-1 bg-slate-900 px-3 text-[12px] font-semibold whitespace-nowrap text-white hover:bg-slate-800"
         >
-          {models.length === 0 ? "+ Set Valuation" : "Open valuation"}
+          {models.length === 0 ? t("transaction.setValuation") : t("transaction.openValuation")}
         </Link>
       </div>
       {open && models.length > 0 && (
@@ -823,7 +866,7 @@ function FairValueControl({ symbol }: { symbol: string }) {
                   model.isMyFairValue ? "font-semibold text-blue-600" : "text-slate-600"
                 }`}
               >
-                {VALUATION_METHOD_LABELS[model.method]}
+                {t(METHOD_KEYS[model.method])}
               </span>
               <span className="text-[13px] font-bold text-slate-800">
                 {formatPrice(fairValueFromOutputs(model.outputs))}
@@ -836,15 +879,15 @@ function FairValueControl({ symbol }: { symbol: string }) {
   );
 }
 
-function analyzeHint(input: { hasBuy: boolean; hasSell: boolean; hasFairValue: boolean }) {
+function analyzeHint(input: { hasBuy: boolean; hasSell: boolean; hasFairValue: boolean }, t: Translate) {
   const missing: string[] = [];
-  if (!input.hasBuy) missing.push("one buy");
-  if (!input.hasSell) missing.push("one sell");
-  if (!input.hasFairValue) missing.push("a fair value");
+  if (!input.hasBuy) missing.push(t("transaction.needBuy"));
+  if (!input.hasSell) missing.push(t("transaction.needSell"));
+  if (!input.hasFairValue) missing.push(t("transaction.needFairValue"));
   if (missing.length === 0) return null;
-  if (missing.length === 1) return `Add ${missing[0]} to analyze`;
-  if (missing.length === 2) return `Add ${missing[0]} and ${missing[1]} to analyze`;
-  return `Add ${missing[0]}, ${missing[1]}, and ${missing[2]} to analyze`;
+  if (missing.length === 1) return t("transaction.addOne", { a: missing[0] });
+  if (missing.length === 2) return t("transaction.addTwo", { a: missing[0], b: missing[1] });
+  return t("transaction.addThree", { a: missing[0], b: missing[1], c: missing[2] });
 }
 
 function RateMyTransactionBar({
@@ -860,6 +903,7 @@ function RateMyTransactionBar({
   review: TradeReview | null;
   onReview: (review: TradeReview) => void;
 }) {
+  const { t } = useI18n();
   const valuationQuery = useQuery({
     queryKey: ["valuation", ticker],
     queryFn: () => api<ValuationWorkbench>(`/stocks/${ticker}/valuation`),
@@ -867,7 +911,7 @@ function RateMyTransactionBar({
   const hasFairValue = valuationQuery.data?.myFairValue != null;
   const hint = valuationQuery.isPending
     ? null
-    : analyzeHint({ hasBuy, hasSell, hasFairValue });
+    : analyzeHint({ hasBuy, hasSell, hasFairValue }, t);
   const canAnalyze = !valuationQuery.isPending && hint == null;
 
   const rateMutation = useMutation({
@@ -889,9 +933,9 @@ function RateMyTransactionBar({
     return (
       <div className="flex w-full items-center justify-between gap-3 border-t border-[#ebf0f5] px-4 py-[18px] md:px-6">
         <div className="flex min-w-0 flex-col gap-0.5">
-          <span className="text-[13px] font-semibold text-[#1e293b]">Rate My Transaction</span>
+          <span className="text-[13px] font-semibold text-[#1e293b]">{t("transaction.rateTitle")}</span>
           <span className="text-[11px] text-[#94a3b8]">
-            {hint ?? "AI analysis of this trade"}
+            {hint ?? t("transaction.rateHint")}
           </span>
           {errorMessage && <p className="text-[11px] font-medium text-red-500">{errorMessage}</p>}
         </div>
@@ -907,7 +951,7 @@ function RateMyTransactionBar({
         >
           <RobotIcon size={17} />
           <span className="text-[12px] font-semibold whitespace-nowrap">
-            {analyzing ? "Analyzing…" : "Analyze"}
+            {analyzing ? t("common.analyzing") : t("common.analyze")}
           </span>
         </button>
       </div>
@@ -925,13 +969,13 @@ function RateMyTransactionBar({
           }}
         >
           <span className="text-center text-[11px] leading-tight font-bold text-[#1e40af]">
-            {review.grade}
+            {t(GRADE_KEYS[review.grade])}
           </span>
         </div>
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           <div className="flex items-center gap-1.5 text-[#94a3b8]">
             <RobotIcon size={12} />
-            <span className="text-[9px] font-bold tracking-widest uppercase">AI Verdict</span>
+            <span className="text-[9px] font-bold tracking-widest uppercase">{t("transaction.aiVerdict")}</span>
           </div>
           <p className="text-[12px] leading-[1.5] font-medium text-[#334155]">{review.blurb}</p>
           {hint && <p className="text-[11px] text-[#94a3b8]">{hint}</p>}
@@ -939,13 +983,13 @@ function RateMyTransactionBar({
         </div>
         <button
           type="button"
-          title="Re-analyze"
+          title={t("common.reanalyze")}
           disabled={analyzing || !canAnalyze}
           onClick={() => rateMutation.mutate()}
           className="flex shrink-0 items-center gap-1.5 rounded-[7px] border border-[#e2e8f0] px-2.5 py-1.5 text-[#94a3b8] hover:border-[#93c5fd] hover:bg-[#eff6ff] hover:text-[#2563eb] disabled:opacity-50"
         >
           <RobotIcon size={12} />
-          <span className="text-[11px] font-medium">{analyzing ? "Analyzing…" : "Re-run"}</span>
+          <span className="text-[11px] font-medium">{analyzing ? t("common.analyzing") : t("common.rerun")}</span>
         </button>
       </div>
     </div>
@@ -953,6 +997,7 @@ function RateMyTransactionBar({
 }
 
 export function StockDetail({ ticker }: { ticker: string }) {
+  const { t } = useI18n();
   const router = useRouter();
   const queryClient = useQueryClient();
   const [txnDraft, setTxnDraft] = useState<
@@ -1025,7 +1070,7 @@ export function StockDetail({ ticker }: { ticker: string }) {
               type="button"
               onClick={() => router.push("/")}
               className="flex size-8 shrink-0 items-center justify-center rounded-full bg-[#f4f6f9] hover:bg-[#ebf0f5]"
-              aria-label="Back"
+              aria-label={t("common.back")}
             >
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
                 <path d="M10 13L5 8l5-5" stroke="#1E293B" strokeWidth="2" strokeLinecap="round" />
@@ -1044,6 +1089,7 @@ export function StockDetail({ ticker }: { ticker: string }) {
             {headerDate && (
               <span className="text-[13px] text-slate-500 md:text-[14px]">{formatEntryDate(headerDate)}</span>
             )}
+            <NavLocaleToggle />
             <AccountAvatar />
           </div>
         </div>
@@ -1051,19 +1097,21 @@ export function StockDetail({ ticker }: { ticker: string }) {
 
       <div className="mx-auto flex max-w-[720px] flex-col gap-4 px-3 py-4 md:gap-6 md:px-6 md:py-6">
         {detailQuery.isError && (
-          <p className="text-[13px] text-red-500">Couldn’t load this stock. Is the API running?</p>
+          <p className="text-[13px] text-red-500">{t("stock.loadError")}</p>
         )}
 
         <section className="flex flex-col gap-5 rounded-2xl border border-[#ebf0f5] bg-white p-4 shadow-[0_2px_8px_rgba(15,23,42,0.04)] md:p-6">
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="text-[17px] font-bold text-slate-800">
-                {symbol} · Journal
+                {t("stock.journalTitle", { ticker: symbol })}
               </p>
-              <p className="mt-0.5 text-[12px] text-slate-400">Your investment thesis & decision record</p>
+              <p className="mt-0.5 text-[12px] text-slate-400">{t("stock.journalSubtitle")}</p>
             </div>
             <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-600">
-              {data?.journal.length ?? 0} {(data?.journal.length ?? 0) === 1 ? "entry" : "entries"}
+              {(data?.journal.length ?? 0) === 1
+                ? t("stock.entryOne", { count: data?.journal.length ?? 0 })
+                : t("stock.entryMany", { count: data?.journal.length ?? 0 })}
             </span>
           </div>
           {data?.journal && (
@@ -1075,7 +1123,7 @@ export function StockDetail({ ticker }: { ticker: string }) {
           )}
           <NewEntryComposer
             ticker={symbol}
-            priceLabel={formatPrice(data?.quote?.price ?? null, data?.quote?.currency)}
+            priceLabel={formatPrice(data?.quote?.price ?? null)}
             peLabel={null}
             pending={journalMutation.isPending}
             onSave={(text) => journalMutation.mutate(text)}
@@ -1089,7 +1137,7 @@ export function StockDetail({ ticker }: { ticker: string }) {
               onClick={() => setTxnOpen((v) => !v)}
               className="flex min-w-0 items-center gap-1.5 text-left"
             >
-              <p className="text-[18px] font-bold text-slate-800">Transaction</p>
+              <p className="text-[18px] font-bold text-slate-800">{t("stock.transaction")}</p>
               <svg
                 width="16"
                 height="16"
@@ -1112,7 +1160,7 @@ export function StockDetail({ ticker }: { ticker: string }) {
                   <EditingTransactionForm
                     key={txn.id}
                     side={txnDraft.side}
-                    title="Editing · Record"
+                    title={t("transaction.editingRecord")}
                     initial={txnFormValues(txn)}
                     pending={updateTxn.isPending}
                     onSideChange={(side) => setTxnDraft({ mode: "edit", id: txn.id, side })}
@@ -1131,7 +1179,7 @@ export function StockDetail({ ticker }: { ticker: string }) {
                 <EditingTransactionForm
                   key="new"
                   side={txnDraft.side}
-                  title="Editing · New record"
+                  title={t("transaction.editingNew")}
                   pending={saveTxn.isPending}
                   onSideChange={(side) => setTxnDraft({ mode: "create", side })}
                   onCancel={() => setTxnDraft(null)}

@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  METHOD_LABELS,
   dcfInputsFromAnchors,
   dcfModelReady,
   defaultAssumptions,
@@ -23,21 +22,23 @@ import {
   type ValuationSnapshot,
   type ValuationWorkbench,
 } from "@mystockjournal/shared";
+import { useI18n } from "@/i18n";
 import { api } from "@/lib/api";
 import { formatEntryDate } from "@/lib/format";
 import { AccountAvatar } from "@/components/account-avatar";
+import { NavLocaleToggle } from "@/components/language-switcher";
 import type { ValuationActions } from "./actions";
 import { DcfView } from "./dcf-view";
 import { PeView } from "./pe-view";
 import { RdcfView } from "./rdcf-view";
-import { fmt2 } from "./primitives";
+import { fmt2, methodLabel } from "./primitives";
 
 type WorkbenchTab = "dcf" | "rdcf" | "multiples";
 
-const WORKBENCH_TABS: { id: WorkbenchTab; label: string }[] = [
-  { id: "dcf", label: "DCF" },
-  { id: "rdcf", label: "Reverse DCF" },
-  { id: "multiples", label: "Multiples" },
+const WORKBENCH_TABS: { id: WorkbenchTab; labelKey: "valuation.tabDcf" | "valuation.tabRdcf" | "valuation.tabMultiples" }[] = [
+  { id: "dcf", labelKey: "valuation.tabDcf" },
+  { id: "rdcf", labelKey: "valuation.tabRdcf" },
+  { id: "multiples", labelKey: "valuation.tabMultiples" },
 ];
 
 function tabOf(method: ValuationMethod): WorkbenchTab {
@@ -95,6 +96,7 @@ function evebitdaDraft(saved: unknown, anchors: ValuationWorkbench["anchors"]): 
 }
 
 export function ValuationWorkbenchPage({ ticker }: { ticker: string }) {
+  const { t } = useI18n();
   const symbol = ticker.toUpperCase();
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -201,14 +203,14 @@ export function ValuationWorkbenchPage({ ticker }: { ticker: string }) {
   });
 
   if (workbenchQuery.isPending) {
-    return <StatusScreen symbol={symbol} message="Loading valuation…" />;
+    return <StatusScreen symbol={symbol} message={t("valuation.loading")} />;
   }
 
   if (workbenchQuery.error || !data || !drafts) {
     const message =
       workbenchQuery.error instanceof Error
         ? workbenchQuery.error.message
-        : "Could not load this stock.";
+        : t("valuation.loadError");
     return <StatusScreen symbol={symbol} message={message} isError />;
   }
 
@@ -281,14 +283,11 @@ export function ValuationWorkbenchPage({ ticker }: { ticker: string }) {
         )}
 
         {currentPrice <= 0 ? (
-          <EmptyState
-            title="No price for this ticker"
-            body="Every method compares your fair value to the market price. Without a quote there is nothing to compare against."
-          />
+          <EmptyState title={t("valuation.noPriceTitle")} body={t("valuation.noPriceBody")} />
         ) : !isImplementedMethod(method) ? (
           <EmptyState
-            title={`${METHOD_LABELS[method]} model`}
-            body="Not built yet. DCF, Reverse DCF, and Multiples are available today."
+            title={t("valuation.notBuiltTitle", { method: methodLabel(method, t) })}
+            body={t("valuation.notBuiltBody")}
           />
         ) : method === "dcf" ? (
           <DcfView
@@ -363,6 +362,7 @@ function TopBar({
   actions: ValuationActions;
   canAct: boolean;
 }) {
+  const { t } = useI18n();
   // A reverse DCF outputs the market's implied growth, so it has no fair value to set.
   const producesFairValue = method !== "rdcf";
 
@@ -388,11 +388,15 @@ function TopBar({
         <div className="hidden items-center gap-1.5 md:flex">
           <span className="font-heading text-[14px] font-bold text-slate-900">{name}</span>
           <span className="text-slate-300">·</span>
-          <span className="text-[12px] font-semibold text-slate-500">Valuation</span>
+          <span className="text-[12px] font-semibold text-slate-500">{t("valuation.title")}</span>
           {myFairValue !== null && (
             <span className="ml-0.5 rounded-full border border-emerald-200 bg-emerald-50 px-[7px] py-0.5 text-[10px] font-bold text-emerald-700">
-              My Fair Value ${fmt2(myFairValue)}
-              {myFairValueMethod ? ` · ${METHOD_LABELS[myFairValueMethod]}` : ""}
+              {myFairValueMethod
+                ? t("valuation.myFairValueChipMethod", {
+                    value: fmt2(myFairValue),
+                    method: methodLabel(myFairValueMethod, t),
+                  })
+                : t("valuation.myFairValueChip", { value: fmt2(myFairValue) })}
             </span>
           )}
         </div>
@@ -406,7 +410,7 @@ function TopBar({
               actions.saved ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-700 hover:bg-slate-200"
             }`}
           >
-            {actions.saved ? "Saved ✓" : actions.saving ? "Saving…" : "Save"}
+            {actions.saved ? t("common.saved") : actions.saving ? t("common.saving") : t("common.save")}
           </button>
           {producesFairValue && (
             <button
@@ -415,9 +419,10 @@ function TopBar({
               disabled={!canAct || actions.saving}
               className="hidden rounded-[7px] bg-emerald-600 px-3 py-1.5 text-[11px] font-bold text-white hover:bg-emerald-700 disabled:opacity-50 md:block"
             >
-              Set Fair Value
+              {t("valuation.setFairValue")}
             </button>
           )}
+          <NavLocaleToggle />
           <AccountAvatar />
         </div>
       </div>
@@ -435,7 +440,7 @@ function TopBar({
                   : "text-slate-500 hover:text-slate-700"
               }`}
             >
-              {tab.label}
+              {t(tab.labelKey)}
             </button>
           ))}
         </div>

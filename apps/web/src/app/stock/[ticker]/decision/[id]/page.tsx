@@ -1,4 +1,5 @@
 import { DecisionDetail, DecisionNotFound } from "@/components/decision-detail";
+import { getServerT } from "@/i18n/server";
 import { findDecision } from "@/lib/mock-journal";
 import type { Metadata } from "next";
 
@@ -9,7 +10,10 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { ticker, id } = await params;
   const decision = findDecision(ticker, id);
-  if (!decision) return { title: "Decision not found" };
+  if (!decision) {
+    const { t } = await getServerT();
+    return { title: t("meta.decisionNotFound") };
+  }
   return { title: `${decision.ticker} · ${decision.action}` };
 }
 

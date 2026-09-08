@@ -5,7 +5,9 @@ import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { AccountAvatar } from "@/components/account-avatar";
 import { LogoMark } from "@/components/logo-mark";
+import { NavLocaleToggle } from "@/components/language-switcher";
 import { Input } from "@/components/ui/input";
+import { useI18n } from "@/i18n";
 import { DECISIONS, WATCH_ROWS, decisionHref } from "@/lib/mock-journal";
 
 function SearchIcon({ size = 18 }: { size?: number }) {
@@ -28,6 +30,7 @@ function jumpToTicker(raw: string) {
 }
 
 export function SiteNav({ showSearch = true }: { showSearch?: boolean }) {
+  const { t } = useI18n();
   const router = useRouter();
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -66,7 +69,7 @@ export function SiteNav({ showSearch = true }: { showSearch?: boolean }) {
         <Link href="/" className="flex min-w-0 items-center gap-2">
           <LogoMark size={30} />
           <span className="font-heading truncate text-[15px] font-semibold tracking-tight text-slate-900">
-            MyStockJournal
+            {t("common.brand")}
           </span>
         </Link>
         <div className="flex items-center gap-3">
@@ -75,11 +78,12 @@ export function SiteNav({ showSearch = true }: { showSearch?: boolean }) {
               type="button"
               onClick={onSearchClick}
               className="text-slate-400 transition-colors hover:text-slate-600"
-              aria-label="Search"
+              aria-label={t("common.search")}
             >
               <SearchIcon />
             </button>
           )}
+          <NavLocaleToggle />
           <AccountAvatar />
         </div>
       </div>
@@ -94,7 +98,7 @@ export function SiteNav({ showSearch = true }: { showSearch?: boolean }) {
               type="search"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Ticker — AAPL, NVDA…"
+              placeholder={t("nav.searchPlaceholder")}
               className="h-[42px] rounded-[9px] bg-slate-50 pl-9 text-[14px]"
               enterKeyHint="search"
             />
