@@ -1,4 +1,5 @@
 import {
+  DEFAULT_EQUITY_RISK_PREMIUM,
   WACC_BUILD_LIMITS,
   type WaccPrefillResponse,
 } from "@mystockjournal/shared";
@@ -49,11 +50,9 @@ ${lang} only in note. No markdown. No emoji.
 Do not invent facts contradicted by the payload.`;
 }
 
-const FALLBACK_ERP = 5.5;
-
 export function fallbackWaccPrefill(ctx: WaccPrefillContext): WaccPrefillResponse {
   const out: WaccPrefillResponse = {
-    erp: FALLBACK_ERP,
+    erp: DEFAULT_EQUITY_RISK_PREMIUM,
     note: "Used a 5.5% US equity risk premium — edit if you prefer a different ERP.",
   };
   if (ctx.missing.includes("rf")) out.rf = 4.3;
@@ -72,7 +71,7 @@ export async function prefillWaccAssumptions(
     { role: "user", content: JSON.stringify(ctx) },
   ]);
   const row = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
-  const erp = pickNum(row, "erp", WACC_BUILD_LIMITS.erp) ?? FALLBACK_ERP;
+  const erp = pickNum(row, "erp", WACC_BUILD_LIMITS.erp) ?? DEFAULT_EQUITY_RISK_PREMIUM;
   const note = typeof row.note === "string" && row.note.trim() ? row.note.trim().slice(0, 220) : "";
   const out: WaccPrefillResponse = { erp, note: note || fallbackWaccPrefill(ctx).note };
   if (ctx.missing.includes("rf")) {

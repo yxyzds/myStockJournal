@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  DRIVER_LIMITS,
   dcfInputsFromAnchors,
   dcfModelReady,
   defaultAssumptions,
@@ -64,6 +65,18 @@ function draftsFrom(data: ValuationWorkbench): Drafts {
     data.models.find((model) => model.method === method)?.assumptions;
   const dcf = (saved("dcf") as DcfInputs | undefined) ?? dcfInputsFromAnchors(data.anchors);
   const rdcf = (saved("rdcf") as RdcfInputs | undefined) ?? rdcfInputsFromAnchors(data.anchors);
+  const prefillWacc = data.anchors.waccBuild;
+  const prefillRate = data.anchors.drivers.wacc;
+  if (prefillWacc && prefillRate >= DRIVER_LIMITS.wacc.min) {
+    if (!dcf.waccBuild) {
+      dcf.wacc = prefillRate;
+      dcf.waccBuild = prefillWacc;
+    }
+    if (!rdcf.waccBuild) {
+      rdcf.wacc = prefillRate;
+      rdcf.waccBuild = prefillWacc;
+    }
+  }
   // Filing-computed Y1 margin always wins over a stale saved worksheet.
   if (data.anchors.fcfMarginY1FromFilings) {
     dcf.fcfMarginY1 = data.anchors.drivers.fcfMarginY1;
