@@ -19,10 +19,11 @@ out
 next-env.d.ts
 coverage
 
-# env (keep the example)
+# env (keep the examples)
 .env
 .env.*
 !.env.example
+!.env.development.example
 
 # logs / debug
 *.log

@@ -1,9 +1,5 @@
-import { config } from "dotenv";
-import { resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import "../../scripts/load-root-env.mjs";
 import { defineConfig } from "drizzle-kit";
-
-config({ path: resolve(fileURLToPath(new URL(".", import.meta.url)), "../../.env") });
 
 export default defineConfig({
   schema: "./src/db/schema.ts",

@@ -22,9 +22,9 @@ import { env } from "../env";
  * SEC EDGAR client. Free and key-less, but every request needs a contact
  * `User-Agent` and callers are capped at 10 requests a second.
  *
- * Node's built-in fetch ignores `HTTPS_PROXY` unless `NODE_USE_ENV_PROXY=1` is
- * set, which the api dev script does — a machine that only reaches SEC through a
- * local proxy would otherwise see every request fail.
+ * Node's built-in fetch ignores `HTTPS_PROXY` unless `NODE_USE_ENV_PROXY=1`.
+ * The api `dev` script sets that; production `start` does not, so a local
+ * proxy in `.env.development` cannot leak onto the live server.
  */
 const TICKERS_URL = "https://www.sec.gov/files/company_tickers.json";
 const SUBMISSIONS_URL = "https://data.sec.gov/submissions";
