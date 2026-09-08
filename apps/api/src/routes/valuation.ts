@@ -17,8 +17,11 @@ import {
   type ValuationOutputs,
   type ValuationSnapshot,
   type ValuationWorkbench,
+  type WaccFieldSource,
+  type WaccInputsResponse,
 } from "@mystockjournal/shared";
 import { reviewDcfAssumptions } from "../ai/dcf-review";
+import { fallbackWaccPrefill, prefillWaccAssumptions } from "../ai/wacc-prefill";
 import { env } from "../env";
 import type { AppEnv } from "../types";
 import { requestLocale } from "../lib/locale";
@@ -31,6 +34,7 @@ import { getAnchors } from "../market/fundamentals";
 import { buildEvEbitdaChart } from "../market/ev-ebitda-series";
 import { buildPeChart, peUnavailableReason } from "../market/pe-series";
 import { getQuotes } from "../market/quotes";
+import { fetchTreasury10Y, fetchYahooBeta } from "../market/yahoo-wacc";
 
 export const valuationRoutes = new Hono<AppEnv>();
 
@@ -185,6 +189,108 @@ valuationRoutes.get("/:ticker/valuation", async (c) => {
   };
 
   return c.json(payload);
+});
+
+function moneyM(value: number) {
+  return Math.round(value * 10) / 10;
+}
+
+function fieldSource(value: number | null, fetched: WaccFieldSource): WaccFieldSource {
+  return value == null ? "missing" : fetched;
+}
+
+/**
+ * GET /stocks/:ticker/valuation/wacc-inputs — fetched CAPM / capital-structure
+ * pieces for the WACC calculator. ERP is never fetched.
+ */
+valuationRoutes.get("/:ticker/valuation/wacc-inputs", async (c) => {
+  const loaded = await loadWorkbenchContext(c.get("userId"), c.req.param("ticker"));
+  if ("error" in loaded) return c.json({ error: loaded.error }, loaded.status);
+
+  const ticker = loaded.stock.ticker;
+  const [rf, beta] = await Promise.all([fetchTreasury10Y(), fetchYahooBeta(ticker)]);
+  const price = loaded.quote.price ?? 0;
+  const equity = moneyM(price * loaded.anchors.shares);
+  const debt = loaded.anchors.debt;
+  const taxRate = loaded.anchors.effectiveTaxRate;
+  const preTaxCostOfDebt = loaded.anchors.preTaxCostOfDebt;
+
+  const payload: WaccInputsResponse = {
+    ticker,
+    name: loaded.quote.name || loaded.stock.name,
+    currentPrice: price,
+    past5YCagr: loaded.anchors.past5YCagr,
+    equity,
+    debt,
+    rf,
+    beta,
+    preTaxCostOfDebt,
+    taxRate,
+    sources: {
+      rf: fieldSource(rf, "yahoo"),
+      beta: fieldSource(beta, "yahoo"),
+      erp: "missing",
+      preTaxCostOfDebt: fieldSource(preTaxCostOfDebt, "filing"),
+      taxRate: fieldSource(taxRate, "filing"),
+      equity: price > 0 && loaded.anchors.shares > 0 ? "yahoo" : "missing",
+      debt: loaded.anchors.available ? "filing" : "missing",
+    },
+  };
+  return c.json(payload);
+});
+
+/**
+ * POST /stocks/:ticker/valuation/wacc/ai-prefill — ERP plus any unfetched WACC
+ * pieces. Shares the daily AI review quota.
+ */
+valuationRoutes.post("/:ticker/valuation/wacc/ai-prefill", async (c) => {
+  const loaded = await loadWorkbenchContext(c.get("userId"), c.req.param("ticker"));
+  if ("error" in loaded) return c.json({ error: loaded.error }, loaded.status);
+
+  const body = (await c.req.json().catch(() => null)) as {
+    rf?: number | null;
+    beta?: number | null;
+    preTaxCostOfDebt?: number | null;
+    taxRate?: number | null;
+    equity?: number;
+    debt?: number;
+  } | null;
+
+  const missing: Array<"rf" | "beta" | "preTaxCostOfDebt" | "taxRate"> = [];
+  const ctx = {
+    ticker: loaded.stock.ticker,
+    name: loaded.quote.name || loaded.stock.name,
+    currentPrice: loaded.quote.price ?? 0,
+    past5YCagr: loaded.anchors.past5YCagr,
+    equity: typeof body?.equity === "number" ? body.equity : moneyM((loaded.quote.price ?? 0) * loaded.anchors.shares),
+    debt: typeof body?.debt === "number" ? body.debt : loaded.anchors.debt,
+    rf: typeof body?.rf === "number" ? body.rf : null,
+    beta: typeof body?.beta === "number" ? body.beta : null,
+    preTaxCostOfDebt:
+      typeof body?.preTaxCostOfDebt === "number" ? body.preTaxCostOfDebt : loaded.anchors.preTaxCostOfDebt,
+    taxRate: typeof body?.taxRate === "number" ? body.taxRate : loaded.anchors.effectiveTaxRate,
+    missing,
+  };
+  if (ctx.rf == null) missing.push("rf");
+  if (ctx.beta == null) missing.push("beta");
+  if (ctx.preTaxCostOfDebt == null) missing.push("preTaxCostOfDebt");
+  if (ctx.taxRate == null) missing.push("taxRate");
+
+  if (!env.aiApiKey || !env.aiBaseUrl) {
+    return c.json({ prefill: fallbackWaccPrefill(ctx) });
+  }
+
+  const allowed = await consumeAiReviewSlot(c.get("userId"));
+  if (!allowed) return c.json({ error: AI_REVIEW_LIMIT_ERROR }, 429);
+
+  try {
+    const prefill = await prefillWaccAssumptions(ctx, requestLocale(c.req.header("accept-language")));
+    return c.json({ prefill });
+  } catch (error) {
+    await releaseAiReviewSlot(c.get("userId"));
+    const message = error instanceof Error ? error.message : "WACC prefill failed";
+    return c.json({ error: message }, 502);
+  }
 });
 
 /**

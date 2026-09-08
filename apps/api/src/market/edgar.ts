@@ -75,6 +75,17 @@ const DA_TAGS = [
   /** Filers that split D&A (e.g. Microsoft) keep this cash-flow line current. */
   "Depreciation",
 ];
+const INCOME_TAX_TAGS = ["IncomeTaxExpenseBenefit"];
+const PRETAX_INCOME_TAGS = [
+  "IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest",
+  "IncomeLossFromContinuingOperationsBeforeIncomeTaxesMinorityInterestAndIncomeLossFromEquityMethodInvestments",
+  "IncomeLossFromContinuingOperationsBeforeIncomeTaxes",
+];
+const INTEREST_EXPENSE_TAGS = [
+  "InterestExpense",
+  "InterestExpenseDebt",
+  "InterestExpenseNonoperating",
+];
 
 type CompanyFacts = {
   facts?: Record<string, Record<string, { units?: Record<string, XbrlFact[]> }>>;
@@ -112,6 +123,10 @@ export type EdgarFundamentals = {
   observedDrivers: Partial<DcfDrivers>;
   sourceFilings: FilingRef[];
   quarterlyActuals: QuarterlyActual[];
+  /** TTM tax ÷ pretax, percent. */
+  effectiveTaxRate: number | null;
+  /** TTM interest ÷ total debt, percent. */
+  preTaxCostOfDebt: number | null;
 };
 
 let lastRequestAt = 0;
@@ -319,6 +334,30 @@ function clamp(value: number, limits: { min: number; max: number }) {
   return Math.min(limits.max, Math.max(limits.min, value));
 }
 
+function round1(value: number) {
+  return Math.round(value * 10) / 10;
+}
+
+/** Effective tax rate in percent, when pretax income is positive. */
+function effectiveTaxRateFromFacts(companyFacts: CompanyFacts): number | null {
+  const tax = ttmFromFacts(factsFor(companyFacts, INCOME_TAX_TAGS, "USD"));
+  const pretax = ttmFromFacts(factsFor(companyFacts, PRETAX_INCOME_TAGS, "USD"));
+  if (tax == null || pretax == null || pretax <= 0) return null;
+  const rate = (tax / pretax) * 100;
+  if (!Number.isFinite(rate) || rate < 0 || rate > 50) return null;
+  return round1(rate);
+}
+
+/** Book cost of debt in percent: TTM interest over the latest total-debt balance. */
+function preTaxCostOfDebtFromFacts(companyFacts: CompanyFacts, debt: number): number | null {
+  if (debt <= 0) return null;
+  const interest = ttmFromFacts(factsFor(companyFacts, INTEREST_EXPENSE_TAGS, "USD"));
+  if (interest == null || interest <= 0) return null;
+  const rate = (interest / debt) * 100;
+  if (!Number.isFinite(rate) || rate <= 0 || rate > 20) return null;
+  return round1(rate);
+}
+
 /** TTM EBITDA in whole dollars: prefer the explicit tag, else operating income + D&A. */
 function ttmEbitdaFromFacts(companyFacts: CompanyFacts): number | null {
   const direct = ttmFromFacts(factsFor(companyFacts, EBITDA_TAGS, "USD"));
@@ -359,10 +398,6 @@ function ebitdaHistoryFromFacts(companyFacts: CompanyFacts): EvEbitdaAnnualPoint
     .sort((a, b) => a.year - b.year);
 }
 
-function round1(value: number) {
-  return Math.round(value * 10) / 10;
-}
-
 /** EPS is summed across quarters, so trim the floating-point tail. */
 function round2(value: number) {
   return Math.round(value * 100) / 100;
@@ -399,6 +434,7 @@ export async function fetchEdgarFundamentals(ticker: string): Promise<EdgarFunda
   const past5YCagr = annualCagr(revenueFacts, 5);
   const ttmEps = ttmFromFacts(factsFor(companyFacts, DILUTED_EPS_TAGS, "USD/shares"));
   const ttmEbitda = ttmEbitdaFromFacts(companyFacts);
+  const debt = totalDebt(companyFacts);
 
   return {
     cik,
@@ -408,7 +444,7 @@ export async function fetchEdgarFundamentals(ticker: string): Promise<EdgarFunda
     cash: toMillions(
       instantValue(companyFacts, CASH_TAGS) + instantValue(companyFacts, SHORT_TERM_INVESTMENT_TAGS),
     ),
-    debt: toMillions(totalDebt(companyFacts)),
+    debt: toMillions(debt),
     shares: toMillions(sharesFact.val),
     ttmEps: ttmEps == null ? null : round2(ttmEps),
     ttmEbitda: ttmEbitda == null ? null : toMillions(ttmEbitda),
@@ -417,5 +453,7 @@ export async function fetchEdgarFundamentals(ticker: string): Promise<EdgarFunda
     observedDrivers: observedDrivers(companyFacts, ttmRevenue, past5YCagr),
     sourceFilings: submissions ? recentFilings(submissions, cik) : [],
     quarterlyActuals: quarterlyActualsFromFacts(companyFacts),
+    effectiveTaxRate: effectiveTaxRateFromFacts(companyFacts),
+    preTaxCostOfDebt: preTaxCostOfDebtFromFacts(companyFacts, debt),
   };
 }

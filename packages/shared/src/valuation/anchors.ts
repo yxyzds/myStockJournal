@@ -64,6 +64,10 @@ export type ValuationAnchors = {
   peHistory: PePoint[];
   /** Recent reported quarters for the Assumptions actuals strip. Newest last. */
   quarterlyActuals: QuarterlyActual[];
+  /** TTM income tax ÷ pretax income, as a percent. Null when filings don't support it. */
+  effectiveTaxRate: number | null;
+  /** TTM interest expense ÷ total debt, as a percent. Null when debt or interest is missing. */
+  preTaxCostOfDebt: number | null;
   /** Starting point for the editable drivers, from the vendor or an AI estimate. */
   drivers: DcfDrivers;
   /**

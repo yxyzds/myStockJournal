@@ -21,6 +21,7 @@ import {
   type ValuationModel,
   type ValuationSnapshot,
   type ValuationWorkbench,
+  type WaccBuild,
 } from "@mystockjournal/shared";
 import { useI18n } from "@/i18n";
 import { api } from "@/lib/api";
@@ -217,6 +218,19 @@ export function ValuationWorkbenchPage({ ticker }: { ticker: string }) {
   const currentPrice = data.quote?.price ?? 0;
   const priceAsOf = data.quote?.fetchedAt ? formatEntryDate(data.quote.fetchedAt) : null;
   const myFairValueMethod = data.models.find((model) => model.isMyFairValue)?.method ?? null;
+  const termGrowthFloor = Math.max(drafts.dcf.termGrowth, drafts.rdcf.termGrowth);
+
+  function applyWacc(wacc: number, build: WaccBuild) {
+    setDrafts((current) =>
+      current
+        ? {
+            ...current,
+            dcf: { ...current.dcf, wacc, waccBuild: build },
+            rdcf: { ...current.rdcf, wacc, waccBuild: build },
+          }
+        : current,
+    );
+  }
 
   const activeAssumptions: ValuationAssumptions | null = isImplementedMethod(method)
     ? drafts[method]
@@ -306,6 +320,8 @@ export function ValuationWorkbenchPage({ ticker }: { ticker: string }) {
                 prev ? { ...prev, dcfAssumptionReview: review } : prev,
               );
             }}
+            termGrowthFloor={termGrowthFloor}
+            onApplyWacc={applyWacc}
           />
         ) : method === "rdcf" ? (
           <RdcfView
@@ -320,6 +336,8 @@ export function ValuationWorkbenchPage({ ticker }: { ticker: string }) {
             onChange={(assumptions) => setDrafts({ ...drafts, rdcf: assumptions })}
             dcfBaseline={drafts.dcf}
             onOpenDcf={() => setMethod("dcf")}
+            termGrowthFloor={termGrowthFloor}
+            onApplyWacc={applyWacc}
           />
         ) : isMultiplesMethod(method) ? (
           <PeView

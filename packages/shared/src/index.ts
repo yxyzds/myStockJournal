@@ -9,5 +9,6 @@ export * from "./valuation/anchors";
 export * from "./valuation/model";
 export * from "./valuation/compute";
 export * from "./valuation/xbrl";
+export * from "./valuation/wacc";
 export * from "./ai/trade-review";
 export * from "./ai/dcf-review";

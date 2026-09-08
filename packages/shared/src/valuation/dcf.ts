@@ -1,3 +1,5 @@
+import type { WaccBuild } from "./wacc";
+
 export type DcfInputs = {
   ttmRevenue: number;
   growthY1_5: number;
@@ -11,6 +13,8 @@ export type DcfInputs = {
   shares: number;
   /** User haircut (%) applied to intrinsic value to get fair value. */
   mosPercent: number;
+  /** Last applied WACC calculator snapshot. Discounting uses `wacc` only. */
+  waccBuild?: WaccBuild;
 };
 
 export type DcfYearRow = {

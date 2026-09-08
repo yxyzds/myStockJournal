@@ -15,6 +15,7 @@ import { valueDcf, type DcfInputs } from "./dcf";
 import { valueEvEbitda, type EvEbitdaInputs } from "./evebitda";
 import { valuePe, type PeInputs } from "./pe";
 import { valueRdcf, type RdcfInputs } from "./rdcf";
+import { parseWaccBuild } from "./wacc";
 import {
   isImplementedMethod,
   METHOD_LABELS,
@@ -118,6 +119,8 @@ export function parseDcfInputs(raw: unknown): { value: DcfInputs } | { error: st
     fcfMarginTerm: read.num("fcfMarginTerm", "FCF margin terminal", DRIVER_LIMITS.fcfMarginTerm),
     mosPercent: read.num("mosPercent", "Margin of safety", MOS_PERCENT_LIMITS),
   };
+  const waccBuild = parseWaccBuild((normalized as Record<string, unknown>).waccBuild);
+  if (waccBuild) value.waccBuild = waccBuild;
   const error = read.error();
   return error ? { error } : { value };
 }
@@ -132,6 +135,10 @@ export function parseRdcfInputs(raw: unknown): { value: RdcfInputs } | { error: 
     fcfMarginY1: read.num("fcfMarginY1", "FCF margin Y1", DRIVER_LIMITS.fcfMarginY1),
     fcfMarginTerm: read.num("fcfMarginTerm", "FCF margin terminal", DRIVER_LIMITS.fcfMarginTerm),
   };
+  const waccBuild = parseWaccBuild(
+    raw && typeof raw === "object" ? (raw as Record<string, unknown>).waccBuild : undefined,
+  );
+  if (waccBuild) value.waccBuild = waccBuild;
   const error = read.error();
   return error ? { error } : { value };
 }

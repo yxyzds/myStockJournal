@@ -30,6 +30,8 @@ type BundledAnchors = Omit<
   | "ebitdaHistory"
   | "fwdEpsSource"
   | "quarterlyActuals"
+  | "effectiveTaxRate"
+  | "preTaxCostOfDebt"
 > & {
   ttmEbitda?: number | null;
   ebitdaHistory?: EvEbitdaAnnualPoint[];
@@ -41,7 +43,7 @@ const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
  * Bump when the cached payload shape or merge rules change so stale rows are
  * refetched instead of serving week-old driver prefills.
  */
-const CACHE_VERSION = 13;
+const CACHE_VERSION = 14;
 
 /** Neutral drivers for G7 tickers we have no estimate for. The user must review them. */
 const FALLBACK_DRIVERS: DcfDrivers = {
@@ -234,6 +236,8 @@ function unavailableAnchors(
     ebitdaHistory: [],
     peHistory: [],
     quarterlyActuals: [],
+    effectiveTaxRate: null,
+    preTaxCostOfDebt: null,
     drivers: isG7Ticker(ticker) ? { ...FALLBACK_DRIVERS } : { ...EMPTY_DRIVERS },
     fcfMarginY1FromFilings: false,
   };
@@ -262,18 +266,17 @@ function asPeHistory(value: unknown): PePoint[] {
 
 function asEbitdaHistory(value: unknown): EvEbitdaAnnualPoint[] {
   if (!Array.isArray(value)) return [];
-  return value
-    .map((row) => {
-      if (!row || typeof row !== "object") return null;
-      const point = row as { year?: unknown; ebitda?: unknown; shares?: unknown };
-      const year = num(point.year);
-      const ebitda = num(point.ebitda);
-      if (year == null || ebitda == null) return null;
-      const shares = num(point.shares);
-      return { year, ebitda, shares: shares != null && shares > 0 ? shares : null };
-    })
-    .filter((point): point is EvEbitdaAnnualPoint => point != null)
-    .sort((a, b) => a.year - b.year);
+  const points: EvEbitdaAnnualPoint[] = [];
+  for (const row of value) {
+    if (!row || typeof row !== "object") continue;
+    const point = row as { year?: unknown; ebitda?: unknown; shares?: unknown };
+    const year = num(point.year);
+    const ebitda = num(point.ebitda);
+    if (year == null || ebitda == null) continue;
+    const shares = num(point.shares);
+    points.push({ year, ebitda, shares: shares != null && shares > 0 ? shares : null });
+  }
+  return points.sort((a, b) => a.year - b.year);
 }
 
 function asQuarterlyActuals(value: unknown): QuarterlyActual[] {
@@ -378,6 +381,8 @@ function asAnchors(payload: unknown, period: string | null): ValuationAnchors | 
     ebitdaHistory: asEbitdaHistory(row.ebitdaHistory),
     peHistory: asPeHistory(row.peHistory),
     quarterlyActuals: asQuarterlyActuals(row.quarterlyActuals),
+    effectiveTaxRate: num(row.effectiveTaxRate),
+    preTaxCostOfDebt: num(row.preTaxCostOfDebt),
     drivers: asDrivers(row.drivers),
     fcfMarginY1FromFilings: row.fcfMarginY1FromFilings === true,
   };
@@ -452,6 +457,8 @@ function anchorsFromEdgar(
     ebitdaHistory: edgar.ebitdaHistory.length > 0 ? edgar.ebitdaHistory : g7 ? (bundled?.ebitdaHistory ?? []) : [],
     peHistory: g7 ? (bundled?.peHistory ?? []) : [],
     quarterlyActuals: edgar.quarterlyActuals,
+    effectiveTaxRate: edgar.effectiveTaxRate,
+    preTaxCostOfDebt: edgar.preTaxCostOfDebt,
     drivers: g7
       ? {
           ...FALLBACK_DRIVERS,
@@ -512,6 +519,8 @@ export async function getAnchors(rawTicker: string): Promise<ValuationAnchors> {
     ttmEbitda: bundled.ttmEbitda ?? null,
     ebitdaHistory: bundled.ebitdaHistory ?? [],
     quarterlyActuals: [],
+    effectiveTaxRate: null,
+    preTaxCostOfDebt: null,
   };
   await writeCache(ticker, anchors);
   return anchors;
