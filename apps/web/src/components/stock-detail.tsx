@@ -6,10 +6,13 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import {
   fairValueFromOutputs,
+  txnImageErrorMessage,
+  type ExtractedTrade,
   type JournalEntry,
   type StockDetail,
   type StockTransaction,
   type TradeReview,
+  type TxnExtractResponse,
   type ValuationMethod,
   type ValuationWorkbench,
 } from "@mystockjournal/shared";
@@ -18,6 +21,7 @@ import { NavLocaleToggle } from "@/components/language-switcher";
 import { useI18n, type Translate } from "@/i18n";
 import { ApiError, api } from "@/lib/api";
 import { formatEntryDate, formatPrice, formatShortDate, isCalendarDate, todayNyDate } from "@/lib/format";
+import { prepareTxnImage, rejectTxnImageFile, txnImageClientMessage } from "@/lib/txn-image";
 
 const GRADE_KEYS = {
   Clownery: "grades.Clownery",
@@ -770,6 +774,197 @@ function BuySellToggle({
   );
 }
 
+function CameraIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M4 8.5A2.5 2.5 0 0 1 6.5 6h1.2l.7-1.2A1.5 1.5 0 0 1 9.7 4h4.6a1.5 1.5 0 0 1 1.3.8L16.3 6h1.2A2.5 2.5 0 0 1 20 8.5v8A2.5 2.5 0 0 1 17.5 19h-11A2.5 2.5 0 0 1 4 16.5z"
+        stroke="currentColor"
+        strokeWidth="1.6"
+      />
+      <circle cx="12" cy="12.5" r="3.2" stroke="currentColor" strokeWidth="1.6" />
+    </svg>
+  );
+}
+
+type ImportRow = {
+  key: string;
+  selected: boolean;
+  type: "buy" | "sell";
+  price: string;
+  qty: string;
+  date: string;
+  rationale: string;
+  error?: string;
+};
+
+function extractedToRows(trades: ExtractedTrade[], rationale: string): ImportRow[] {
+  return trades.map((trade, index) => ({
+    key: `${index}-${trade.date ?? ""}-${trade.price ?? ""}-${trade.qty ?? ""}`,
+    selected: true,
+    type: trade.type ?? "buy",
+    price: trade.price != null && trade.price > 0 ? String(trade.price) : "",
+    qty: trade.qty != null && trade.qty > 0 ? String(trade.qty) : "",
+    date: trade.date && isCalendarDate(trade.date) ? trade.date : todayNyDate(),
+    rationale,
+  }));
+}
+
+function ImportFromImageButton({
+  pending,
+  error,
+  onPick,
+}: {
+  pending: boolean;
+  error: string | null;
+  onPick: (file: File) => void;
+}) {
+  const { t } = useI18n();
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  return (
+    <div className="flex flex-col items-end gap-1">
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        className="hidden"
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          event.target.value = "";
+          if (file) onPick(file);
+        }}
+      />
+      <button
+        type="button"
+        disabled={pending}
+        onClick={() => inputRef.current?.click()}
+        className="flex items-center gap-1.5 rounded-lg border border-dashed border-slate-300 px-3 py-1.5 text-[12px] font-semibold text-slate-500 hover:border-blue-400 hover:text-blue-600 disabled:opacity-50"
+      >
+        <CameraIcon />
+        {pending ? t("transaction.importing") : t("transaction.importFromImage")}
+      </button>
+      {error ? <p className="max-w-[16rem] text-right text-[11px] font-medium text-red-500">{error}</p> : null}
+    </div>
+  );
+}
+
+function TxnImportReview({
+  rows,
+  skippedNote,
+  pending,
+  onCancel,
+  onChange,
+  onImport,
+}: {
+  rows: ImportRow[];
+  skippedNote: string | null;
+  pending: boolean;
+  onCancel: () => void;
+  onChange: (rows: ImportRow[]) => void;
+  onImport: () => void;
+}) {
+  const { t } = useI18n();
+  const selectedCount = rows.filter((row) => row.selected).length;
+
+  function patch(index: number, next: Partial<ImportRow>) {
+    onChange(rows.map((row, i) => (i === index ? { ...row, ...next, error: undefined } : row)));
+  }
+
+  return (
+    <div className="flex flex-col gap-3 rounded-xl border-2 border-dashed border-blue-600 bg-white p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[10px] font-bold tracking-wide text-blue-600 uppercase">
+          {t("transaction.importReviewTitle")}
+        </span>
+        <div className="flex gap-1.5">
+          <button
+            type="button"
+            disabled={pending}
+            onClick={onCancel}
+            className="rounded-md bg-[#f4f6f9] px-3 py-1.5 text-[12px] font-semibold text-slate-600"
+          >
+            {t("common.cancel")}
+          </button>
+          <button
+            type="button"
+            disabled={pending || selectedCount === 0}
+            onClick={onImport}
+            className="rounded-md bg-blue-600 px-3 py-1.5 text-[12px] font-bold text-white disabled:opacity-50"
+          >
+            {pending ? t("common.saving") : t("transaction.importN", { count: selectedCount })}
+          </button>
+        </div>
+      </div>
+      {skippedNote ? <p className="text-[11px] text-slate-400">{skippedNote}</p> : null}
+      <div className="flex flex-col gap-2">
+        {rows.map((row, index) => (
+          <div
+            key={row.key}
+            className={`flex flex-col gap-2 rounded-lg border px-3 py-2.5 ${
+              row.error ? "border-red-300 bg-red-50" : "border-slate-100 bg-slate-50"
+            }`}
+          >
+            <label className="flex items-center gap-2 text-[12px] font-semibold text-slate-600">
+              <input
+                type="checkbox"
+                checked={row.selected}
+                disabled={pending}
+                onChange={(event) => patch(index, { selected: event.target.checked })}
+              />
+              <span>{t("transaction.label", { side: row.type === "buy" ? t("transaction.buy") : t("transaction.sell") })}</span>
+            </label>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <select
+                value={row.type}
+                disabled={pending}
+                onChange={(event) => patch(index, { type: event.target.value as "buy" | "sell" })}
+                className={fieldClass(false)}
+              >
+                <option value="buy">{t("transaction.buy")}</option>
+                <option value="sell">{t("transaction.sell")}</option>
+              </select>
+              <input
+                value={row.price}
+                inputMode="decimal"
+                disabled={pending}
+                placeholder={t("transaction.price")}
+                onChange={(event) => patch(index, { price: event.target.value })}
+                className={fieldClass(!!row.error && !parseMoney(row.price))}
+              />
+              <input
+                value={row.qty}
+                inputMode="decimal"
+                disabled={pending}
+                placeholder={t("transaction.quantity")}
+                onChange={(event) => patch(index, { qty: event.target.value })}
+                className={fieldClass(!!row.error && !parseQty(row.qty))}
+              />
+              <input
+                type="date"
+                value={row.date}
+                min="1990-01-01"
+                max={todayNyDate()}
+                disabled={pending}
+                onChange={(event) => patch(index, { date: event.target.value })}
+                className={`${fieldClass(false)} scheme-light`}
+              />
+            </div>
+            <input
+              value={row.rationale}
+              disabled={pending}
+              placeholder={t("transaction.reason")}
+              onChange={(event) => patch(index, { rationale: event.target.value })}
+              className={fieldClass(!!row.error && !row.rationale.trim())}
+            />
+            {row.error ? <p className="text-[11px] font-medium text-red-500">{row.error}</p> : null}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /**
  * Shows the stock's My Fair Value and lets the user switch which saved model
  * supplies it. The dropdown only lists models that produce a fair value, so a
@@ -992,9 +1187,13 @@ export function StockDetail({ ticker }: { ticker: string }) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [txnDraft, setTxnDraft] = useState<
-    { mode: "create"; side: "buy" | "sell" } | { mode: "edit"; id: string; side: "buy" | "sell" } | null
+    | { mode: "create"; side: "buy" | "sell" }
+    | { mode: "edit"; id: string; side: "buy" | "sell" }
+    | { mode: "import"; rows: ImportRow[]; skippedNote: string | null }
+    | null
   >(null);
   const [txnOpen, setTxnOpen] = useState(true);
+  const [importError, setImportError] = useState<string | null>(null);
   const symbol = ticker.toUpperCase();
 
   const detailQuery = useQuery({
@@ -1044,6 +1243,92 @@ export function StockDetail({ ticker }: { ticker: string }) {
     onSuccess: () => {
       setTxnDraft(null);
       queryClient.invalidateQueries({ queryKey: ["stock", symbol] });
+    },
+  });
+
+  const extractTxn = useMutation({
+    mutationFn: async (file: File) => {
+      const rejected = rejectTxnImageFile(file);
+      if (rejected) throw new Error(txnImageErrorMessage(rejected));
+      const prepared = await prepareTxnImage(file);
+      return api<TxnExtractResponse>(`/stocks/${symbol}/transactions/extract-from-image`, {
+        method: "POST",
+        body: JSON.stringify(prepared),
+      });
+    },
+    onSuccess: (payload) => {
+      setImportError(null);
+      const rows = extractedToRows(payload.trades, t("transaction.importDefaultReason"));
+      const skippedNote =
+        payload.skippedCount > 0
+          ? t("transaction.importSkipped", { count: payload.skippedCount, ticker: symbol })
+          : payload.skippedNote;
+      if (rows.length === 0) {
+        setTxnDraft(null);
+        setImportError(skippedNote || t("transaction.importEmpty"));
+        return;
+      }
+      setTxnDraft({ mode: "import", rows, skippedNote });
+    },
+    onError: (error) => {
+      const message = error instanceof Error ? error.message : t("transaction.importFailed");
+      if (message === txnImageErrorMessage("too_large")) setImportError(t("transaction.importTooLarge"));
+      else if (message === txnImageErrorMessage("bad_name")) setImportError(t("transaction.importBadName"));
+      else if (message === txnImageErrorMessage("bad_type")) setImportError(t("transaction.importBadType"));
+      else setImportError(message || t("transaction.importFailed"));
+    },
+  });
+
+  const importTxn = useMutation({
+    mutationFn: async (rows: ImportRow[]) => {
+      const selected = rows
+        .map((row, index) => ({ row, index }))
+        .filter((item) => item.row.selected);
+      const next: ImportRow[] = rows.map((row) => {
+        const copy = { ...row };
+        delete copy.error;
+        return copy;
+      });
+      for (const { row, index } of selected) {
+        const errors = validateTxnForm(row, t);
+        const first = errors.price ?? errors.qty ?? errors.date ?? errors.rationale;
+        if (first) {
+          next[index] = { ...row, error: first };
+          setTxnDraft({ mode: "import", rows: next, skippedNote: txnDraft?.mode === "import" ? txnDraft.skippedNote : null });
+          throw new Error(first);
+        }
+      }
+      const remaining = [...next];
+      for (const { row, index } of selected) {
+        try {
+          await api(`/stocks/${symbol}/transactions`, {
+            method: "POST",
+            body: txnBody({
+              type: row.type,
+              price: row.price,
+              qty: row.qty,
+              date: row.date,
+              rationale: row.rationale,
+            }),
+          });
+          remaining[index] = { ...remaining[index], selected: false };
+          await queryClient.invalidateQueries({ queryKey: ["stock", symbol] });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : t("transaction.importFailed");
+          remaining[index] = { ...remaining[index], error: message };
+          setTxnDraft({
+            mode: "import",
+            rows: remaining,
+            skippedNote: txnDraft?.mode === "import" ? txnDraft.skippedNote : null,
+          });
+          throw error;
+        }
+      }
+      return remaining;
+    },
+    onSuccess: async () => {
+      setTxnDraft(null);
+      await queryClient.invalidateQueries({ queryKey: ["stock", symbol] });
     },
   });
 
@@ -1142,10 +1427,28 @@ export function StockDetail({ ticker }: { ticker: string }) {
           </div>
           {txnOpen && (
             <div className="flex flex-col gap-4 border-t border-[#ebf0f5] px-4 pt-4 pb-2 md:px-6">
-              <BuySellToggle
-                side={txnDraft?.mode === "create" ? txnDraft.side : null}
-                onSelect={(side) => setTxnDraft({ mode: "create", side })}
-              />
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <BuySellToggle
+                  side={txnDraft?.mode === "create" ? txnDraft.side : null}
+                  onSelect={(side) => {
+                    setImportError(null);
+                    setTxnDraft({ mode: "create", side });
+                  }}
+                />
+                <ImportFromImageButton
+                  pending={extractTxn.isPending}
+                  error={importError}
+                  onPick={(file) => {
+                    const rejected = rejectTxnImageFile(file);
+                    if (rejected) {
+                      setImportError(t(`transaction.${txnImageClientMessage(rejected)}`));
+                      return;
+                    }
+                    setImportError(null);
+                    extractTxn.mutate(file);
+                  }}
+                />
+              </div>
               {(data?.transactions ?? []).map((txn) =>
                 txnDraft?.mode === "edit" && txnDraft.id === txn.id ? (
                   <EditingTransactionForm
@@ -1175,6 +1478,16 @@ export function StockDetail({ ticker }: { ticker: string }) {
                   onSideChange={(side) => setTxnDraft({ mode: "create", side })}
                   onCancel={() => setTxnDraft(null)}
                   onSave={(input) => saveTxn.mutate(input)}
+                />
+              )}
+              {txnDraft?.mode === "import" && (
+                <TxnImportReview
+                  rows={txnDraft.rows}
+                  skippedNote={txnDraft.skippedNote}
+                  pending={importTxn.isPending}
+                  onCancel={() => setTxnDraft(null)}
+                  onChange={(rows) => setTxnDraft({ mode: "import", rows, skippedNote: txnDraft.skippedNote })}
+                  onImport={() => importTxn.mutate(txnDraft.rows)}
                 />
               )}
             </div>

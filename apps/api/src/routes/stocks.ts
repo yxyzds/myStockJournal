@@ -1,7 +1,12 @@
 import { Hono } from "hono";
 import { and, asc, eq, inArray } from "drizzle-orm";
 import {
+  TXN_IMAGE_MAX_DECODED_BYTES,
+  dataUrlDecodedBytes,
   isTradeReviewGrade,
+  parseTxnImageDataUrl,
+  txnImageErrorMessage,
+  validateTxnImageMeta,
   type JournalEntry,
   type JournalSnapshot,
   type Quote,
@@ -9,6 +14,7 @@ import {
   type StockTransaction,
   type TradeReview,
 } from "@mystockjournal/shared";
+import { extractTradesFromImage, filterExtractedTrades } from "../ai/txn-extract";
 import { reviewTradeJournal } from "../ai/trade-review";
 import { env } from "../env";
 import type { AppEnv } from "../types";
@@ -280,6 +286,62 @@ stockRoutes.post("/:ticker/transactions", async (c) => {
 
   const txn = toTransaction(inserted[0]);
   return c.json({ transaction: txn }, 201);
+});
+
+/**
+ * POST /stocks/:ticker/transactions/extract-from-image — vision pass over a
+ * brokerage screenshot. Returns drafts only; the client saves after review.
+ */
+stockRoutes.post("/:ticker/transactions/extract-from-image", async (c) => {
+  if (!env.aiApiKey || !env.aiBaseUrl) {
+    return c.json({ error: "Set AI_BASE_URL and AI_API_KEY in .env to enable screenshot import" }, 503);
+  }
+  if (!env.aiVisionModel) {
+    return c.json({ error: "Set AI_VISION_MODEL in .env to enable screenshot import" }, 503);
+  }
+
+  const found = await getOrCreateStock(c.get("userId"), c.req.param("ticker"));
+  if ("error" in found) return c.json({ error: found.error }, found.status);
+
+  const body = (await c.req.json().catch(() => null)) as Record<string, unknown> | null;
+  if (!body || typeof body.image !== "string" || typeof body.filename !== "string") {
+    return c.json({ error: "Invalid body" }, 400);
+  }
+
+  const parsed = parseTxnImageDataUrl(body.image);
+  if (!parsed) return c.json({ error: txnImageErrorMessage("bad_type") }, 400);
+
+  const mediaType = typeof body.mediaType === "string" ? body.mediaType : parsed.mediaType;
+  if (mediaType.trim().toLowerCase() !== parsed.mediaType) {
+    return c.json({ error: txnImageErrorMessage("bad_type") }, 400);
+  }
+
+  const decoded = dataUrlDecodedBytes(parsed.dataUrl);
+  if (decoded == null) return c.json({ error: txnImageErrorMessage("bad_type") }, 400);
+  const rejected = validateTxnImageMeta({
+    filename: body.filename,
+    mediaType,
+    byteLength: decoded,
+    maxBytes: TXN_IMAGE_MAX_DECODED_BYTES,
+  });
+  if (rejected) return c.json({ error: txnImageErrorMessage(rejected) }, 400);
+
+  const allowed = await consumeAiReviewSlot(c.get("userId"));
+  if (!allowed) return c.json({ error: AI_REVIEW_LIMIT_ERROR }, 429);
+
+  try {
+    const extracted = await extractTradesFromImage(parsed.dataUrl);
+    const { kept, skippedCount } = filterExtractedTrades(extracted.trades, found.stock.ticker);
+    const skippedNote =
+      skippedCount > 0
+        ? `Ignored ${skippedCount} trade${skippedCount === 1 ? "" : "s"} that are not ${found.stock.ticker} or not USD.`
+        : extracted.skippedNote;
+    return c.json({ trades: kept, skippedCount, skippedNote });
+  } catch (error) {
+    await releaseAiReviewSlot(c.get("userId"));
+    const message = error instanceof Error ? error.message : "Screenshot import failed";
+    return c.json({ error: message }, 502);
+  }
 });
 
 /**
