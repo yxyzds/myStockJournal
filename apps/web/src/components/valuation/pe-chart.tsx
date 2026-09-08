@@ -15,6 +15,16 @@ export const PEER_COLORS = ["#6366f1", "#f59e0b", "#ec4899", "#10b981", "#8b5cf6
 export type PeChartMode = "pe" | "peg" | "evebitda";
 export type PeChartPeriod = "week" | "month" | "year";
 
+/** `lock` / `unlock` are missing from the DOM lib's `ScreenOrientation`. */
+type OrientationWithLock = ScreenOrientation & {
+  lock?: (orientation: string) => Promise<void>;
+  unlock?: () => void;
+};
+
+function screenOrientation(): OrientationWithLock | null {
+  return typeof screen === "undefined" ? null : (screen.orientation as OrientationWithLock | undefined) ?? null;
+}
+
 type PeChartProps = {
   mode: PeChartMode;
   history: PeSeriesPoint[];
@@ -91,7 +101,7 @@ export function PeChart(props: PeChartProps) {
         /* iOS Safari and some desktop browsers reject this. */
       }
       try {
-        await screen.orientation.lock("landscape");
+        await screenOrientation()?.lock?.("landscape");
       } catch {
         /* Lock is optional; CSS rotation covers portrait. */
       }
@@ -103,7 +113,7 @@ export function PeChart(props: PeChartProps) {
         void document.exitFullscreen().catch(() => undefined);
       }
       try {
-        screen.orientation.unlock();
+        screenOrientation()?.unlock?.();
       } catch {
         /* ignore */
       }
