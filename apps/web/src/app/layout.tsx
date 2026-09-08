@@ -1,8 +1,9 @@
 import type { Metadata, Viewport } from "next";
-import { ClerkProvider } from "@clerk/nextjs";
 import { Inter, JetBrains_Mono, Playfair_Display } from "next/font/google";
-import { QueryProvider } from "@/components/query-provider";
-import { isClerkEnabled } from "@/lib/clerk";
+import { AppProviders } from "@/components/app-providers";
+import { I18nProvider } from "@/i18n/provider";
+import { bcp47 } from "@/i18n/locale";
+import { getRequestLocale, getServerT } from "@/i18n/server";
 import { cn } from "@/lib/utils";
 import "./globals.css";
 
@@ -21,10 +22,13 @@ const jetbrains = JetBrains_Mono({
   subsets: ["latin"],
 });
 
-export const metadata: Metadata = {
-  title: "MyStockJournal",
-  description: "Record decisions. Get rated. Stay honest.",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getServerT();
+  return {
+    title: t("meta.title"),
+    description: t("meta.description"),
+  };
+}
 
 export const viewport: Viewport = {
   width: "device-width",
@@ -32,34 +36,17 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
-function Providers({ children }: { children: React.ReactNode }) {
-  const inner = <QueryProvider>{children}</QueryProvider>;
-  if (!isClerkEnabled) return inner;
-  return (
-    <ClerkProvider
-      signInUrl="/sign-in"
-      signUpUrl="/sign-up"
-      afterSignOutUrl="/sign-in"
-      appearance={{
-        variables: {
-          colorPrimary: "#0f172a",
-          borderRadius: "0.6rem",
-        },
-      }}
-    >
-      {inner}
-    </ClerkProvider>
-  );
-}
-
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default async function RootLayout({ children }: LayoutProps<"/">) {
+  const locale = await getRequestLocale();
   return (
     <html
-      lang="en"
+      lang={bcp47(locale)}
       className={cn("h-full antialiased font-sans", inter.variable, playfair.variable, jetbrains.variable)}
     >
       <body className="min-h-full flex flex-col bg-background text-foreground">
-        <Providers>{children}</Providers>
+        <I18nProvider initialLocale={locale}>
+          <AppProviders>{children}</AppProviders>
+        </I18nProvider>
       </body>
     </html>
   );

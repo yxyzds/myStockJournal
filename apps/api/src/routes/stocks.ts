@@ -19,6 +19,7 @@ import { recordDecision } from "../lib/decisions";
 import { getOrCreateStock, num } from "../lib/stocks";
 import { getQuotes } from "../market/quotes";
 import { fetchTencentKline } from "../market/tencent";
+import { requestLocale } from "../lib/locale";
 
 function todayNyDate() {
   return new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
@@ -418,6 +419,7 @@ stockRoutes.post("/:ticker/ai/trade-review", async (c) => {
       sessionCloses: kline
         .filter((bar) => bar.close > 0)
         .map((bar) => ({ date: bar.date, close: bar.close })),
+      language: requestLocale(c.req.header("accept-language")),
     });
     await db
       .update(stocks)

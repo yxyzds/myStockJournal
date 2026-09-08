@@ -1,8 +1,15 @@
-export function formatPrice(value: number | null, currency = "USD") {
+import { bcp47, getCurrentLocale, type Locale } from "@/i18n/locale";
+
+function intlLocale(locale?: Locale) {
+  return bcp47(locale ?? getCurrentLocale());
+}
+
+/** US-listed prices — always USD. */
+export function formatPrice(value: number | null) {
   if (value == null) return "—";
   return new Intl.NumberFormat("en-US", {
     style: "currency",
-    currency,
+    currency: "USD",
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(value);
@@ -14,10 +21,16 @@ export function formatPercent(value: number | null, digits = 2) {
 }
 
 /** Calendar date for journal / trade records, e.g. "Aug 27, 2026". */
-export function formatEntryDate(isoDate: string) {
+export function formatEntryDate(isoDate: string, locale?: Locale) {
   const date = isoDate.length === 10 ? new Date(`${isoDate}T12:00:00`) : new Date(isoDate);
   if (Number.isNaN(date.getTime())) return isoDate;
-  return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  return date.toLocaleDateString(intlLocale(locale), { month: "short", day: "numeric", year: "numeric" });
+}
+
+export function formatShortDate(isoDate: string, locale?: Locale) {
+  const date = isoDate.length === 10 ? new Date(`${isoDate}T12:00:00`) : new Date(isoDate);
+  if (Number.isNaN(date.getTime())) return isoDate;
+  return date.toLocaleDateString(intlLocale(locale), { month: "short", day: "numeric" });
 }
 
 /** YYYY-MM-DD in US Eastern. */
@@ -38,7 +51,7 @@ export function formatQuoteAsOf(iso: string | null) {
   if (!iso) return null;
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return null;
-  return new Intl.DateTimeFormat("en-US", {
+  return new Intl.DateTimeFormat(intlLocale(), {
     timeZone: "America/New_York",
     month: "short",
     day: "numeric",

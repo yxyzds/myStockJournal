@@ -5,16 +5,23 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import { AccountAvatar } from "@/components/account-avatar";
+import { LanguageSwitcher, NavLocaleToggle } from "@/components/language-switcher";
+import { useI18n } from "@/i18n";
 import { ApiError, api } from "@/lib/api";
 import { isClerkEnabled, type Me } from "@/lib/clerk";
 import { initials } from "@/lib/initials";
 
 type Tab = "account" | "subscription" | "billing";
 
-const NAV: { id: Tab; label: string; icon: ReactNode }[] = [
+const TAB_LABEL_KEY: Record<Tab, "settings.account" | "settings.subscription" | "settings.billing"> = {
+  account: "settings.account",
+  subscription: "settings.subscription",
+  billing: "settings.billing",
+};
+
+const NAV: { id: Tab; icon: ReactNode }[] = [
   {
     id: "account",
-    label: "Account",
     icon: (
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
         <circle cx="8" cy="5.5" r="2.5" stroke="currentColor" strokeWidth="1.3" />
@@ -29,7 +36,6 @@ const NAV: { id: Tab; label: string; icon: ReactNode }[] = [
   },
   {
     id: "subscription",
-    label: "Subscription",
     icon: (
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
         <path
@@ -43,7 +49,6 @@ const NAV: { id: Tab; label: string; icon: ReactNode }[] = [
   },
   {
     id: "billing",
-    label: "Billing",
     icon: (
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
         <rect x="1.5" y="3.5" width="13" height="9" rx="2" stroke="currentColor" strokeWidth="1.3" />
@@ -68,6 +73,7 @@ function ProfileAvatar({ name, size }: { name: string; size: number }) {
 }
 
 function AccountPanel({ me }: { me: Me }) {
+  const { t } = useI18n();
   const queryClient = useQueryClient();
   const [name, setName] = useState(me.name);
   const [email, setEmail] = useState(me.email);
@@ -91,13 +97,13 @@ function AccountPanel({ me }: { me: Me }) {
     },
   });
 
-  const error = save.error instanceof ApiError ? save.error.message : save.isError ? "Could not save profile" : null;
+  const error = save.error instanceof ApiError ? save.error.message : save.isError ? t("settings.saveError") : null;
 
   return (
     <div className="flex flex-col gap-8">
       <div>
-        <h1 className="text-[22px] leading-snug font-bold text-slate-900">Account</h1>
-        <p className="mt-1 text-[14px] text-slate-500">Manage your profile and login details</p>
+        <h1 className="text-[22px] leading-snug font-bold text-slate-900">{t("settings.account")}</h1>
+        <p className="mt-1 text-[14px] text-slate-500">{t("settings.accountSubtitle")}</p>
       </div>
 
       <div className="flex items-center gap-5 rounded-2xl border border-[#e8eef5] bg-white p-6 shadow-[0_1px_4px_rgba(15,23,42,0.05)]">
@@ -108,17 +114,24 @@ function AccountPanel({ me }: { me: Me }) {
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-[#e8eef5] bg-white shadow-[0_1px_4px_rgba(15,23,42,0.05)]">
-        <div className="border-b border-slate-100 px-6 py-[18px]">
-          <p className="text-[14px] font-semibold text-slate-800">Profile details</p>
+      <div className="rounded-2xl border border-[#e8eef5] bg-white shadow-[0_1px_4px_rgba(15,23,42,0.05)]">
+        <div className="rounded-t-2xl border-b border-slate-100 px-6 py-[18px]">
+          <p className="text-[14px] font-semibold text-slate-800">{t("settings.profileDetails")}</p>
         </div>
-        <div className="flex flex-col gap-5 px-6 py-[22px]">
-          <Field label="Full name" value={name} onChange={setName} />
-          <Field label="Email address" value={email} onChange={setEmail} type="email" />
-          <Field label="Username" value={me.username} onChange={() => {}} disabled hint="Username cannot be changed" />
+        <div className="relative z-10 flex flex-col gap-5 px-6 py-[22px]">
+          <Field label={t("settings.fullName")} value={name} onChange={setName} />
+          <Field label={t("settings.email")} value={email} onChange={setEmail} type="email" />
+          <Field
+            label={t("settings.username")}
+            value={me.username}
+            onChange={() => {}}
+            disabled
+            hint={t("settings.usernameHint")}
+          />
+          <LanguageSwitcher />
         </div>
-        <div className="flex items-center justify-between border-t border-slate-100 bg-slate-50 px-6 py-4">
-          {saved ? <span className="text-[13px] font-medium text-emerald-500">Changes saved</span> : <div />}
+        <div className="flex items-center justify-between rounded-b-2xl border-t border-slate-100 bg-slate-50 px-6 py-4">
+          {saved ? <span className="text-[13px] font-medium text-emerald-500">{t("settings.changesSaved")}</span> : <div />}
           {error ? <span className="mr-auto text-[13px] font-medium text-red-500">{error}</span> : null}
           <button
             type="button"
@@ -127,7 +140,7 @@ function AccountPanel({ me }: { me: Me }) {
             className="rounded-[9px] px-[18px] py-2 text-[13px] font-semibold text-white disabled:opacity-50"
             style={{ background: AVATAR_GRADIENT }}
           >
-            {save.isPending ? "Saving…" : "Save changes"}
+            {save.isPending ? t("common.saving") : t("settings.saveChanges")}
           </button>
         </div>
       </div>
@@ -210,13 +223,14 @@ function UsageCard({
 }
 
 function SubscriptionPanel() {
+  const { t } = useI18n();
   const [showCancel, setShowCancel] = useState(false);
 
   return (
     <div className="flex flex-col gap-8">
       <div>
-        <h1 className="text-[22px] leading-snug font-bold text-slate-900">Subscription</h1>
-        <p className="mt-1 text-[14px] text-slate-500">Your plan, AI quota, and usage</p>
+        <h1 className="text-[22px] leading-snug font-bold text-slate-900">{t("settings.subscription")}</h1>
+        <p className="mt-1 text-[14px] text-slate-500">{t("settings.subscriptionSubtitle")}</p>
       </div>
 
       <div
@@ -226,23 +240,23 @@ function SubscriptionPanel() {
         <div className="flex flex-col gap-2.5">
           <div className="flex items-center gap-2.5">
             <span className="rounded-[5px] bg-blue-600 px-2 py-[3px] text-[10px] font-bold tracking-widest text-white uppercase">
-              Active Plan
+              {t("settings.activePlan")}
             </span>
-            <span className="text-[24px] leading-none font-bold text-slate-900">Pro Plan</span>
+            <span className="text-[24px] leading-none font-bold text-slate-900">{t("settings.proPlan")}</span>
           </div>
-          <p className="text-[14px] text-slate-500">Full decision loop depth, AI critiques, and monitoring.</p>
+          <p className="text-[14px] text-slate-500">{t("settings.planBlurb")}</p>
           <div className="mt-1 flex items-center gap-7">
             <div>
-              <p className="mb-1 text-[10px] font-bold tracking-wide text-slate-400 uppercase">Price</p>
+              <p className="mb-1 text-[10px] font-bold tracking-wide text-slate-400 uppercase">{t("settings.price")}</p>
               <p className="text-[20px] leading-none font-bold text-slate-900">
-                $19<span className="text-[14px] font-normal text-slate-500">/month</span>
+                $19<span className="text-[14px] font-normal text-slate-500">{t("settings.perMonth")}</span>
               </p>
             </div>
             <div>
-              <p className="mb-1 text-[10px] font-bold tracking-wide text-slate-400 uppercase">Status</p>
+              <p className="mb-1 text-[10px] font-bold tracking-wide text-slate-400 uppercase">{t("settings.status")}</p>
               <div className="flex items-center gap-1.5">
                 <div className="size-[7px] rounded-full bg-emerald-500" />
-                <p className="text-[13px] font-semibold text-emerald-500">Coming soon</p>
+                <p className="text-[13px] font-semibold text-emerald-500">{t("common.comingSoon")}</p>
               </div>
             </div>
           </div>
@@ -253,46 +267,44 @@ function SubscriptionPanel() {
             disabled
             className="cursor-not-allowed rounded-[10px] border border-slate-200 bg-white px-[18px] py-[9px] text-[13px] font-semibold text-slate-400"
           >
-            Manage plan
+            {t("settings.managePlan")}
           </button>
           <button
             type="button"
             onClick={() => setShowCancel((v) => !v)}
             className="bg-transparent text-[12px] text-slate-400 hover:text-red-500"
           >
-            Cancel subscription
+            {t("settings.cancelSubscription")}
           </button>
         </div>
       </div>
 
       {showCancel ? (
         <div className="flex items-center justify-between gap-4 rounded-[14px] border border-rose-200 bg-rose-50 px-5 py-4">
-          <p className="text-[13px] text-rose-800">
-            Billing isn’t connected yet. This is a preview of the cancel flow.
-          </p>
+          <p className="text-[13px] text-rose-800">{t("settings.cancelPreview")}</p>
           <button
             type="button"
             onClick={() => setShowCancel(false)}
             className="shrink-0 rounded-[7px] border border-slate-200 bg-white px-3 py-1.5 text-[12px] font-medium text-slate-600"
           >
-            Close
+            {t("common.close")}
           </button>
         </div>
       ) : null}
 
       <div>
-        <p className="mb-3.5 text-[11px] font-bold tracking-widest text-slate-400 uppercase">Current Usage</p>
+        <p className="mb-3.5 text-[11px] font-bold tracking-widest text-slate-400 uppercase">{t("settings.currentUsage")}</p>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-          <UsageCard label="AI Rate My Transaction" value={0} max={50} unit="this month" color="#2563eb" />
+          <UsageCard label={t("settings.usageAi")} value={0} max={50} unit={t("settings.thisMonth")} color="#2563eb" />
           <UsageCard
-            label="Saved Valuations"
+            label={t("settings.usageValuations")}
             value={0}
             max={null}
-            unit="Unlimited"
-            proBenefit="Pro Benefit: Unlimited"
+            unit={t("settings.unlimited")}
+            proBenefit={t("settings.proBenefitUnlimited")}
             color="#10b981"
           />
-          <UsageCard label="Filing Analyses" value={0} max={20} unit="" color="#2563eb" />
+          <UsageCard label={t("settings.usageFilings")} value={0} max={20} unit="" color="#2563eb" />
         </div>
       </div>
     </div>
@@ -300,33 +312,35 @@ function SubscriptionPanel() {
 }
 
 const INVOICES = [
-  { id: "INV-preview", date: "—", amount: "—", label: "No invoices yet" },
+  { id: "INV-preview", date: "—", amount: "—" },
 ];
 
 function BillingPanel() {
+  const { t } = useI18n();
+
   return (
     <div className="flex flex-col gap-8">
       <div>
-        <h1 className="text-[22px] leading-snug font-bold text-slate-900">Billing</h1>
-        <p className="mt-1 text-[14px] text-slate-500">Payment method and invoice history</p>
+        <h1 className="text-[22px] leading-snug font-bold text-slate-900">{t("settings.billing")}</h1>
+        <p className="mt-1 text-[14px] text-slate-500">{t("settings.billingSubtitle")}</p>
       </div>
 
       <div className="overflow-hidden rounded-2xl border border-[#e8eef5] bg-white shadow-[0_1px_4px_rgba(15,23,42,0.05)]">
         <div className="flex items-center justify-between border-b border-slate-100 px-6 py-[18px]">
-          <p className="text-[14px] font-semibold text-slate-800">Payment method</p>
-          <span className="text-[13px] font-medium text-slate-400">Coming soon</span>
+          <p className="text-[14px] font-semibold text-slate-800">{t("settings.paymentMethod")}</p>
+          <span className="text-[13px] font-medium text-slate-400">{t("common.comingSoon")}</span>
         </div>
-        <div className="px-6 py-5 text-[13px] text-slate-500">No card on file. Billing is not connected yet.</div>
+        <div className="px-6 py-5 text-[13px] text-slate-500">{t("settings.noCard")}</div>
       </div>
 
       <div className="overflow-hidden rounded-2xl border border-[#e8eef5] bg-white shadow-[0_1px_4px_rgba(15,23,42,0.05)]">
         <div className="border-b border-slate-100 px-6 py-[18px]">
-          <p className="text-[14px] font-semibold text-slate-800">Invoice history</p>
+          <p className="text-[14px] font-semibold text-slate-800">{t("settings.invoiceHistory")}</p>
         </div>
         {INVOICES.map((inv) => (
           <div key={inv.id} className="flex items-center justify-between px-6 py-3.5">
             <div className="flex flex-col">
-              <span className="text-[13px] font-semibold text-slate-800">{inv.label}</span>
+              <span className="text-[13px] font-semibold text-slate-800">{t("settings.noInvoices")}</span>
               <span className="mt-px text-[11px] text-slate-400">{inv.date}</span>
             </div>
             <span className="font-mono text-[13px] font-semibold text-slate-800 tabular-nums">{inv.amount}</span>
@@ -347,6 +361,7 @@ function SignOutRow() {
 }
 
 function SignOutButton() {
+  const { t } = useI18n();
   const { signOut } = useClerk();
   return (
     <button
@@ -354,7 +369,7 @@ function SignOutButton() {
       onClick={() => void signOut({ redirectUrl: "/sign-in" })}
       className="flex w-full cursor-pointer items-center gap-2 rounded-[10px] bg-transparent px-3 py-2.5 text-left hover:bg-slate-50"
     >
-      <span className="text-[13px] font-medium text-slate-400 hover:text-slate-600">Sign out</span>
+      <span className="text-[13px] font-medium text-slate-400 hover:text-slate-600">{t("common.signOut")}</span>
     </button>
   );
 }
@@ -370,20 +385,21 @@ function SidebarInner({
   name: string;
   onClose?: () => void;
 }) {
+  const { t } = useI18n();
   return (
     <div className="flex h-full flex-col bg-white">
       <div className="flex items-center gap-3 border-b border-[#ebf0f5] px-5 py-5">
         <ProfileAvatar name={name} size={40} />
         <div className="min-w-0 flex-1">
-          <p className="truncate text-[13px] font-semibold text-slate-800">{name || "Account"}</p>
-          <p className="truncate text-[11px] text-slate-400">Pro Plan</p>
+          <p className="truncate text-[13px] font-semibold text-slate-800">{name || t("common.account")}</p>
+          <p className="truncate text-[11px] text-slate-400">{t("settings.proPlan")}</p>
         </div>
         {onClose ? (
           <button
             type="button"
             onClick={onClose}
             className="flex size-8 shrink-0 items-center justify-center rounded-full bg-[#f4f6f9] text-slate-400 hover:bg-[#ebf0f5] hover:text-slate-600"
-            aria-label="Close menu"
+            aria-label={t("common.closeMenu")}
           >
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
               <path d="M2 2l10 10M12 2L2 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
@@ -407,7 +423,7 @@ function SidebarInner({
           >
             <span className={tab === item.id ? "text-blue-600" : "text-slate-400"}>{item.icon}</span>
             <span className={`flex-1 text-[13px] font-semibold ${tab === item.id ? "text-blue-600" : "text-slate-600"}`}>
-              {item.label}
+              {t(TAB_LABEL_KEY[item.id])}
             </span>
             {tab === item.id ? <div className="size-1.5 shrink-0 rounded-full bg-blue-600" /> : null}
           </button>
@@ -420,6 +436,7 @@ function SidebarInner({
 }
 
 export function SettingsPage() {
+  const { t } = useI18n();
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("account");
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -428,7 +445,7 @@ export function SettingsPage() {
     queryFn: () => api<Me>("/me"),
   });
   const me = meQuery.data;
-  const activeItem = NAV.find((item) => item.id === tab)!;
+  const activeLabel = t(TAB_LABEL_KEY[tab]);
   const name = me?.name ?? "";
 
   return (
@@ -446,7 +463,7 @@ export function SettingsPage() {
                 router.push("/");
               }}
               className="flex size-8 shrink-0 items-center justify-center rounded-full bg-[#f4f6f9] hover:bg-[#ebf0f5]"
-              aria-label="Back"
+              aria-label={t("common.back")}
             >
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
                 <path d="M10 13L5 8l5-5" stroke="#1E293B" strokeWidth="2" strokeLinecap="round" />
@@ -454,11 +471,11 @@ export function SettingsPage() {
             </button>
             <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <p className="text-[16px] font-bold text-slate-900 md:text-lg">Settings</p>
+                <p className="text-[16px] font-bold text-slate-900 md:text-lg">{t("settings.title")}</p>
                 <span className="hidden h-4 w-px bg-[#ebf0f5] md:block" />
-                <p className="hidden truncate text-[14px] text-slate-500 md:inline">{activeItem.label}</p>
+                <p className="hidden truncate text-[14px] text-slate-500 md:inline">{activeLabel}</p>
               </div>
-              <p className="truncate text-[12px] text-slate-500 md:hidden">{activeItem.label}</p>
+              <p className="truncate text-[12px] text-slate-500 md:hidden">{activeLabel}</p>
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-3">
@@ -466,12 +483,13 @@ export function SettingsPage() {
               type="button"
               onClick={() => setDrawerOpen(true)}
               className="flex size-8 items-center justify-center rounded-full bg-[#f4f6f9] hover:bg-[#ebf0f5] md:hidden"
-              aria-label="Open menu"
+              aria-label={t("common.openMenu")}
             >
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
                 <path d="M2 4h12M2 8h12M2 12h12" stroke="#1E293B" strokeWidth="1.6" strokeLinecap="round" />
               </svg>
             </button>
+            <NavLocaleToggle />
             <AccountAvatar />
           </div>
         </div>
@@ -493,9 +511,9 @@ export function SettingsPage() {
 
         <div className="w-full min-w-0 max-w-[760px] flex-1 px-3 py-4 md:px-9 md:py-9">
           {meQuery.isError ? (
-            <p className="text-[13px] text-red-500">Couldn’t load your account.</p>
+            <p className="text-[13px] text-red-500">{t("settings.loadError")}</p>
           ) : !me ? (
-            <p className="text-[13px] text-slate-400">Loading…</p>
+            <p className="text-[13px] text-slate-400">{t("common.loading")}</p>
           ) : (
             <>
               {tab === "account" ? <AccountPanel me={me} /> : null}

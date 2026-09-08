@@ -23,6 +23,8 @@ import {
   type Quote,
 } from "@mystockjournal/shared";
 import { api } from "@/lib/api";
+import { useI18n, type Translate } from "@/i18n";
+import { apiErrorKey } from "@/i18n/api-errors";
 import { useDebounced } from "@/hooks/use-debounced";
 import type { MethodViewProps } from "./actions";
 import { PEER_COLORS, PeChart, type PeChartMode } from "./pe-chart";
@@ -33,11 +35,12 @@ export type MultiplesLens = "pe" | "evebitda";
 
 const TICKER_RE = /^[A-Z0-9][A-Z0-9.\-]{0,15}$/;
 const MAX_PEERS = 8;
-const CHART_PERIODS: { id: PeChartPeriod; label: string }[] = [
-  { id: "week", label: "周" },
-  { id: "month", label: "月" },
-  { id: "year", label: "年" },
-];
+
+function localizeUnavailable(reason: string | null, t: Translate): string | null {
+  if (reason == null) return null;
+  const key = apiErrorKey(reason);
+  return key ? t(key) : reason;
+}
 
 type PeChartResponse = {
   period: PeChartPeriod;
@@ -87,6 +90,7 @@ export function PeView({
   myFairValue,
   actions,
 }: PeViewProps) {
+  const { t, locale } = useI18n();
   const [view, setView] = useState<MultiplesView>(lens === "evebitda" ? "evebitda" : "pe");
   const [chartPeriod, setChartPeriod] = useState<PeChartPeriod>("year");
   const [peerTickers, setPeerTickers] = useState<string[]>([]);
@@ -168,12 +172,12 @@ export function PeView({
     !chartQuery.isFetching &&
     !hasPlottableSeries
       ? evLens
-        ? "暂无 EV/EBITDA 历史，无法对比。"
+        ? t("pe.noHistoryEvebitda")
         : pegView
-          ? "暂无 PEG 历史，无法对比。"
-          : "暂无 P/E 历史，无法对比。"
+          ? t("pe.noHistoryPeg")
+          : t("pe.noHistoryPe")
       : null;
-  const blockedReason = multipleBlockedReason ?? noSeriesReason;
+  const blockedReason = localizeUnavailable(multipleBlockedReason, t) ?? noSeriesReason;
   const compareDisabled = blockedReason != null;
   const evHistory = useMemo(
     () =>
@@ -238,21 +242,34 @@ export function PeView({
   }
 
   const periodTitle =
-    chartPeriod === "week" ? "Weekly" : chartPeriod === "month" ? "Monthly" : "Annual";
+    chartPeriod === "week" ? t("pe.weekly") : chartPeriod === "month" ? t("pe.monthly") : t("pe.annual");
+  const chartPeriods: { id: PeChartPeriod; label: string }[] = [
+    { id: "week", label: t("pe.tabWeek") },
+    { id: "month", label: t("pe.tabMonth") },
+    { id: "year", label: t("pe.tabYear") },
+  ];
+  const peerSubtitle =
+    peerSeries.length > 0
+      ? peerSeries.length === 1
+        ? t("pe.peerPlotted", { count: peerSeries.length })
+        : t("pe.peersPlotted", { count: peerSeries.length })
+      : peers.length > 0
+        ? t("pe.noPlottable")
+        : t("pe.noPeers");
+  const latestNote = chartPeriod !== "year" ? (evLens ? t("pe.evLatest") : t("pe.priceLatest")) : "";
 
   return (
     <div className="flex flex-col items-start gap-3 md:flex-row md:gap-4">
       <div className="order-last flex min-w-0 flex-col gap-3 md:order-first md:flex-1">
         <blockquote className="rounded-[12px] border-l-4 border-blue-200 bg-white px-4 py-3 md:px-5 md:py-3.5">
           <p className="font-heading text-[15px] leading-relaxed text-slate-700 italic">
-            “倍数单独看没有意义；只有和自身历史、同业对比时，才有参考价值。”
+            {locale === "en" ? t("pe.quoteEn") : t("pe.quoteZh")}
           </p>
           <p className="mt-1.5 text-[11px] text-slate-400">
-            A multiple means little in isolation — it becomes useful only next to a company&apos;s own
-            history and its peers.
+            {locale === "en" ? t("pe.quoteZh") : t("pe.quoteEn")}
           </p>
           <p className="mt-0.5 text-[10px] text-slate-400">
-            — inspired by <span className="italic">The Five Rules for Successful Stock Investing</span>
+            {t("pe.inspiredBy")} <span className="italic">{t("pe.inspiredBook")}</span>
           </p>
         </blockquote>
 
@@ -260,32 +277,20 @@ export function PeView({
           <CardHeader
             title={
               view === "evebitda"
-                ? `${periodTitle} EV/EBITDA vs. peers`
+                ? t("pe.titleEvebitda", { period: periodTitle })
                 : view === "peg"
-                  ? `${periodTitle} PEG vs. growth and peers`
-                  : `${periodTitle} P/E vs. peers`
+                  ? t("pe.titlePeg", { period: periodTitle })
+                  : t("pe.titlePe", { period: periodTitle })
             }
-            subtitle={`${ticker} · ${
-              peerSeries.length > 0
-                ? `${peerSeries.length} peer${peerSeries.length > 1 ? "s" : ""} plotted`
-                : peers.length > 0
-                  ? "no plottable peers"
-                  : "no peers added"
-            }${
-              chartPeriod !== "year"
-                ? evLens
-                  ? " · EV ÷ latest EBITDA"
-                  : " · price ÷ latest EPS"
-                : ""
-            }`}
+            subtitle={`${ticker} · ${peerSubtitle}${latestNote}`}
             right={
               <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
                 <div className="flex items-center rounded-lg bg-slate-100 p-[3px]">
                   {(
                     [
-                      { id: "pe" as const, label: "P/E" },
-                      { id: "peg" as const, label: "PEG" },
-                      { id: "evebitda" as const, label: "EV/EBITDA" },
+                      { id: "pe" as const, label: t("pe.tabPe") },
+                      { id: "peg" as const, label: t("pe.tabPeg") },
+                      { id: "evebitda" as const, label: t("pe.tabEvebitda") },
                     ] as const
                   ).map((option) => (
                     <button
@@ -303,7 +308,7 @@ export function PeView({
                   ))}
                 </div>
                 <div className="flex items-center rounded-lg bg-slate-100 p-[3px]">
-                  {CHART_PERIODS.map((period) => (
+                  {chartPeriods.map((period) => (
                     <button
                       key={period.id}
                       type="button"
@@ -328,7 +333,7 @@ export function PeView({
                 <p className="rounded-lg border border-red-200 bg-red-50 px-3.5 py-2 text-[12px] font-semibold text-red-700">
                   {chartQuery.error instanceof Error
                     ? chartQuery.error.message
-                    : "Failed to load chart series"}
+                    : t("pe.chartFailed")}
                 </p>
               </div>
             ) : blockedReason ? (
@@ -363,22 +368,24 @@ export function PeView({
                 {(evLens ? evInputs.expectedEvEbitda : peAssumptions.expectedPe) > 0 && (
                   <Legend
                     color="bg-emerald-500"
-                    label={`Expected ${evLens ? evInputs.expectedEvEbitda : peAssumptions.expectedPe}×`}
+                    label={t("pe.expectedLegend", {
+                      value: evLens ? evInputs.expectedEvEbitda : peAssumptions.expectedPe,
+                    })}
                     solid
                   />
                 )}
                 {chartPeriod === "year" && avg5Y != null && (
-                  <Legend color="bg-slate-400" label={`5Y avg ${fmt1(avg5Y)}×`} />
+                  <Legend color="bg-slate-400" label={t("pe.avg5y", { value: fmt1(avg5Y) })} />
                 )}
                 {chartPeriod === "year" && avg10Y != null && (
-                  <Legend color="bg-slate-300" label={`10Y avg ${fmt1(avg10Y)}×`} />
+                  <Legend color="bg-slate-300" label={t("pe.avg10y", { value: fmt1(avg10Y) })} />
                 )}
               </>
             ) : (
               <>
-                <Legend color="bg-amber-400" label="PEG = 1 (growth-fair)" />
+                <Legend color="bg-amber-400" label={t("pe.pegFair")} />
                 {peAssumptions.expectedPe > 0 && (
-                  <Legend color="bg-emerald-500" label="PEG at your expected P/E" solid />
+                  <Legend color="bg-emerald-500" label={t("pe.pegExpected")} solid />
                 )}
               </>
             )}
@@ -396,7 +403,7 @@ export function PeView({
           {compareDisabled ? (
             <div className="border-t border-slate-100 px-4 py-3 md:px-5">
               <p className="rounded-lg border border-red-200 bg-red-50 px-3.5 py-2 text-[12px] font-semibold text-red-700">
-                {blockedReason} 无法添加同业对比。
+                {blockedReason} {t("pe.cannotCompare")}
               </p>
             </div>
           ) : (
@@ -424,14 +431,14 @@ export function PeView({
             else setPeField("expectedPe", rounded);
           }}
           quickFills={[
-            avg5Y != null ? { label: `5Y avg ${fmt1(avg5Y)}×`, value: avg5Y } : null,
-            avg10Y != null ? { label: `10Y avg ${fmt1(avg10Y)}×`, value: avg10Y } : null,
+            avg5Y != null ? { label: t("pe.avg5y", { value: fmt1(avg5Y) }), value: avg5Y } : null,
+            avg10Y != null ? { label: t("pe.avg10y", { value: fmt1(avg10Y) }), value: avg10Y } : null,
             evLens
               ? evResult.currentMultiple != null
-                ? { label: `Current ${fmt1(evResult.currentMultiple)}×`, value: evResult.currentMultiple }
+                ? { label: t("pe.currentLegend", { value: fmt1(evResult.currentMultiple) }), value: evResult.currentMultiple }
                 : null
               : peResult.currentPe != null
-                ? { label: `Current ${fmt1(peResult.currentPe)}×`, value: peResult.currentPe }
+                ? { label: t("pe.currentLegend", { value: fmt1(peResult.currentPe) }), value: peResult.currentPe }
                 : null,
           ].filter((fill): fill is { label: string; value: number } => fill != null)}
         />
@@ -523,6 +530,7 @@ function PeerComposer({
   onAdd: (ticker: string) => void;
   onRemove: (ticker: string) => void;
 }) {
+  const { t } = useI18n();
   const [draft, setDraft] = useState("");
   const [reasonTicker, setReasonTicker] = useState<string | null>(null);
   const query = draft.trim();
@@ -533,12 +541,13 @@ function PeerComposer({
     () => new Map(peers.map((peer) => [peer.ticker, peer])),
     [peers],
   );
-  const openReason =
+  const rawReason =
     reasonTicker == null
       ? null
       : lens === "evebitda"
         ? (peerByTicker.get(reasonTicker)?.evEbitdaUnavailableReason ?? null)
         : (peerByTicker.get(reasonTicker)?.peUnavailableReason ?? null);
+  const openReason = localizeUnavailable(rawReason, t);
 
   const searchQuery = useQuery({
     queryKey: ["quote-search", debouncedQuery],
@@ -611,7 +620,7 @@ function PeerComposer({
                     className={`inline-flex items-center gap-1 ${
                       unavailable ? "cursor-pointer hover:text-slate-500" : "cursor-default"
                     } ${selected ? "underline decoration-slate-300 underline-offset-2" : ""}`}
-                    title={unavailable ? "查看原因" : undefined}
+                    title={unavailable ? t("pe.viewReason") : undefined}
                   >
                     <span
                       className="size-1.5 rounded-full"
@@ -630,14 +639,14 @@ function PeerComposer({
                       onRemove(peer);
                     }}
                     className="ml-0.5 text-slate-400 hover:text-red-500"
-                    aria-label={`Remove ${peer}`}
+                    aria-label={t("pe.removePeer", { ticker: peer })}
                   >
                     ×
                   </button>
                 </span>
               );
             })}
-            {loading && <span className="text-[10px] text-slate-400">Updating chart…</span>}
+            {loading && <span className="text-[10px] text-slate-400">{t("pe.updatingChart")}</span>}
           </div>
           {openReason != null && reasonTicker != null && (
             <p className="rounded-md bg-slate-50 px-2.5 py-1.5 text-[11px] leading-snug text-slate-500">
@@ -660,7 +669,7 @@ function PeerComposer({
           type="text"
           value={draft}
           onChange={(event) => setDraft(event.target.value.toUpperCase())}
-          placeholder={atLimit ? `Up to ${MAX_PEERS} peers` : "Search ticker to compare…"}
+          placeholder={atLimit ? t("pe.peerLimit", { max: MAX_PEERS }) : t("pe.searchPeer")}
           maxLength={16}
           disabled={atLimit}
           autoComplete="off"
@@ -671,13 +680,13 @@ function PeerComposer({
           disabled={!canAdd}
           className="rounded-[7px] bg-slate-900 px-2.5 py-1.5 text-[11px] font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
         >
-          Compare
+          {t("pe.compare")}
         </button>
 
         {showDropdown && (
           <div className="absolute right-0 bottom-[calc(100%+4px)] left-0 z-20 overflow-hidden rounded-[8px] border border-slate-200 bg-white shadow-md">
             {searching && (
-              <p className="px-3 py-2 text-[11px] text-slate-400">Searching market…</p>
+              <p className="px-3 py-2 text-[11px] text-slate-400">{t("pe.searchingMarket")}</p>
             )}
             {!searching &&
               hits.slice(0, 6).map((item) => (
@@ -693,7 +702,7 @@ function PeerComposer({
               ))}
             {noMatch && (
               <p className="px-3 py-2 text-[11px] text-slate-400">
-                No tickers match “{query}”
+                {t("watchList.noMatch", { query })}
               </p>
             )}
           </div>
@@ -703,7 +712,7 @@ function PeerComposer({
       {error && <p className="mt-1.5 text-[11px] text-red-500">{error}</p>}
       {peerTickers.length === 0 && !error && !showDropdown && (
         <p className="mt-1.5 text-[11px] text-slate-400">
-          Search a competitor the same way as the watch list — only resolved tickers can be compared.
+          {t("pe.searchHint")}
         </p>
       )}
     </div>
@@ -733,6 +742,7 @@ function RightRail({
   actions: MethodViewProps["actions"];
   onField: <K extends keyof PeInputs>(key: K, value: PeInputs[K]) => void;
 }) {
+  const { t } = useI18n();
   const hasFairValue =
     (assumptions.epsBasis === "fwd" ? hasFwdEps : hasTtmEps) && assumptions.expectedPe > 0;
   const undervalued = hasFairValue && result.mos >= 0;
@@ -743,8 +753,8 @@ function RightRail({
         <Card className="px-3.5 py-3.5 md:px-[18px] md:py-4">
           <div className="mb-2.5 flex items-start justify-between gap-2">
             <div>
-              <p className="text-[12px] font-bold text-slate-900">Expected P/E</p>
-              <p className="mt-px text-[10px] text-slate-400">Your judgment multiple</p>
+              <p className="text-[12px] font-bold text-slate-900">{t("pe.expectedPe")}</p>
+              <p className="mt-px text-[10px] text-slate-400">{t("pe.judgmentMultiple")}</p>
             </div>
             {avg5Y != null && (
               <button
@@ -752,7 +762,7 @@ function RightRail({
                 onClick={() => onField("expectedPe", Math.round(avg5Y * 10) / 10)}
                 className="shrink-0 rounded-md border border-dashed border-slate-200 px-[7px] py-1 text-[10px] font-semibold text-slate-400 hover:border-blue-400 hover:text-blue-600"
               >
-                5Y avg
+                {t("pe.avg5yShort")}
               </button>
             )}
           </div>
@@ -762,7 +772,7 @@ function RightRail({
               value={assumptions.expectedPe}
               limits={EXPECTED_PE_LIMITS}
               onCommit={(value) => onField("expectedPe", value)}
-              ariaLabel="Expected P/E"
+              ariaLabel={t("pe.expectedPe")}
               className="min-w-0 flex-1 text-[32px] font-bold text-slate-900"
             />
             <span className="text-[18px] font-semibold text-slate-400">×</span>
@@ -770,12 +780,12 @@ function RightRail({
 
           <div className="mt-2.5">
             <div className="mb-1.5 flex items-center justify-between">
-              <span className="text-[10px] font-bold tracking-wide text-slate-400 uppercase">EPS</span>
+              <span className="text-[10px] font-bold tracking-wide text-slate-400 uppercase">{t("pe.eps")}</span>
               <div className="flex items-center rounded-md bg-slate-100 p-0.5">
                 {(
                   [
-                    { basis: "ttm" as const, label: "TTM" },
-                    { basis: "fwd" as const, label: "Forward" },
+                    { basis: "ttm" as const, label: t("pe.ttm") },
+                    { basis: "fwd" as const, label: t("pe.forward") },
                   ]
                 ).map((option) => (
                   <button
@@ -795,7 +805,7 @@ function RightRail({
             </div>
             <div className="flex items-center justify-between gap-2 rounded-[7px] border border-slate-100 bg-slate-50 px-2.5 py-1.5">
               <span className="text-[11px] text-slate-500">
-                {assumptions.epsBasis === "ttm" ? "TTM EPS (actual)" : "Forward EPS (next 12 months)"}
+                {assumptions.epsBasis === "ttm" ? t("pe.ttmEpsActual") : t("pe.fwdEps")}
               </span>
               <span className="font-mono text-[13px] font-bold text-slate-800 tabular-nums">
                 {hasFairValue ? `$${fmt2(result.eps)}` : "—"}
@@ -806,8 +816,8 @@ function RightRail({
             ) : null}
             <p className="mt-1.5 text-center text-[10px] text-slate-400">
               {hasFairValue
-                ? `Fair value = ${assumptions.expectedPe}× × $${fmt2(result.eps)}`
-                : "Fair value = —"}
+                ? t("pe.fairValueEq", { pe: assumptions.expectedPe, eps: fmt2(result.eps) })
+                : t("pe.fairValueEmpty")}
             </p>
           </div>
         </Card>
@@ -823,11 +833,11 @@ function RightRail({
         >
           <div className="flex flex-wrap items-center justify-between gap-1.5">
             <span className="text-[10px] font-bold tracking-wide text-slate-400 uppercase">
-              Fair value / share
+              {t("pe.fairValueShare")}
             </span>
             {myFairValue !== null && (
               <span className="rounded-full border border-emerald-200 bg-white px-[7px] py-0.5 text-[10px] font-bold text-emerald-700">
-                MFV ${fmt2(myFairValue)}
+                {t("pe.mfv", { value: fmt2(myFairValue) })}
               </span>
             )}
           </div>
@@ -840,7 +850,7 @@ function RightRail({
           </span>
           <div className="mt-2 flex flex-col gap-1">
             <div className="flex items-center justify-between rounded-[7px] bg-white px-2.5 py-1.5">
-              <span className="text-[11px] text-slate-500">Current price</span>
+              <span className="text-[11px] text-slate-500">{t("pe.currentPrice")}</span>
               <span className="font-mono text-[12px] font-semibold text-slate-700 tabular-nums">
                 ${fmt2(currentPrice)}
               </span>
@@ -855,7 +865,7 @@ function RightRail({
                   !hasFairValue ? "text-slate-500" : undervalued ? "text-emerald-700" : "text-red-600"
                 }`}
               >
-                Margin of safety
+                {t("dcf.mos")}
               </span>
               <span
                 className={`font-mono text-[14px] font-bold tabular-nums ${
@@ -873,8 +883,8 @@ function RightRail({
               }`}
             >
               {undervalued
-                ? `Price sits ${fmt1(result.mos)}% below your fair value`
-                : `Price sits ${fmt1(Math.abs(result.mos))}% above your fair value`}
+                ? t("pe.priceBelow", { pct: fmt1(result.mos) })
+                : t("pe.priceAbove", { pct: fmt1(Math.abs(result.mos)) })}
             </p>
           ) : null}
         </div>
@@ -886,7 +896,7 @@ function RightRail({
         disabled={actions.saving || !hasFairValue || result.fairValue <= 0}
         className="rounded-[9px] bg-emerald-600 py-2.5 text-[12px] font-bold text-white hover:bg-emerald-700 disabled:opacity-50"
       >
-        {actions.saving ? "Saving…" : "Set as My Fair Value"}
+        {actions.saving ? t("common.saving") : t("dcf.setAsMyFairValue")}
       </button>
     </div>
   );
@@ -909,6 +919,7 @@ function PegRightRail({
   actions: MethodViewProps["actions"];
   onField: <K extends keyof PeInputs>(key: K, value: PeInputs[K]) => void;
 }) {
+  const { t } = useI18n();
   const undervalued = hasFairValue && result.mos >= 0;
 
   return (
@@ -916,17 +927,17 @@ function PegRightRail({
       <div className="grid grid-cols-2 gap-2.5 md:grid-cols-1">
         <Card className="px-3.5 py-3.5 md:px-[18px] md:py-4">
           <div className="mb-2.5 flex items-center justify-between gap-2">
-            <p className="text-[12px] font-bold text-slate-900">PEG</p>
-            <span className="text-[10px] text-slate-400">growth-adjusted lens</span>
+            <p className="text-[12px] font-bold text-slate-900">{t("pe.tabPeg")}</p>
+            <span className="text-[10px] text-slate-400">{t("pe.growthLens")}</span>
           </div>
 
           <div className="flex items-center gap-1 rounded-[7px] border border-slate-200 bg-white px-2.5 py-1.5 focus-within:border-blue-300">
-            <span className="shrink-0 text-[10px] text-slate-400">Expected growth</span>
+            <span className="shrink-0 text-[10px] text-slate-400">{t("pe.expectedGrowth")}</span>
             <NumberInput
               value={assumptions.expectedGrowth}
               limits={EXPECTED_GROWTH_LIMITS}
               onCommit={(value) => onField("expectedGrowth", value)}
-              ariaLabel="Expected earnings growth"
+              ariaLabel={t("pe.growthAria")}
               className="min-w-0 flex-1 text-right text-[13px] font-bold text-slate-900"
             />
             <span className="shrink-0 text-[10px] text-slate-400">%</span>
@@ -934,24 +945,30 @@ function PegRightRail({
 
           {result.pegAtExpectedPe == null ? (
             <p className="mt-2.5 text-[11px] leading-snug text-slate-400">
-              PEG needs positive earnings and positive growth. On this EPS basis it does not apply.
+              {t("pe.pegNeedsEarnings")}
             </p>
           ) : (
             <>
               <div className="mt-2.5 flex flex-col gap-0.5">
                 {[
                   {
-                    label: "Current PEG",
+                    label: t("pe.currentPeg"),
                     value: result.currentPeg,
                     note:
                       result.currentPe == null
                         ? ""
-                        : `${fmt1(result.currentPe)}× ÷ ${assumptions.expectedGrowth}%`,
+                        : t("pe.pegNote", {
+                            pe: fmt1(result.currentPe),
+                            growth: assumptions.expectedGrowth,
+                          }),
                   },
                   {
-                    label: "PEG at your expected P/E",
+                    label: t("pe.pegExpected"),
                     value: result.pegAtExpectedPe,
-                    note: `${assumptions.expectedPe}× ÷ ${assumptions.expectedGrowth}%`,
+                    note: t("pe.pegNote", {
+                      pe: assumptions.expectedPe,
+                      growth: assumptions.expectedGrowth,
+                    }),
                     highlight: true,
                   },
                 ].map((row) => (
@@ -981,11 +998,11 @@ function PegRightRail({
               </div>
 
               <div className="mt-1.5 border-t border-slate-100 pt-2">
-                <p className="mb-1.5 text-[10px] text-slate-400">Implied P/E at a target PEG:</p>
+                <p className="mb-1.5 text-[10px] text-slate-400">{t("pe.impliedPe")}</p>
                 <div className="flex gap-1.5">
                   {[
-                    { label: "PEG = 1", value: result.impliedPeAtPeg1 },
-                    { label: "PEG = 2", value: result.impliedPeAtPeg2 },
+                    { label: t("pe.peg1"), value: result.impliedPeAtPeg1 },
+                    { label: t("pe.peg2"), value: result.impliedPeAtPeg2 },
                   ].map((option) => (
                     <button
                       key={option.label}
@@ -1020,11 +1037,11 @@ function PegRightRail({
         >
           <div className="flex flex-wrap items-center justify-between gap-1.5">
             <span className="text-[10px] font-bold tracking-wide text-slate-400 uppercase">
-              Fair value / share
+              {t("pe.fairValueShare")}
             </span>
             {myFairValue !== null && (
               <span className="rounded-full border border-emerald-200 bg-white px-[7px] py-0.5 text-[10px] font-bold text-emerald-700">
-                MFV ${fmt2(myFairValue)}
+                {t("pe.mfv", { value: fmt2(myFairValue) })}
               </span>
             )}
           </div>
@@ -1037,7 +1054,7 @@ function PegRightRail({
           </span>
           <div className="mt-2 flex flex-col gap-1">
             <div className="flex items-center justify-between rounded-[7px] bg-white px-2.5 py-1.5">
-              <span className="text-[11px] text-slate-500">Current price</span>
+              <span className="text-[11px] text-slate-500">{t("pe.currentPrice")}</span>
               <span className="font-mono text-[12px] font-semibold text-slate-700 tabular-nums">
                 ${fmt2(currentPrice)}
               </span>
@@ -1052,7 +1069,7 @@ function PegRightRail({
                   !hasFairValue ? "text-slate-500" : undervalued ? "text-emerald-700" : "text-red-600"
                 }`}
               >
-                Margin of safety
+                {t("dcf.mos")}
               </span>
               <span
                 className={`font-mono text-[14px] font-bold tabular-nums ${
@@ -1070,8 +1087,8 @@ function PegRightRail({
               }`}
             >
               {undervalued
-                ? `Price sits ${fmt1(result.mos)}% below your fair value`
-                : `Price sits ${fmt1(Math.abs(result.mos))}% above your fair value`}
+                ? t("pe.priceBelow", { pct: fmt1(result.mos) })
+                : t("pe.priceAbove", { pct: fmt1(Math.abs(result.mos)) })}
             </p>
           ) : null}
         </div>
@@ -1083,7 +1100,7 @@ function PegRightRail({
         disabled={actions.saving || !hasFairValue || result.fairValue <= 0}
         className="rounded-[9px] bg-emerald-600 py-2.5 text-[12px] font-bold text-white hover:bg-emerald-700 disabled:opacity-50"
       >
-        {actions.saving ? "Saving…" : "Set as My Fair Value"}
+        {actions.saving ? t("common.saving") : t("dcf.setAsMyFairValue")}
       </button>
     </div>
   );
@@ -1106,6 +1123,7 @@ function EvRightRail({
   actions: MethodViewProps["actions"];
   onField: <K extends keyof EvEbitdaInputs>(key: K, value: EvEbitdaInputs[K]) => void;
 }) {
+  const { t } = useI18n();
   const hasFairValue =
     assumptions.expectedEvEbitda > 0 && assumptions.ttmEbitda > 0 && assumptions.shares > 0;
   const undervalued = hasFairValue && result.mos >= 0;
@@ -1117,8 +1135,8 @@ function EvRightRail({
         <Card className="px-3.5 py-3.5 md:px-[18px] md:py-4">
           <div className="mb-2.5 flex items-start justify-between gap-2">
             <div>
-              <p className="text-[12px] font-bold text-slate-900">Expected EV/EBITDA</p>
-              <p className="mt-px text-[10px] text-slate-400">Your judgment multiple</p>
+              <p className="text-[12px] font-bold text-slate-900">{t("pe.expectedEv")}</p>
+              <p className="mt-px text-[10px] text-slate-400">{t("pe.judgmentMultiple")}</p>
             </div>
             {avg5Y != null && (
               <button
@@ -1126,7 +1144,7 @@ function EvRightRail({
                 onClick={() => onField("expectedEvEbitda", Math.round(avg5Y * 10) / 10)}
                 className="shrink-0 rounded-md border border-dashed border-slate-200 px-[7px] py-1 text-[10px] font-semibold text-slate-400 hover:border-blue-400 hover:text-blue-600"
               >
-                5Y avg
+                {t("pe.avg5yShort")}
               </button>
             )}
           </div>
@@ -1136,7 +1154,7 @@ function EvRightRail({
               value={assumptions.expectedEvEbitda}
               limits={EXPECTED_EV_EBITDA_LIMITS}
               onCommit={(value) => onField("expectedEvEbitda", value)}
-              ariaLabel="Expected EV/EBITDA"
+              ariaLabel={t("pe.expectedEv")}
               className="min-w-0 flex-1 text-[32px] font-bold text-slate-900"
             />
             <span className="text-[18px] font-semibold text-slate-400">×</span>
@@ -1144,27 +1162,27 @@ function EvRightRail({
 
           <div className="mt-2.5 flex flex-col gap-1">
             <div className="flex items-center justify-between gap-2 rounded-[7px] border border-slate-100 bg-slate-50 px-2.5 py-1.5">
-              <span className="text-[11px] text-slate-500">TTM EBITDA</span>
+              <span className="text-[11px] text-slate-500">{t("pe.ttmEbitda")}</span>
               <span className="font-mono text-[13px] font-bold text-slate-800 tabular-nums">
                 {assumptions.ttmEbitda > 0 ? fmtMoneyM(assumptions.ttmEbitda) : "—"}
               </span>
             </div>
             <div className="flex items-center justify-between gap-2 rounded-[7px] border border-slate-100 bg-slate-50 px-2.5 py-1.5">
-              <span className="text-[11px] text-slate-500">Net debt</span>
+              <span className="text-[11px] text-slate-500">{t("pe.netDebt")}</span>
               <span className="font-mono text-[13px] font-bold text-slate-800 tabular-nums">
                 {fmtMoneyM(netDebt)}
               </span>
             </div>
             <div className="flex items-center justify-between gap-2 rounded-[7px] border border-slate-100 bg-slate-50 px-2.5 py-1.5">
-              <span className="text-[11px] text-slate-500">Diluted shares</span>
+              <span className="text-[11px] text-slate-500">{t("pe.dilutedShares")}</span>
               <span className="font-mono text-[13px] font-bold text-slate-800 tabular-nums">
-                {assumptions.shares > 0 ? `${assumptions.shares.toLocaleString()}M` : "—"}
+                {assumptions.shares > 0 ? `${assumptions.shares.toLocaleString("en-US")}M` : "—"}
               </span>
             </div>
             <p className="mt-1 text-center text-[10px] leading-snug text-slate-400">
               {hasFairValue
-                ? `FV = (${assumptions.expectedEvEbitda}× × EBITDA − debt + cash) / shares`
-                : "Fair value = —"}
+                ? t("pe.fvEvebitda", { multiple: assumptions.expectedEvEbitda })
+                : t("pe.fairValueEmpty")}
             </p>
           </div>
         </Card>
@@ -1180,11 +1198,11 @@ function EvRightRail({
         >
           <div className="flex flex-wrap items-center justify-between gap-1.5">
             <span className="text-[10px] font-bold tracking-wide text-slate-400 uppercase">
-              Fair value / share
+              {t("pe.fairValueShare")}
             </span>
             {myFairValue !== null && (
               <span className="rounded-full border border-emerald-200 bg-white px-[7px] py-0.5 text-[10px] font-bold text-emerald-700">
-                MFV ${fmt2(myFairValue)}
+                {t("pe.mfv", { value: fmt2(myFairValue) })}
               </span>
             )}
           </div>
@@ -1197,13 +1215,13 @@ function EvRightRail({
           </span>
           <div className="mt-2 flex flex-col gap-1">
             <div className="flex items-center justify-between rounded-[7px] bg-white px-2.5 py-1.5">
-              <span className="text-[11px] text-slate-500">Current price</span>
+              <span className="text-[11px] text-slate-500">{t("pe.currentPrice")}</span>
               <span className="font-mono text-[12px] font-semibold text-slate-700 tabular-nums">
                 ${fmt2(currentPrice)}
               </span>
             </div>
             <div className="flex items-center justify-between rounded-[7px] bg-white px-2.5 py-1.5">
-              <span className="text-[11px] text-slate-500">Current EV/EBITDA</span>
+              <span className="text-[11px] text-slate-500">{t("pe.currentEvEbitda")}</span>
               <span className="font-mono text-[12px] font-semibold text-slate-700 tabular-nums">
                 {result.currentMultiple == null ? "—" : `${fmt1(result.currentMultiple)}×`}
               </span>
@@ -1218,7 +1236,7 @@ function EvRightRail({
                   !hasFairValue ? "text-slate-500" : undervalued ? "text-emerald-700" : "text-red-600"
                 }`}
               >
-                Margin of safety
+                {t("dcf.mos")}
               </span>
               <span
                 className={`font-mono text-[14px] font-bold tabular-nums ${
@@ -1236,8 +1254,8 @@ function EvRightRail({
               }`}
             >
               {undervalued
-                ? `Price sits ${fmt1(result.mos)}% below your fair value`
-                : `Price sits ${fmt1(Math.abs(result.mos))}% above your fair value`}
+                ? t("pe.priceBelow", { pct: fmt1(result.mos) })
+                : t("pe.priceAbove", { pct: fmt1(Math.abs(result.mos)) })}
             </p>
           ) : null}
         </div>
@@ -1249,7 +1267,7 @@ function EvRightRail({
         disabled={actions.saving || !hasFairValue || result.fairValue <= 0}
         className="rounded-[9px] bg-emerald-600 py-2.5 text-[12px] font-bold text-white hover:bg-emerald-700 disabled:opacity-50"
       >
-        {actions.saving ? "Saving…" : "Set as My Fair Value"}
+        {actions.saving ? t("common.saving") : t("dcf.setAsMyFairValue")}
       </button>
     </div>
   );
@@ -1270,6 +1288,7 @@ function PeerSection({
   onUseMultiple: (value: number) => void;
   quickFills: { label: string; value: number }[];
 }) {
+  const { t } = useI18n();
   const [reasonTicker, setReasonTicker] = useState<string | null>(null);
 
   if (peers.length === 0 && quickFills.length === 0) return null;
@@ -1277,11 +1296,9 @@ function PeerSection({
   return (
     <Card className="px-4 py-4 md:px-5">
       <div className="mb-3">
-        <p className="text-[13px] font-bold text-slate-900">Peer multiples</p>
+        <p className="text-[13px] font-bold text-slate-900">{t("pe.peerMultiples")}</p>
         <p className="mt-px text-[11px] text-slate-400">
-          {lens === "evebitda"
-            ? "Live EV ÷ TTM EBITDA for peers already on the chart. 无倍数的标的会置灰，点击可看原因。"
-            : "Live price ÷ EPS for peers already on the chart. 无 P/E 的标的会置灰，点击可看原因。"}
+          {lens === "evebitda" ? t("pe.peerSubEvebitda") : t("pe.peerSubPe")}
         </p>
       </div>
 
@@ -1290,7 +1307,10 @@ function PeerSection({
           <table className="w-full min-w-[360px] border-collapse text-left">
             <thead>
               <tr className="border-b border-slate-100 bg-slate-50">
-                {(lens === "evebitda" ? ["Ticker", "Price", "EV/EBITDA", ""] : ["Ticker", "Price", "P/E", "PEG", ""]).map((heading) => (
+                {(lens === "evebitda"
+                  ? [t("pe.colTicker"), t("pe.colPrice"), t("pe.tabEvebitda"), ""]
+                  : [t("pe.colTicker"), t("pe.colPrice"), t("pe.tabPe"), t("pe.tabPeg"), ""]
+                ).map((heading) => (
                   <th key={heading} className="px-3 py-1.5">
                     <span className="text-[10px] font-bold tracking-wide text-slate-400 uppercase">
                       {heading}
@@ -1325,7 +1345,7 @@ function PeerSection({
                           className={`flex items-center gap-1.5 text-left ${
                             unavailable ? "cursor-pointer hover:text-slate-500" : "cursor-default"
                           }`}
-                          title={unavailable ? "查看原因" : undefined}
+                          title={unavailable ? t("pe.viewReason") : undefined}
                         >
                           <div
                             className="size-[7px] shrink-0 rounded-full"
@@ -1394,7 +1414,7 @@ function PeerSection({
                           }}
                           className="text-[10px] text-slate-400 hover:text-red-500"
                         >
-                          Remove
+                          {t("common.remove")}
                         </button>
                       </td>
                     </tr>
@@ -1405,9 +1425,12 @@ function PeerSection({
                       <tr className="border-b border-slate-50 bg-slate-50">
                         <td colSpan={lens === "evebitda" ? 4 : 5} className="px-3 py-2">
                           <p className="text-[11px] leading-snug text-slate-500">
-                            {lens === "evebitda"
+                          {localizeUnavailable(
+                            lens === "evebitda"
                               ? peer.evEbitdaUnavailableReason
-                              : peer.peUnavailableReason}
+                              : peer.peUnavailableReason,
+                            t,
+                          )}
                           </p>
                         </td>
                       </tr>
@@ -1423,7 +1446,7 @@ function PeerSection({
       {quickFills.length > 0 && (
         <div className={`${peers.length > 0 ? "mt-2" : ""} flex flex-wrap items-center gap-1.5`}>
           <span className="text-[10px] text-slate-400">
-            {lens === "evebitda" ? "Set expected EV/EBITDA →" : "Set expected P/E →"}
+            {lens === "evebitda" ? t("pe.setExpectedEv") : t("pe.setExpectedPe")}
           </span>
           {quickFills.map((fill) => (
             <button

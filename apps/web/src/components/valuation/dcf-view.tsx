@@ -3,7 +3,6 @@
 import { useMemo, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import {
-  DCF_REVIEW_FIELD_LABELS,
   DCF_REVIEW_FIELDS,
   DRIVER_LIMITS,
   MOS_PERCENT_LIMITS,
@@ -14,11 +13,13 @@ import {
   type DcfBridge,
   type DcfDrivers,
   type DcfInputs,
+  type DcfReviewField,
   type DcfScenario,
   type DcfYearRow,
   type FilingRef,
   type QuarterlyActual,
 } from "@mystockjournal/shared";
+import { useI18n, type MessageKey } from "@/i18n";
 import { ApiError, api } from "@/lib/api";
 import type { MethodViewProps } from "./actions";
 import { ActualsStrip } from "./actuals-strip";
@@ -46,6 +47,20 @@ const ANCHOR_LIMITS: Record<"ttmRevenue" | "cash" | "debt" | "shares", NumberLim
 };
 
 const SCENARIOS: DcfScenario[] = ["bear", "base", "bull"];
+
+const REVIEW_FIELD_KEYS: Record<DcfReviewField, MessageKey> = {
+  growthY1_5: "dcf.growthY15",
+  growthY6_10: "dcf.growthY610",
+  termGrowth: "dcf.termGrowth",
+  wacc: "dcf.wacc",
+  fcfMarginTerm: "dcf.fcfMarginTerm",
+};
+
+const SCENARIO_KEYS: Record<DcfScenario, MessageKey> = {
+  bear: "dcf.bear",
+  base: "dcf.base",
+  bull: "dcf.bull",
+};
 
 export type DcfViewProps = MethodViewProps & {
   assumptions: DcfInputs;
@@ -172,6 +187,7 @@ function ResultsSection({
   actions: MethodViewProps["actions"];
   onField: <K extends keyof DcfInputs>(key: K, value: DcfInputs[K]) => void;
 }) {
+  const { t } = useI18n();
   const priceGap =
     currentPrice > 0 ? ((bridge.fv - currentPrice) / currentPrice) * 100 : 0;
   const undervalued = ready && bridge.fv >= currentPrice;
@@ -193,8 +209,8 @@ function ResultsSection({
             }`}
           >
             {undervalued
-              ? `Price is ${fmt1(priceGap)}% below your fair value — $${fmt2(bridge.fv - currentPrice)} per share of cushion`
-              : `Price is ${fmt1(Math.abs(priceGap))}% above your fair value — no cushion at this price`}
+              ? t("dcf.cushionBelow", { pct: fmt1(priceGap), amount: fmt2(bridge.fv - currentPrice) })
+              : t("dcf.noCushion", { pct: fmt1(Math.abs(priceGap)) })}
           </p>
         </div>
       ) : null}
@@ -203,11 +219,11 @@ function ResultsSection({
         <div className="flex flex-col gap-2.5 px-[18px] py-[18px] md:gap-3 md:px-6 md:py-5">
           <div className="flex flex-wrap items-center justify-between gap-1.5">
             <span className="text-[10px] font-bold tracking-wider text-slate-400 uppercase">
-              Margin of safety
+              {t("dcf.mos")}
             </span>
             {myFairValue !== null && (
               <span className="rounded-full border border-emerald-200 bg-emerald-50 px-[7px] py-0.5 text-[10px] font-bold text-emerald-700">
-                My Fair Value · ${fmt2(myFairValue)}
+                {t("dcf.myFairValue", { value: fmt2(myFairValue) })}
               </span>
             )}
           </div>
@@ -216,18 +232,18 @@ function ResultsSection({
               value={assumptions.mosPercent}
               limits={MOS_PERCENT_LIMITS}
               onCommit={(value) => onField("mosPercent", value)}
-              ariaLabel="Margin of safety"
+              ariaLabel={t("dcf.mos")}
               className="min-w-0 flex-1 text-[28px] font-bold text-slate-900 md:text-[32px]"
             />
             <span className="text-[18px] font-semibold text-slate-400">%</span>
           </div>
           <p className="text-[11px] text-slate-400">
-            Haircut on intrinsic {ready ? `$${fmt2(bridge.intrinsic)}` : "—"} → fair value
+            {t("dcf.haircut", { intrinsic: ready ? `$${fmt2(bridge.intrinsic)}` : "—" })}
           </p>
 
           <div className="mt-1 border-t border-slate-100 pt-2.5">
             <span className="text-[10px] font-bold tracking-wider text-slate-400 uppercase">
-              My model fair value
+              {t("dcf.modelFairValue")}
             </span>
             <span
               className={`mt-1 block font-mono text-[40px] leading-none font-bold tabular-nums md:text-[52px] ${
@@ -242,7 +258,7 @@ function ResultsSection({
                   undervalued ? "text-emerald-600" : "text-red-500"
                 }`}
               >
-                {fmtSigned(priceGap)} vs. current price
+                {t("dcf.vsCurrent", { gap: fmtSigned(priceGap) })}
               </span>
             ) : null}
           </div>
@@ -252,13 +268,13 @@ function ResultsSection({
             disabled={actions.saving || !ready || bridge.fv <= 0}
             className="self-start rounded-lg bg-emerald-600 px-3.5 py-[7px] text-[11px] font-bold text-white hover:bg-emerald-700 disabled:opacity-50"
           >
-            Set as My Fair Value
+            {t("dcf.setAsMyFairValue")}
           </button>
         </div>
 
         <div className="flex flex-col gap-2.5 px-[18px] py-[18px] md:gap-3 md:px-6 md:py-5">
           <span className="text-[10px] font-bold tracking-wider text-slate-400 uppercase">
-            Current market price
+            {t("dcf.currentPrice")}
           </span>
           <div>
             <span className="block font-mono text-[40px] leading-none font-bold text-slate-700 tabular-nums md:text-[52px]">
@@ -273,16 +289,16 @@ function ResultsSection({
       </div>
 
       <div className="flex items-center gap-2 overflow-x-auto border-t border-slate-100 bg-slate-50 px-[18px] py-2.5 md:px-[22px]">
-        <span className="shrink-0 text-[10px] font-semibold text-slate-400">Inside the model →</span>
+        <span className="shrink-0 text-[10px] font-semibold text-slate-400">{t("dcf.insideModel")}</span>
         {[
-          { label: "Intrinsic / share", value: ready ? `$${fmt2(bridge.intrinsic)}` : "—" },
-          { label: "Terminal value", value: ready ? fmtMoneyM(bridge.tv) : "—" },
-          { label: "PV of terminal value", value: ready ? fmtMoneyM(bridge.pvTv) : "—" },
+          { label: t("dcf.intrinsicShare"), value: ready ? `$${fmt2(bridge.intrinsic)}` : "—" },
+          { label: t("dcf.terminalValue"), value: ready ? fmtMoneyM(bridge.tv) : "—" },
+          { label: t("dcf.pvTerminal"), value: ready ? fmtMoneyM(bridge.pvTv) : "—" },
           {
-            label: "Terminal share of EV",
+            label: t("dcf.terminalShareEv"),
             value: ready && bridge.ev > 0 ? fmtPct((bridge.pvTv / bridge.ev) * 100) : "—",
           },
-          { label: "Sum of PV of FCFs", value: ready ? fmtMoneyM(bridge.pvFcfs) : "—" },
+          { label: t("dcf.sumPvFcfs"), value: ready ? fmtMoneyM(bridge.pvFcfs) : "—" },
         ].map((chip) => (
           <div
             key={chip.label}
@@ -334,14 +350,15 @@ function AssumptionsSection({
   review: DcfAssumptionReview | null;
   onReview: (review: DcfAssumptionReview) => void;
 }) {
+  const { t } = useI18n();
   // Filed figures are facts, so they are only typed in when no filing covered the ticker.
   const manualEntry = !anchorsAvailable;
 
   return (
     <Card>
       <CardHeader
-        title="Assumptions"
-        subtitle="Edit the drivers — fair value updates as you type"
+        title={t("dcf.assumptions")}
+        subtitle={t("dcf.assumptionsSub")}
         right={
           scenariosEnabled ? (
             <div className="flex items-center gap-1 overflow-x-auto rounded-lg bg-slate-100 p-[3px]">
@@ -354,7 +371,7 @@ function AssumptionsSection({
                     scenario === name ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"
                   }`}
                 >
-                  <span className="block text-[10px] font-semibold capitalize">{name}</span>
+                  <span className="block text-[10px] font-semibold capitalize">{t(SCENARIO_KEYS[name])}</span>
                   <span className="block font-mono text-[10px] font-bold">
                     ${fmt2(scenarioFairValues[name])}
                   </span>
@@ -370,14 +387,13 @@ function AssumptionsSection({
           <div>
             <div className="mb-1 flex flex-wrap items-center gap-1.5">
               <div className="size-[7px] shrink-0 rounded-full bg-blue-500" />
-              <span className="text-[11px] font-bold text-slate-800">Your drivers</span>
+              <span className="text-[11px] font-bold text-slate-800">{t("dcf.yourDrivers")}</span>
               <span className="hidden text-[10px] text-slate-400 md:inline">
-                — these judgments drive FCF, terminal value, and EV
+                {t("dcf.driversAside")}
               </span>
             </div>
             <p className="hidden pl-[13px] text-[10px] leading-snug text-slate-400 md:block">
-              Free cash flow comes from revenue × FCF margin. WACC discounts those flows and the
-              terminal value into enterprise value.
+              {t("dcf.driversHelp")}
             </p>
           </div>
 
@@ -387,40 +403,40 @@ function AssumptionsSection({
 
           <div className="grid grid-cols-2 gap-2.5 md:grid-cols-3 md:gap-3">
             <DriverField
-              label="Revenue growth Y1–5"
-              hint="Expected annual revenue growth for forecast years 1–5. When filings are available this is prefilled from the past 5-year revenue CAGR; edit it to set your own outlook."
+              label={t("dcf.growthY15")}
+              hint={t("dcf.growthY15Hint")}
               value={assumptions.growthY1_5}
               suffix="%"
               limits={DRIVER_LIMITS.growthY1_5}
               onChange={(v) => onField("growthY1_5", v)}
             />
             <DriverField
-              label="Revenue growth Y6–10"
-              hint="Expected annual revenue growth for years 6–10 as the business matures. This is a forward judgment, not read from filings."
+              label={t("dcf.growthY610")}
+              hint={t("dcf.growthY610Hint")}
               value={assumptions.growthY6_10}
               suffix="%"
               limits={DRIVER_LIMITS.growthY6_10}
               onChange={(v) => onField("growthY6_10", v)}
             />
             <DriverField
-              label="Terminal growth (g)"
-              hint="Perpetual growth after year 10 in the Gordon growth terminal value. Must stay below WACC or the terminal value is undefined."
+              label={t("dcf.termGrowth")}
+              hint={t("dcf.termGrowthHint")}
               value={assumptions.termGrowth}
               suffix="%"
               limits={DRIVER_LIMITS.termGrowth}
               onChange={(v) => onField("termGrowth", v)}
             />
             <DriverField
-              label="WACC"
-              hint="Weighted average cost of capital — the discount rate applied to each year's free cash flow and to the terminal value."
+              label={t("dcf.wacc")}
+              hint={t("dcf.waccHint")}
               value={assumptions.wacc}
               suffix="%"
               limits={DRIVER_LIMITS.wacc}
               onChange={(v) => onField("wacc", v)}
             />
             <DriverField
-              label="FCF margin Y1"
-              hint="Free cash flow as a % of revenue in year 1. Each year: FCF = revenue × margin. Prefill from filings: (TTM operating cash flow − TTM CapEx) ÷ TTM revenue. CapEx is an outflow, so it subtracts; if CapEx exceeds OCF the prefill floors at 0%. When prefilled from filings this field is locked."
+              label={t("dcf.fcfMarginY1")}
+              hint={t("dcf.fcfMarginY1Hint")}
               value={assumptions.fcfMarginY1}
               suffix="%"
               limits={DRIVER_LIMITS.fcfMarginY1}
@@ -428,8 +444,8 @@ function AssumptionsSection({
               readOnly={fcfMarginY1FromFilings}
             />
             <DriverField
-              label="FCF margin terminal"
-              hint="Assumed FCF / revenue in year 10. Margin fades linearly from Y1 to this terminal rate over the 10-year forecast; year-10 FCF also feeds the terminal value."
+              label={t("dcf.fcfMarginTerm")}
+              hint={t("dcf.fcfMarginTermHint")}
               value={assumptions.fcfMarginTerm}
               suffix="%"
               limits={DRIVER_LIMITS.fcfMarginTerm}
@@ -440,10 +456,10 @@ function AssumptionsSection({
 
         <div className="flex w-full flex-col gap-2.5 border-t border-slate-100 bg-slate-50 px-4 py-4 md:w-[240px] md:shrink-0 md:border-t-0 md:px-[18px] md:py-[18px]">
           <div>
-            <span className="text-[11px] font-bold text-slate-500">Anchors</span>
+            <span className="text-[11px] font-bold text-slate-500">{t("dcf.anchors")}</span>
             {manualEntry ? (
               <p className="text-[10px] leading-snug text-slate-400">
-                No filing data for this ticker — enter the figures yourself
+                {t("dcf.noFiling")}
               </p>
             ) : (
               <FilingSourceNote period={anchorPeriod} filings={sourceFilings} />
@@ -452,32 +468,32 @@ function AssumptionsSection({
 
           <div className="flex flex-col">
             <AnchorRow
-              label="TTM revenue"
-              display={`$${assumptions.ttmRevenue.toLocaleString()}M`}
+              label={t("dcf.ttmRevenue")}
+              display={`$${assumptions.ttmRevenue.toLocaleString("en-US")}M`}
               editable={manualEntry}
               value={assumptions.ttmRevenue}
               limits={ANCHOR_LIMITS.ttmRevenue}
               onChange={(v) => onField("ttmRevenue", v)}
             />
             <AnchorRow
-              label="Cash & investments"
-              display={`$${assumptions.cash.toLocaleString()}M`}
+              label={t("dcf.cash")}
+              display={`$${assumptions.cash.toLocaleString("en-US")}M`}
               editable={manualEntry}
               value={assumptions.cash}
               limits={ANCHOR_LIMITS.cash}
               onChange={(v) => onField("cash", v)}
             />
             <AnchorRow
-              label="Total debt"
-              display={`$${assumptions.debt.toLocaleString()}M`}
+              label={t("dcf.debt")}
+              display={`$${assumptions.debt.toLocaleString("en-US")}M`}
               editable={manualEntry}
               value={assumptions.debt}
               limits={ANCHOR_LIMITS.debt}
               onChange={(v) => onField("debt", v)}
             />
             <AnchorRow
-              label="Diluted shares"
-              display={`${assumptions.shares.toLocaleString()}M`}
+              label={t("dcf.shares")}
+              display={`${assumptions.shares.toLocaleString("en-US")}M`}
               editable={manualEntry}
               value={assumptions.shares}
               limits={ANCHOR_LIMITS.shares}
@@ -485,15 +501,15 @@ function AssumptionsSection({
             />
             {past5YCagr != null && (
               <AnchorRow
-                label="Past 5Y revenue CAGR"
+                label={t("dcf.past5yCagr")}
                 display={fmtPct(past5YCagr)}
-                note="Reference only · not used in the model"
+                note={t("valuation.referenceOnly")}
               />
             )}
           </div>
 
           <p className="pt-1 text-[10px] leading-snug text-slate-400">
-            Cash and debt convert enterprise value into equity value per share.
+            {t("dcf.cashDebtHelp")}
           </p>
         </div>
       </div>
@@ -534,6 +550,7 @@ function DcfAssumptionReviewBar({
   review: DcfAssumptionReview | null;
   onReview: (review: DcfAssumptionReview) => void;
 }) {
+  const { t } = useI18n();
   const ready = dcfModelReady(assumptions);
   const rateMutation = useMutation({
     mutationFn: () =>
@@ -557,8 +574,8 @@ function DcfAssumptionReviewBar({
     return (
       <div className="flex w-full items-center justify-between gap-3 border-t border-[#ebf0f5] px-4 py-[18px] md:px-[22px]">
         <div className="flex min-w-0 flex-col gap-0.5">
-          <span className="text-[13px] font-semibold text-[#1e293b]">Rate My Assumptions</span>
-          <span className="text-[11px] text-[#94a3b8]">AI review of these DCF drivers</span>
+          <span className="text-[13px] font-semibold text-[#1e293b]">{t("dcf.rateTitle")}</span>
+          <span className="text-[11px] text-[#94a3b8]">{t("dcf.rateHint")}</span>
           {errorMessage && <p className="text-[11px] font-medium text-red-500">{errorMessage}</p>}
         </div>
         <button
@@ -573,7 +590,7 @@ function DcfAssumptionReviewBar({
         >
           <RobotIcon size={17} />
           <span className="text-[12px] font-semibold whitespace-nowrap">
-            {analyzing ? "Analyzing…" : "Analyze"}
+            {analyzing ? t("common.analyzing") : t("common.analyze")}
           </span>
         </button>
       </div>
@@ -591,18 +608,18 @@ function DcfAssumptionReviewBar({
           }}
         >
           <span className="text-center text-[11px] leading-tight font-bold text-[#1e40af]">
-            {review.grade}
+            {t(`grades.${review.grade}`)}
           </span>
         </div>
         <div className="flex min-w-0 flex-1 flex-col gap-2">
           <div className="flex items-center gap-1.5 text-[#94a3b8]">
             <RobotIcon size={12} />
-            <span className="text-[9px] font-bold tracking-widest uppercase">AI Verdict</span>
+            <span className="text-[9px] font-bold tracking-widest uppercase">{t("dcf.aiVerdict")}</span>
           </div>
           <div className="flex flex-col gap-2">
             {DCF_REVIEW_FIELDS.map((key) => (
               <div key={key}>
-                <p className="text-[10px] font-bold text-slate-400">{DCF_REVIEW_FIELD_LABELS[key]}</p>
+                <p className="text-[10px] font-bold text-slate-400">{t(REVIEW_FIELD_KEYS[key])}</p>
                 <p className="text-[12px] leading-[1.5] font-medium text-[#334155]">
                   {review.comments[key]}
                 </p>
@@ -613,13 +630,13 @@ function DcfAssumptionReviewBar({
         </div>
         <button
           type="button"
-          title="Re-analyze"
+          title={t("common.reanalyze")}
           disabled={analyzing || !ready}
           onClick={() => rateMutation.mutate()}
           className="flex shrink-0 items-center gap-1.5 rounded-[7px] border border-[#e2e8f0] px-2.5 py-1.5 text-[#94a3b8] hover:border-[#93c5fd] hover:bg-[#eff6ff] hover:text-[#2563eb] disabled:opacity-50"
         >
           <RobotIcon size={12} />
-          <span className="text-[11px] font-medium">{analyzing ? "Analyzing…" : "Re-run"}</span>
+          <span className="text-[11px] font-medium">{analyzing ? t("common.analyzing") : t("common.rerun")}</span>
         </button>
       </div>
     </div>
@@ -639,6 +656,7 @@ function BridgeSection({
   currentPrice: number;
   onField: <K extends keyof DcfInputs>(key: K, value: DcfInputs[K]) => void;
 }) {
+  const { t } = useI18n();
   const [evOpen, setEvOpen] = useState(false);
   const priceGap =
     currentPrice > 0 ? ((bridge.fv - currentPrice) / currentPrice) * 100 : 0;
@@ -648,13 +666,16 @@ function BridgeSection({
     <Card>
       <div className="border-b border-slate-100 px-[22px] py-3.5">
         <div className="flex items-baseline gap-2.5">
-          <p className="text-[14px] font-bold text-slate-900">Valuation bridge</p>
+          <p className="text-[14px] font-bold text-slate-900">{t("dcf.bridge")}</p>
           <span className="text-[11px] text-slate-400">
-            Terminal value {ready ? fmtMoneyM(bridge.tv) : "—"} · PV {ready ? fmtMoneyM(bridge.pvTv) : "—"}
+            {t("dcf.bridgeTv", {
+              tv: ready ? fmtMoneyM(bridge.tv) : "—",
+              pv: ready ? fmtMoneyM(bridge.pvTv) : "—",
+            })}
           </span>
         </div>
         <p className="mt-px text-[11px] text-slate-400">
-          FCF → terminal value → EV → plus cash, less debt → equity → intrinsic → MOS → fair value
+          {t("dcf.bridgeFlow")}
         </p>
       </div>
 
@@ -667,9 +688,9 @@ function BridgeSection({
           >
             <div className="flex items-center gap-2">
               <Chevron open={evOpen} className="text-slate-400" />
-              <span className="text-[12px] font-bold text-slate-800">Enterprise value</span>
+              <span className="text-[12px] font-bold text-slate-800">{t("dcf.enterpriseValue")}</span>
               <span className="hidden text-[10px] text-slate-400 sm:inline">
-                {evOpen ? "— click to collapse" : "· click for the FCF and terminal split"}
+                {evOpen ? t("dcf.clickCollapse") : t("dcf.clickSplit")}
               </span>
             </div>
             <span className="font-mono text-[14px] font-bold text-slate-900 tabular-nums">
@@ -680,9 +701,9 @@ function BridgeSection({
           {evOpen && (
             <div className="mt-0.5 ml-[22px] flex flex-col border-l-2 border-slate-100 pl-3.5">
               {[
-                { label: "Sum of PV of FCFs (10 years)", value: ready ? fmtMoneyM(bridge.pvFcfs) : "—" },
+                { label: t("dcf.sumPvFcfsYears"), value: ready ? fmtMoneyM(bridge.pvFcfs) : "—" },
                 {
-                  label: "PV of terminal value, FCF₁₀ × (1+g) / (WACC−g)",
+                  label: t("dcf.pvTvFormula"),
                   value: ready ? fmtMoneyM(bridge.pvTv) : "—",
                 },
               ].map((row) => (
@@ -698,8 +719,8 @@ function BridgeSection({
 
           <div className="mt-1 ml-[22px] flex flex-col">
             {[
-              { op: "+", label: "Cash & investments", value: assumptions.cash, tone: "text-emerald-600" },
-              { op: "−", label: "Total debt", value: assumptions.debt, tone: "text-red-500" },
+              { op: "+", label: t("dcf.cash"), value: assumptions.cash, tone: "text-emerald-600" },
+              { op: "−", label: t("dcf.debt"), value: assumptions.debt, tone: "text-red-500" },
             ].map((row) => (
               <div
                 key={row.label}
@@ -721,7 +742,7 @@ function BridgeSection({
           <div className="mt-0.5 border-t-2 border-slate-200" />
 
           <div className="mt-1 flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2.5">
-            <span className="text-[12px] font-bold text-slate-800">Equity value</span>
+            <span className="text-[12px] font-bold text-slate-800">{t("dcf.equityValue")}</span>
             <span className="font-mono text-[14px] font-bold text-slate-900 tabular-nums">
               {ready ? fmtMoneyM(bridge.equity) : "—"}
             </span>
@@ -730,7 +751,7 @@ function BridgeSection({
           <div className="ml-[22px] flex items-center justify-between py-1.5">
             <div className="flex items-center gap-2.5">
               <span className="w-3.5 font-mono text-[13px] font-bold text-slate-300">÷</span>
-              <span className="text-[12px] text-slate-500">Diluted shares outstanding</span>
+              <span className="text-[12px] text-slate-500">{t("dcf.dilutedShares")}</span>
             </div>
             <span className="font-mono text-[12px] font-semibold text-slate-600 tabular-nums">
               {fmt1(assumptions.shares)}M
@@ -741,8 +762,8 @@ function BridgeSection({
 
           <div className="mt-1.5 flex items-center justify-between rounded-lg bg-slate-50 px-3.5 py-2.5">
             <div>
-              <span className="text-[12px] font-bold text-slate-800">= Intrinsic value / share</span>
-              <span className="ml-2 text-[10px] text-slate-400">equity ÷ shares</span>
+              <span className="text-[12px] font-bold text-slate-800">{t("dcf.intrinsicEq")}</span>
+              <span className="ml-2 text-[10px] text-slate-400">{t("dcf.equityDivShares")}</span>
             </div>
             <span className="font-mono text-[18px] font-bold text-slate-900 tabular-nums">
               {ready ? `$${fmt2(bridge.intrinsic)}` : "—"}
@@ -751,15 +772,15 @@ function BridgeSection({
 
           <div className="mt-2 flex items-center justify-between gap-3 rounded-[7px] border border-slate-200 bg-white px-3.5 py-2">
             <div>
-              <span className="text-[12px] font-bold text-slate-700">− Margin of safety</span>
-              <span className="ml-2 text-[10px] text-slate-400">your haircut</span>
+              <span className="text-[12px] font-bold text-slate-700">{t("dcf.minusMos")}</span>
+              <span className="ml-2 text-[10px] text-slate-400">{t("dcf.yourHaircut")}</span>
             </div>
             <div className="flex items-center gap-1">
               <NumberInput
                 value={assumptions.mosPercent}
                 limits={MOS_PERCENT_LIMITS}
                 onCommit={(value) => onField("mosPercent", value)}
-                ariaLabel="Margin of safety"
+                ariaLabel={t("dcf.mos")}
                 className="w-16 text-right text-[16px] font-bold text-slate-900"
               />
               <span className="text-[13px] font-semibold text-slate-400">%</span>
@@ -783,10 +804,10 @@ function BridgeSection({
                   !ready ? "text-slate-700" : undervalued ? "text-emerald-700" : "text-red-600"
                 }`}
               >
-                = Fair value per share
+                {t("dcf.fairValueShare")}
               </span>
               <span className="ml-2 text-[10px] text-slate-400">
-                intrinsic × (1 − {fmt1(assumptions.mosPercent)}%)
+                {t("dcf.mosFormula", { pct: fmt1(assumptions.mosPercent) })}
               </span>
             </div>
             <span
@@ -800,7 +821,7 @@ function BridgeSection({
 
           <div className="mt-2 flex flex-col gap-1">
             <div className="flex items-center justify-between rounded-[7px] bg-slate-50 px-3.5 py-[7px]">
-              <span className="text-[12px] text-slate-500">Current market price</span>
+              <span className="text-[12px] text-slate-500">{t("dcf.currentPrice")}</span>
               <span className="font-mono text-[12px] font-semibold text-slate-700 tabular-nums">
                 ${fmt2(currentPrice)}
               </span>
@@ -815,7 +836,7 @@ function BridgeSection({
                   !ready ? "text-slate-500" : undervalued ? "text-emerald-700" : "text-red-600"
                 }`}
               >
-                vs. current price
+                {t("dcf.vsCurrentLabel")}
               </span>
               <span
                 className={`font-mono text-[16px] font-bold tabular-nums ${
@@ -833,6 +854,7 @@ function BridgeSection({
 }
 
 function ForecastSection({ rows, bridge }: { rows: DcfYearRow[]; bridge: DcfBridge }) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const lastIndex = rows.length - 1;
 
@@ -845,21 +867,19 @@ function ForecastSection({ rows, bridge }: { rows: DcfYearRow[]; bridge: DcfBrid
       >
         <div className="flex flex-col gap-[3px]">
           <div className="flex flex-wrap items-center gap-2.5">
-            <p className="text-[14px] font-bold text-slate-900">10-year FCF forecast</p>
+            <p className="text-[14px] font-bold text-slate-900">{t("dcf.forecastTitle")}</p>
             <span className="text-[11px] font-semibold text-blue-600">
-              Terminal value {fmtMoneyM(bridge.tv)}
+              {t("dcf.terminalValue")} {fmtMoneyM(bridge.tv)}
             </span>
-            <span className="text-[11px] text-slate-500">PV {fmtMoneyM(bridge.pvTv)}</span>
+            <span className="text-[11px] text-slate-500">{t("dcf.pvShort", { value: fmtMoneyM(bridge.pvTv) })}</span>
           </div>
           <p className="text-[11px] text-slate-400">
-            {open
-              ? "Revenue → FCF by year · terminal value lands in the final year · all figures $M"
-              : "Open to verify the year-by-year path behind enterprise value · all figures $M"}
+            {open ? t("dcf.forecastOpen") : t("dcf.forecastClosed")}
           </p>
         </div>
         <div className="ml-4 flex shrink-0 items-center gap-2 text-blue-500">
           <span className="hidden text-[11px] font-semibold sm:inline">
-            {open ? "Hide table" : "Show forecast"}
+            {open ? t("dcf.hideTable") : t("dcf.showForecast")}
           </span>
           <Chevron open={open} />
         </div>
@@ -872,7 +892,7 @@ function ForecastSection({ rows, bridge }: { rows: DcfYearRow[]; bridge: DcfBrid
               <tr className="bg-slate-900">
                 <th className="w-[130px] px-5 py-2 text-left">
                   <span className="text-[10px] font-bold tracking-wider text-slate-400 uppercase">
-                    Driver
+                    {t("dcf.driver")}
                   </span>
                 </th>
                 {rows.map((row, index) => (
@@ -893,13 +913,13 @@ function ForecastSection({ rows, bridge }: { rows: DcfYearRow[]; bridge: DcfBrid
             </thead>
             <tbody className="divide-y divide-slate-50">
               <ForecastRow
-                label="Revenue"
+                label={t("dcf.revenue")}
                 rows={rows}
                 lastIndex={lastIndex}
-                render={(row) => Math.round(row.revenue).toLocaleString()}
+                render={(row) => Math.round(row.revenue).toLocaleString("en-US")}
               />
               <ForecastRow
-                label="YoY growth"
+                label={t("dcf.yoyGrowth")}
                 rows={rows}
                 lastIndex={lastIndex}
                 render={(row) => fmtPct(row.growthPct)}
@@ -907,7 +927,7 @@ function ForecastSection({ rows, bridge }: { rows: DcfYearRow[]; bridge: DcfBrid
               />
               <tr className="border-y border-slate-200 bg-slate-50">
                 <td className="px-5 py-2">
-                  <span className="text-[11px] font-bold text-slate-800">Free cash flow</span>
+                  <span className="text-[11px] font-bold text-slate-800">{t("dcf.freeCashFlow")}</span>
                 </td>
                 {rows.map((row, index) => (
                   <td
@@ -919,13 +939,13 @@ function ForecastSection({ rows, bridge }: { rows: DcfYearRow[]; bridge: DcfBrid
                         index === lastIndex ? "text-blue-700" : "text-slate-700"
                       }`}
                     >
-                      {Math.round(row.fcf).toLocaleString()}
+                      {Math.round(row.fcf).toLocaleString("en-US")}
                     </span>
                   </td>
                 ))}
               </tr>
               <ForecastRow
-                label="FCF margin"
+                label={t("dcf.fcfMargin")}
                 rows={rows}
                 lastIndex={lastIndex}
                 render={(row) => fmtPct(row.fcfMargin)}
@@ -933,8 +953,8 @@ function ForecastSection({ rows, bridge }: { rows: DcfYearRow[]; bridge: DcfBrid
               />
               <tr>
                 <td className="px-5 py-[7px]">
-                  <span className="text-[11px] font-semibold text-blue-600">Terminal value</span>
-                  <p className="text-[9px] text-slate-400">FCF × (1+g) / (WACC−g)</p>
+                  <span className="text-[11px] font-semibold text-blue-600">{t("dcf.terminalValue")}</span>
+                  <p className="text-[9px] text-slate-400">{t("dcf.tvFormula")}</p>
                 </td>
                 {rows.map((row, index) => (
                   <td
@@ -943,7 +963,7 @@ function ForecastSection({ rows, bridge }: { rows: DcfYearRow[]; bridge: DcfBrid
                   >
                     {index === lastIndex ? (
                       <span className="font-mono text-[11px] font-bold text-blue-600 tabular-nums">
-                        {Math.round(bridge.tv).toLocaleString()}
+                        {Math.round(bridge.tv).toLocaleString("en-US")}
                       </span>
                     ) : (
                       <span className="text-[10px] text-slate-200">—</span>
@@ -953,8 +973,8 @@ function ForecastSection({ rows, bridge }: { rows: DcfYearRow[]; bridge: DcfBrid
               </tr>
               <tr className="border-t-2 border-blue-200 bg-blue-50/40">
                 <td className="px-5 py-2">
-                  <span className="text-[11px] font-bold text-slate-800">Total</span>
-                  <p className="text-[9px] text-slate-400">FCF + terminal value</p>
+                  <span className="text-[11px] font-bold text-slate-800">{t("dcf.total")}</span>
+                  <p className="text-[9px] text-slate-400">{t("dcf.fcfPlusTv")}</p>
                 </td>
                 {rows.map((row, index) => (
                   <td
@@ -966,7 +986,7 @@ function ForecastSection({ rows, bridge }: { rows: DcfYearRow[]; bridge: DcfBrid
                         index === lastIndex ? "text-blue-800" : "text-slate-500"
                       }`}
                     >
-                      {Math.round(index === lastIndex ? row.fcf + bridge.tv : row.fcf).toLocaleString()}
+                      {Math.round(index === lastIndex ? row.fcf + bridge.tv : row.fcf).toLocaleString("en-US")}
                     </span>
                   </td>
                 ))}

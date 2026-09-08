@@ -4,6 +4,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { AccountAvatar } from "@/components/account-avatar";
+import { NavLocaleToggle } from "@/components/language-switcher";
+import { useI18n, type Translate } from "@/i18n";
+import { formatEntryDate, formatShortDate, todayNyDate } from "@/lib/format";
 import {
   AAPL_LIVE,
   journalSeedFor,
@@ -14,36 +17,40 @@ import {
 
 type JournalEntry = { id: number; date: string; text: string; snapshot?: { price: string; pe: string } };
 
-const VALUATION_METHODS = [
-  { id: "pe", label: "P/E Band", value: "$225", note: "Preferred · Aug 20" },
-  { id: "dcf", label: "DCF", value: "$235", note: "Base case · Aug 12" },
-  { id: "evebitda", label: "EV/EBITDA", value: "$210", note: "" },
-  { id: "rdcf", label: "Reverse DCF", value: "—", note: "Market implies 9.5% growth" },
-];
+function valuationMethods(t: Translate) {
+  return [
+    { id: "pe", label: t("mock.peBand"), value: "$225", note: t("mock.preferred") },
+    { id: "dcf", label: t("methods.dcf"), value: "$235", note: t("mock.baseCase") },
+    { id: "evebitda", label: t("methods.evebitda"), value: "$210", note: "" },
+    { id: "rdcf", label: t("methods.rdcf"), value: t("common.dash"), note: t("mock.marketImplies") },
+  ];
+}
 
-const EVENTS = [
-  {
-    color: "#f59e0b",
-    title: "Review NVDA growth assumption",
-    teaser: "AI CapEx slowed; your DCF still assumes 30% FCF growth.",
-    badge: "Action needed",
-    badgeClass: "bg-amber-50 text-amber-700",
-  },
-  {
-    color: "#3b82f6",
-    title: "GOOGL 10-K filed",
-    teaser: "New annual filing — your thesis has two open questions.",
-    badge: "Review",
-    badgeClass: "bg-blue-50 text-blue-700",
-  },
-  {
-    color: "#94a3b8",
-    title: "MSFT exit — outcome review",
-    teaser: "You sold MSFT at $385. It's now $412. Was the call right?",
-    badge: "Reflect",
-    badgeClass: "bg-slate-100 text-slate-600",
-  },
-];
+function events(t: Translate) {
+  return [
+    {
+      color: "#f59e0b",
+      title: t("mock.eventNvdaTitle"),
+      teaser: t("mock.eventNvdaTeaser"),
+      badge: t("mock.badgeAction"),
+      badgeClass: "bg-amber-50 text-amber-700",
+    },
+    {
+      color: "#3b82f6",
+      title: t("mock.eventGooglTitle"),
+      teaser: t("mock.eventGooglTeaser"),
+      badge: t("mock.badgeReview"),
+      badgeClass: "bg-blue-50 text-blue-700",
+    },
+    {
+      color: "#94a3b8",
+      title: t("mock.eventMsftTitle"),
+      teaser: t("mock.eventMsftTeaser"),
+      badge: t("mock.badgeReflect"),
+      badgeClass: "bg-slate-100 text-slate-600",
+    },
+  ];
+}
 
 function TrashIcon() {
   return (
@@ -67,6 +74,7 @@ function JournalEntryCard({
   index: number;
   onDelete: () => void;
 }) {
+  const { t } = useI18n();
   const [expanded, setExpanded] = useState(false);
   const long = entry.text.length > 280;
   const displayed = long && !expanded ? `${entry.text.slice(0, 280).trimEnd()}…` : entry.text;
@@ -83,7 +91,7 @@ function JournalEntryCard({
         <button
           type="button"
           className="rounded-md p-1.5 text-slate-300 hover:bg-red-50 hover:text-red-500"
-          aria-label="Delete entry"
+          aria-label={t("journal.deleteAria")}
           onClick={onDelete}
         >
           <TrashIcon />
@@ -97,16 +105,16 @@ function JournalEntryCard({
             onClick={() => setExpanded((v) => !v)}
             className="mt-2 text-[12px] font-semibold text-blue-600 hover:underline"
           >
-            {expanded ? "Show less" : "Read more"}
+            {expanded ? t("journal.showLess") : t("journal.readMore")}
           </button>
         )}
       </div>
       {entry.snapshot && (
         <div className="flex flex-wrap items-center gap-2 border-t border-[#ebf0f5] bg-slate-50 px-4 py-2.5 md:gap-3 md:px-[18px]">
-          <span className="text-[10px] font-bold tracking-wide text-slate-400 uppercase">At entry</span>
+          <span className="text-[10px] font-bold tracking-wide text-slate-400 uppercase">{t("journal.atEntry")}</span>
           <span className="font-mono text-[12px] font-semibold tabular-nums text-slate-600">{entry.snapshot.price}</span>
           <span className="text-[11px] text-slate-300">·</span>
-          <span className="text-[10px] font-bold tracking-wide text-slate-400 uppercase">Fwd P/E</span>
+          <span className="text-[10px] font-bold tracking-wide text-slate-400 uppercase">{t("journal.fwdPe")}</span>
           <span className="font-mono text-[12px] font-semibold tabular-nums text-slate-600">{entry.snapshot.pe}</span>
         </div>
       )}
@@ -115,6 +123,7 @@ function JournalEntryCard({
 }
 
 function NewEntryComposer({ ticker, onSave }: { ticker: string; onSave: (text: string) => void }) {
+  const { t } = useI18n();
   const [text, setText] = useState("");
   const [focused, setFocused] = useState(false);
   const hasText = text.trim().length > 0;
@@ -129,15 +138,19 @@ function NewEntryComposer({ ticker, onSave }: { ticker: string; onSave: (text: s
       <div className="flex items-center justify-between gap-2 border-b border-[#ebf0f5] bg-slate-50 px-3 py-2 md:px-4">
         <div className="flex items-center gap-1.5">
           <span className="size-[7px] rounded-full bg-emerald-500" />
-          <span className="text-[11px] font-semibold text-slate-600">New entry</span>
+          <span className="text-[11px] font-semibold text-slate-600">{t("journal.newEntry")}</span>
         </div>
         <div className="flex min-w-0 items-center gap-1.5 overflow-hidden font-mono text-[11px] tabular-nums text-slate-600">
-          <span className="hidden text-[10px] font-bold tracking-wide text-slate-400 uppercase sm:inline">Today</span>
+          <span className="hidden text-[10px] font-bold tracking-wide text-slate-400 uppercase sm:inline">
+            {t("journal.today")}
+          </span>
           <span className="truncate">
             {ticker} {AAPL_LIVE.price}
           </span>
           <span className="text-slate-300">·</span>
-          <span className="hidden sm:inline">Fwd P/E {AAPL_LIVE.pe}</span>
+          <span className="hidden sm:inline">
+            {t("journal.fwdPe")} {AAPL_LIVE.pe}
+          </span>
           <span className="sm:hidden">{AAPL_LIVE.pe}</span>
         </div>
       </div>
@@ -146,13 +159,17 @@ function NewEntryComposer({ ticker, onSave }: { ticker: string; onSave: (text: s
         onChange={(e) => setText(e.target.value)}
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
-        placeholder="What's your thesis? What are you watching? What would change your mind?"
+        placeholder={t("journal.placeholder")}
         rows={4}
         className="w-full resize-none border-0 bg-white px-4 pt-3.5 pb-2.5 text-[14px] leading-[1.7] text-slate-700 outline-none placeholder:text-slate-300 md:px-[18px]"
       />
       <div className="flex items-center justify-between gap-2 border-t border-[#ebf0f5] bg-slate-50 px-3 py-2.5 md:px-4">
         <span className="min-w-0 truncate text-[11px] text-slate-300">
-          {hasText ? `${words} word${words === 1 ? "" : "s"}` : "Snapshots price & P/E on save"}
+          {hasText
+            ? words === 1
+              ? t("journal.wordOne", { count: words })
+              : t("journal.wordMany", { count: words })
+            : t("mock.snapshotPe")}
         </span>
         <div className="flex shrink-0 items-center gap-1.5">
           {hasText && (
@@ -161,7 +178,7 @@ function NewEntryComposer({ ticker, onSave }: { ticker: string; onSave: (text: s
               onClick={() => setText("")}
               className="rounded-md px-2.5 py-1 text-[12px] font-medium text-slate-400 hover:bg-slate-100 hover:text-slate-600"
             >
-              Clear
+              {t("journal.clear")}
             </button>
           )}
           <button
@@ -186,7 +203,7 @@ function NewEntryComposer({ ticker, onSave }: { ticker: string; onSave: (text: s
                 strokeLinejoin="round"
               />
             </svg>
-            Save
+            {t("journal.save")}
           </button>
         </div>
       </div>
@@ -195,8 +212,9 @@ function NewEntryComposer({ ticker, onSave }: { ticker: string; onSave: (text: s
 }
 
 function Journal({ decision }: { decision: MockDecision }) {
+  const { t } = useI18n();
   const [entries, setEntries] = useState<JournalEntry[]>([
-    { id: 1, date: `${decision.dateLabel}, 2026`, text: journalSeedFor(decision), snapshot: AAPL_LIVE },
+    { id: 1, date: formatEntryDate(decision.date), text: journalSeedFor(decision), snapshot: AAPL_LIVE },
   ]);
 
   return (
@@ -208,12 +226,16 @@ function Journal({ decision }: { decision: MockDecision }) {
               <rect x="2" y="1" width="11" height="13" rx="2" stroke="#0f172a" strokeWidth="1.3" />
               <path d="M5 5h5M5 8h5M5 11h3" stroke="#0f172a" strokeWidth="1.2" strokeLinecap="round" />
             </svg>
-            <p className="text-[16px] font-bold text-slate-800 md:text-[17px]">{decision.ticker} · Journal</p>
+            <p className="text-[16px] font-bold text-slate-800 md:text-[17px]">
+              {t("stock.journalTitle", { ticker: decision.ticker })}
+            </p>
           </div>
-          <p className="text-[12px] text-slate-400">Your investment thesis & decision record</p>
+          <p className="text-[12px] text-slate-400">{t("stock.journalSubtitle")}</p>
         </div>
         <span className="shrink-0 rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-600">
-          {entries.length} {entries.length === 1 ? "entry" : "entries"}
+          {entries.length === 1
+            ? t("stock.entryOne", { count: entries.length })
+            : t("stock.entryMany", { count: entries.length })}
         </span>
       </div>
       {entries.length > 0 && (
@@ -231,7 +253,7 @@ function Journal({ decision }: { decision: MockDecision }) {
       <NewEntryComposer
         ticker={decision.ticker}
         onSave={(text) => {
-          const today = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+          const today = formatEntryDate(todayNyDate());
           setEntries((prev) => [...prev, { id: Date.now(), date: today, text, snapshot: AAPL_LIVE }]);
         }}
       />
@@ -240,10 +262,12 @@ function Journal({ decision }: { decision: MockDecision }) {
 }
 
 function ValuationDropdown() {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [selectedId, setSelectedId] = useState("pe");
   const ref = useRef<HTMLDivElement>(null);
-  const selected = VALUATION_METHODS.find((m) => m.id === selectedId)!;
+  const methods = valuationMethods(t);
+  const selected = methods.find((m) => m.id === selectedId)!;
 
   useEffect(() => {
     function onDoc(e: MouseEvent) {
@@ -260,7 +284,7 @@ function ValuationDropdown() {
         onClick={() => setOpen((v) => !v)}
         className="flex items-center gap-2 rounded-lg bg-[#f4f6f9] px-3 py-1.5 hover:bg-[#ebf0f5]"
       >
-        <span className="text-[10px] font-bold tracking-wide text-slate-600 uppercase">REF:</span>
+        <span className="text-[10px] font-bold tracking-wide text-slate-600 uppercase">{t("mock.ref")}</span>
         <span className="text-[10px] font-bold text-blue-600 uppercase">
           {selected.label} ({selected.value})
         </span>
@@ -276,7 +300,7 @@ function ValuationDropdown() {
       </button>
       {open && (
         <div className="absolute top-[calc(100%+6px)] left-0 z-20 min-w-[min(260px,calc(100vw-2rem))] overflow-hidden rounded-xl border border-[#ebf0f5] bg-white shadow-[0_4px_24px_rgba(15,23,42,0.10)]">
-          {VALUATION_METHODS.map((m) => {
+          {methods.map((m) => {
             const isSelected = m.id === selectedId;
             return (
               <button
@@ -303,7 +327,7 @@ function ValuationDropdown() {
                   </span>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  {m.value !== "—" && (
+                  {m.value !== t("common.dash") && (
                     <span className={`text-[13px] font-bold ${isSelected ? "text-blue-600" : "text-slate-800"}`}>
                       {m.value}
                     </span>
@@ -320,6 +344,7 @@ function ValuationDropdown() {
 }
 
 function TxnRecord({ txn }: { txn: MockTxn }) {
+  const { t } = useI18n();
   const isBuy = txn.side === "buy";
   return (
     <div
@@ -332,13 +357,13 @@ function TxnRecord({ txn }: { txn: MockTxn }) {
           isBuy ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700"
         }`}
       >
-        Transaction · {isBuy ? "Buy" : "Sell"}
+        {t("transaction.label", { side: isBuy ? t("transaction.buy") : t("transaction.sell") })}
       </span>
       <div className="grid grid-cols-3 gap-2">
         {[
-          ["PRICE", txn.price],
-          ["QUANTITY", txn.qty],
-          ["DATE", txn.date.replace(", 2026", "")],
+          [t("transaction.price"), txn.price],
+          [t("transaction.quantity"), txn.qty],
+          [t("transaction.date"), txn.date.replace(", 2026", "")],
         ].map(([label, val]) => (
           <div key={label} className="min-w-0">
             <p className="text-[10px] font-bold text-slate-400 uppercase md:text-[11px]">{label}</p>
@@ -353,7 +378,9 @@ function TxnRecord({ txn }: { txn: MockTxn }) {
         ))}
       </div>
       <div className={`border-t pt-3 ${isBuy ? "border-emerald-200" : "border-rose-200"}`}>
-        <p className={`mb-1 text-[11px] font-bold uppercase ${isBuy ? "text-slate-400" : "text-rose-300"}`}>Reason</p>
+        <p className={`mb-1 text-[11px] font-bold uppercase ${isBuy ? "text-slate-400" : "text-rose-300"}`}>
+          {t("transaction.reason")}
+        </p>
         <p className={`text-[13px] leading-relaxed ${isBuy ? "text-slate-600" : "text-rose-700"}`}>{txn.reason}</p>
       </div>
     </div>
@@ -361,6 +388,7 @@ function TxnRecord({ txn }: { txn: MockTxn }) {
 }
 
 function DraftRecord() {
+  const { t } = useI18n();
   const [side, setSide] = useState<"buy" | "sell">("buy");
   const [price, setPrice] = useState("");
   const [qty, setQty] = useState("");
@@ -371,14 +399,14 @@ function DraftRecord() {
     <div className="flex flex-col gap-3.5 rounded-xl border-2 border-dashed border-blue-600 bg-white p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[10px] font-bold tracking-wide text-blue-600 uppercase">
-          Editing · New record
+          {t("transaction.editingNew")}
         </span>
         <div className="flex gap-1.5">
           <button type="button" className="rounded-md bg-[#f4f6f9] px-3 py-1.5 text-[12px] font-semibold text-slate-600">
-            Cancel
+            {t("common.cancel")}
           </button>
           <button type="button" className="rounded-md bg-blue-600 px-3 py-1.5 text-[12px] font-bold text-white">
-            Save
+            {t("common.save")}
           </button>
         </div>
       </div>
@@ -390,7 +418,7 @@ function DraftRecord() {
             side === "buy" ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-500 opacity-50"
           }`}
         >
-          + Buy
+          {t("transaction.plusBuy")}
         </button>
         <button
           type="button"
@@ -399,15 +427,15 @@ function DraftRecord() {
             side === "sell" ? "bg-rose-100 text-rose-800" : "bg-slate-100 text-slate-500 opacity-50"
           }`}
         >
-          − Sell
+          {t("transaction.minusSell")}
         </button>
       </div>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         {(
           [
-            ["PRICE", price, setPrice, "$—"],
-            ["QUANTITY", qty, setQty, "0 shares"],
-            ["DATE", date, setDate, "Select date"],
+            [t("transaction.price"), price, setPrice, t("transaction.pricePlaceholder")],
+            [t("transaction.quantity"), qty, setQty, t("transaction.qtyPlaceholder")],
+            [t("transaction.date"), date, setDate, t("mock.selectDate")],
           ] as const
         ).map(([label, value, setValue, placeholder], i) => (
           <label key={label} className="flex min-w-0 flex-col gap-1.5">
@@ -424,11 +452,11 @@ function DraftRecord() {
         ))}
       </div>
       <label className="flex flex-col gap-1.5">
-        <span className="text-[11px] font-bold text-slate-400 uppercase">Reason</span>
+        <span className="text-[11px] font-bold text-slate-400 uppercase">{t("transaction.reason")}</span>
         <textarea
           value={reason}
           onChange={(e) => setReason(e.target.value)}
-          placeholder="Describe why you're making this trade…"
+          placeholder={t("transaction.reasonPlaceholder")}
           rows={3}
           className="w-full resize-none rounded-lg border border-[#ebf0f5] bg-[#f4f6f9] px-3 py-2.5 text-[13px] leading-relaxed text-slate-700 outline-none placeholder:text-slate-400"
         />
@@ -438,6 +466,7 @@ function DraftRecord() {
 }
 
 function TransactionCard({ decision }: { decision: MockDecision }) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(true);
   const txns = transactionsFor(decision);
   const hasBuy = txns.some((t) => t.side === "buy");
@@ -451,24 +480,24 @@ function TransactionCard({ decision }: { decision: MockDecision }) {
         className="flex w-full items-center justify-between gap-3 px-4 py-4 text-left md:px-6 md:py-5"
       >
         <div className="min-w-0">
-          <p className="text-[16px] font-bold text-slate-800 md:text-lg">Transaction</p>
-          <p className="text-[12px] text-slate-500">Attached to this entry</p>
+          <p className="text-[16px] font-bold text-slate-800 md:text-lg">{t("stock.transaction")}</p>
+          <p className="text-[12px] text-slate-500">{t("mock.attached")}</p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
           {!open && (
             <div className="hidden items-center gap-1.5 sm:flex">
               {hasBuy && (
                 <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700 uppercase">
-                  Buy
+                  {t("transaction.buy")}
                 </span>
               )}
               {hasSell && (
                 <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-bold text-rose-700 uppercase">
-                  Sell
+                  {t("transaction.sell")}
                 </span>
               )}
               <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-600 uppercase">
-                Draft
+                {t("mock.draft")}
               </span>
             </div>
           )}
@@ -485,9 +514,11 @@ function TransactionCard({ decision }: { decision: MockDecision }) {
       {open && (
         <div className="flex flex-col gap-4 border-t border-[#ebf0f5] px-4 pt-4 pb-5 md:px-6 md:pb-6">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="rounded-lg bg-emerald-100 px-3 py-1.5 text-[13px] font-bold text-emerald-800">+ Buy</span>
+            <span className="rounded-lg bg-emerald-100 px-3 py-1.5 text-[13px] font-bold text-emerald-800">
+              {t("transaction.plusBuy")}
+            </span>
             <span className="rounded-lg bg-rose-100 px-3 py-1.5 text-[13px] font-semibold text-rose-800 opacity-60">
-              − Sell
+              {t("transaction.minusSell")}
             </span>
             <ValuationDropdown />
             <button
@@ -497,7 +528,7 @@ function TransactionCard({ decision }: { decision: MockDecision }) {
               <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
                 <path d="M6 2v8M2 6h8" stroke="#fff" strokeWidth="1.75" strokeLinecap="round" />
               </svg>
-              Set Valuation
+              {t("mock.setValuation")}
             </button>
           </div>
           {txns.map((txn) => (
@@ -511,6 +542,7 @@ function TransactionCard({ decision }: { decision: MockDecision }) {
 }
 
 function EventsCard() {
+  const { t } = useI18n();
   return (
     <section className="rounded-2xl border border-[#ebf0f5] bg-white p-4 md:p-6">
       <div className="mb-4 flex items-center gap-2">
@@ -523,13 +555,13 @@ function EventsCard() {
           />
           <circle cx="7" cy="7" r="2.5" stroke="#f59e0b" strokeWidth="1.3" />
         </svg>
-        <p className="text-[16px] font-bold text-slate-800">Important Events</p>
+        <p className="text-[16px] font-bold text-slate-800">{t("mock.importantEvents")}</p>
         <span className="ml-auto rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700 uppercase">
-          Needs judgment
+          {t("mock.needsJudgment")}
         </span>
       </div>
       <div className="flex flex-col">
-        {EVENTS.map((evt) => (
+        {events(t).map((evt) => (
           <div key={evt.title} className="flex items-start gap-3 rounded-[10px] px-2 py-3 hover:bg-slate-50 md:px-3">
             <span className="mt-1 size-2 shrink-0 rounded-full" style={{ background: evt.color }} />
             <div className="min-w-0 flex-1">
@@ -547,6 +579,7 @@ function EventsCard() {
 }
 
 function ScoringCard({ decision }: { decision: MockDecision }) {
+  const { t } = useI18n();
   const unscored = decision.scoreVariant === "none" || decision.score == null;
   const value = decision.score ?? 78;
   const [rated, setRated] = useState(!unscored);
@@ -562,27 +595,25 @@ function ScoringCard({ decision }: { decision: MockDecision }) {
             strokeLinejoin="round"
           />
         </svg>
-        <p className="text-[12px] font-bold tracking-wide text-blue-600 uppercase">Rate My Transaction</p>
+        <p className="text-[12px] font-bold tracking-wide text-blue-600 uppercase">{t("transaction.rateTitle")}</p>
       </div>
       {rated ? (
         <>
           <div className="flex items-baseline gap-1">
             <span className="font-mono text-5xl font-extrabold text-slate-800 md:text-[56px]">{value}</span>
-            <span className="text-xl text-slate-400">/ 100</span>
+            <span className="text-xl text-slate-400">{t("mock.outOf100")}</span>
           </div>
           <p className="text-center text-[13px] text-slate-500">
-            {decision.scoreVariant === "weak"
-              ? "Thesis is thin — the dip may have been the only reason."
-              : "Strong reasoning, one mild gap in evidence."}
+            {decision.scoreVariant === "weak" ? t("mock.scoreWeak") : t("mock.scoreStrong")}
           </p>
           <div className="flex w-full flex-col gap-2 text-[13px]">
-            <p className="text-[10px] font-bold tracking-wide text-slate-400 uppercase">Breakdown</p>
+            <p className="text-[10px] font-bold tracking-wide text-slate-400 uppercase">{t("mock.breakdown")}</p>
             {(
               [
-                ["Valuation", "86"],
-                ["Thesis Alignment", "81"],
-                ["Evidence", "50"],
-                ["Risk Management", "73"],
+                [t("mock.breakdownValuation"), "86"],
+                [t("mock.breakdownThesis"), "81"],
+                [t("mock.breakdownEvidence"), "50"],
+                [t("mock.breakdownRisk"), "73"],
               ] as const
             ).map(([k, v]) => (
               <div key={k} className="flex justify-between">
@@ -598,30 +629,27 @@ function ScoringCard({ decision }: { decision: MockDecision }) {
             ))}
           </div>
           <div className="w-full rounded-xl border border-amber-200 bg-amber-50 p-4">
-            <p className="text-[10px] font-extrabold tracking-wide text-amber-700 uppercase">AI Challenge</p>
-            <p className="mt-2 text-[13px] leading-relaxed text-amber-700">
-              Your growth assumption sits above the 5Y average. What evidence would justify it?
-            </p>
+            <p className="text-[10px] font-extrabold tracking-wide text-amber-700 uppercase">{t("mock.aiChallenge")}</p>
+            <p className="mt-2 text-[13px] leading-relaxed text-amber-700">{t("mock.aiChallengeBody")}</p>
           </div>
         </>
       ) : (
-        <p className="text-center text-[13px] text-slate-500">
-          Score this decision. AI will challenge your assumptions — not tell you what to buy.
-        </p>
+        <p className="text-center text-[13px] text-slate-500">{t("mock.scorePrompt")}</p>
       )}
       <button
         type="button"
         onClick={() => setRated(true)}
         className="flex size-[88px] items-center justify-center rounded-full bg-blue-600 text-[15px] font-bold text-white shadow-[0_8px_16px_rgba(37,99,235,0.25)] md:size-[100px]"
       >
-        Rate
+        {t("mock.rateCta")}
       </button>
-      <p className="text-center text-[12px] font-semibold text-blue-600">What would change this score?</p>
+      <p className="text-center text-[12px] font-semibold text-blue-600">{t("mock.whatWouldChange")}</p>
     </aside>
   );
 }
 
 export function DecisionDetail({ decision }: { decision: MockDecision }) {
+  const { t } = useI18n();
   const router = useRouter();
 
   return (
@@ -633,7 +661,7 @@ export function DecisionDetail({ decision }: { decision: MockDecision }) {
               type="button"
               onClick={() => router.push("/")}
               className="flex size-8 shrink-0 items-center justify-center rounded-full bg-[#f4f6f9] hover:bg-[#ebf0f5]"
-              aria-label="Back"
+              aria-label={t("common.back")}
             >
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
                 <path d="M10 13L5 8l5-5" stroke="#1E293B" strokeWidth="2" strokeLinecap="round" />
@@ -646,20 +674,21 @@ export function DecisionDetail({ decision }: { decision: MockDecision }) {
                 <p className="hidden truncate text-[14px] text-slate-500 md:inline">{decision.name}</p>
               </div>
               <p className="truncate text-[12px] text-slate-500 md:hidden">
-                {decision.dateLabel ? `${decision.name} · ${decision.dateLabel}` : decision.name}
+                {decision.dateLabel ? `${decision.name} · ${formatShortDate(decision.date)}` : decision.name}
               </p>
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-3">
             {decision.dateLabel ? (
-              <span className="hidden text-[14px] text-slate-500 md:inline">{decision.dateLabel}, 2026</span>
+              <span className="hidden text-[14px] text-slate-500 md:inline">{formatEntryDate(decision.date)}</span>
             ) : null}
             <button
               type="button"
               className="rounded-lg border border-[#ebf0f5] bg-white px-3 py-1.5 text-[13px] font-semibold text-slate-800 md:px-4"
             >
-              Edit
+              {t("mock.edit")}
             </button>
+            <NavLocaleToggle />
             <AccountAvatar />
           </div>
         </div>
@@ -684,11 +713,12 @@ export function DecisionDetail({ decision }: { decision: MockDecision }) {
 }
 
 export function DecisionNotFound() {
+  const { t } = useI18n();
   return (
     <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-white px-4">
-      <p className="font-heading text-xl font-bold">Decision not found</p>
+      <p className="font-heading text-xl font-bold">{t("mock.notFoundTitle")}</p>
       <Link href="/" className="text-sm font-medium text-blue-600">
-        Back to journal
+        {t("mock.backToJournal")}
       </Link>
     </div>
   );

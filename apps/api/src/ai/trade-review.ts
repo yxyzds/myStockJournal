@@ -6,6 +6,7 @@ import {
   type TradeReview,
   type TradeReviewGrade,
 } from "@mystockjournal/shared";
+import { reviewLanguageName, type AppLocale } from "../lib/locale";
 import { chatJson } from "./chat";
 
 /** Recorded fill vs the session close: outside this band is almost certainly a typo. */
@@ -40,7 +41,9 @@ export type PriceSanityFlag = {
   extreme: boolean;
 };
 
-const SYSTEM = `You are a witty, slightly roasting trading coach for a personal stock journal app.
+function systemPrompt(language: AppLocale) {
+  const blurbLang = reviewLanguageName(language);
+  return `You are a witty, slightly roasting trading coach for a personal stock journal app.
 Read the investor's journal notes (and any recorded buys/sells). Grade the overall quality of their thinking.
 
 Pick exactly ONE grade from this list (worst → best):
@@ -54,14 +57,15 @@ Meanings:
 - Oracle: unusually sharp, falsifiable, disciplined
 
 Respond with JSON only:
-{ "grade": "<one of the five grades>", "blurb": "<one punchy English sentence, max ~140 chars, dry humor OK>" }
+{ "grade": "<one of the five grades>", "blurb": "<one punchy sentence, max ~140 chars, dry humor OK>" }
 
 Rules:
 - FIRST check priceSanity. If status is "implausible", the blurb MUST challenge the recorded fill (typo, extra/missing zeros, wrong decimal, missing price). Do not treat that number as a real trade. Grade Clownery or Copeium. Do not praise the thesis until the price is believable.
 - If priceSanity.status is "ok", ignore that section and judge the writing and reasoning — not whether the stock went up.
 - If priceSanity.status is "unchecked", skip the price question.
-- blurb must be English. No markdown. No emoji.
+- blurb must be ${blurbLang}. No markdown. No emoji.
 - Do not invent facts that are not in the notes or priceSanity payload.`;
+}
 
 function compactJournal(entries: JournalEntry[]) {
   return entries.map((entry) => ({
@@ -214,13 +218,49 @@ function capGrade(grade: TradeReviewGrade, flags: PriceSanityFlag[]): TradeRevie
 }
 
 function blurbChallengesPrice(blurb: string) {
-  return /\b(price|priced|typ(o|os)|zeroes?|zeros?|decimal|fill|misprint|wrong number|ghost|implausible|\$\s*\d)/i.test(
+  return /\b(price|priced|typ(o|os)|zeroes?|zeros?|decimal|fill|misprint|wrong number|ghost|implausible|\$\s*\d)|价格|價格|成交|笔误|筆誤|ゼロ|価格|誤記|桁/i.test(
     blurb,
   );
 }
 
-function fallbackBlurb(ticker: string, flags: PriceSanityFlag[]): string {
+function fallbackBlurb(ticker: string, flags: PriceSanityFlag[], language: AppLocale): string {
   const flag = flags.find((row) => row.extreme) ?? flags[0];
+  const buySellZh = flag?.type === "buy" ? "买入" : "卖出";
+  const buySellHant = flag?.type === "buy" ? "買入" : "賣出";
+  const buySellJa = flag?.type === "buy" ? "買い" : "売り";
+  const recorded = flag?.recordedPrice != null ? money(flag.recordedPrice) : "?";
+  const reference = flag?.referencePrice != null ? money(flag.referencePrice) : "?";
+
+  if (language === "zh") {
+    if (!flag) return `这些 ${ticker} 成交价对不上行情。先改价格，再评日记。`;
+    if (flag.reason === "missing") {
+      return `你在 ${flag.date} 记了一笔${buySellZh}，却没有成交价。空单没法评。`;
+    }
+    if (flag.reason === "non_positive") {
+      return `$${flag.recordedPrice} 不是一笔真实的 ${ticker} 成交。先改数字，再谈论点。`;
+    }
+    return `${ticker} 在 ${flag.date} 记成 $${recorded}？当日行情大约 $${reference}。笔误、多写零，还是另一只股票？`;
+  }
+  if (language === "zh-TW") {
+    if (!flag) return `這些 ${ticker} 成交價對不上行情。先改價格，再評日記。`;
+    if (flag.reason === "missing") {
+      return `你在 ${flag.date} 記了一筆${buySellHant}，卻沒有成交價。空單沒法評。`;
+    }
+    if (flag.reason === "non_positive") {
+      return `$${flag.recordedPrice} 不是一筆真實的 ${ticker} 成交。先改數字，再談論點。`;
+    }
+    return `${ticker} 在 ${flag.date} 記成 $${recorded}？當日行情大約 $${reference}。筆誤、多寫零，還是另一檔股票？`;
+  }
+  if (language === "ja") {
+    if (!flag) return `これらの ${ticker} 約定は相場と合いません。価格を直してから日記を採点します。`;
+    if (flag.reason === "missing") {
+      return `${flag.date} の${buySellJa}に約定価格がありません。幽霊トレードは採点できません。`;
+    }
+    if (flag.reason === "non_positive") {
+      return `$${flag.recordedPrice} は実在する ${ticker} の約定ではありません。数字を直してから論点を話しましょう。`;
+    }
+    return `${ticker} を ${flag.date} に $${recorded}？当日の相場は約 $${reference}。誤記、ゼロの付け忘れ、別銘柄？`;
+  }
   if (!flag) return `Those ${ticker} fills do not match the tape. Fix the prices before I grade the diary.`;
   if (flag.reason === "missing") {
     return `You booked a ${flag.type} on ${flag.date} with no fill price. I am not grading a ghost trade.`;
@@ -228,8 +268,6 @@ function fallbackBlurb(ticker: string, flags: PriceSanityFlag[]): string {
   if (flag.reason === "non_positive") {
     return `$${flag.recordedPrice} is not a real ${ticker} fill. Fix the number, then we can talk thesis.`;
   }
-  const recorded = flag.recordedPrice != null ? money(flag.recordedPrice) : "?";
-  const reference = flag.referencePrice != null ? money(flag.referencePrice) : "?";
   return `${ticker} at $${recorded} on ${flag.date}? The session was around $${reference}. Typo, extra zero, or a different stock?`;
 }
 
@@ -240,7 +278,9 @@ export async function reviewTradeJournal(input: {
   transactions: StockTransaction[];
   lastClose?: number | null;
   sessionCloses?: SessionClose[];
+  language?: AppLocale;
 }): Promise<TradeReview> {
+  const language = input.language ?? "en";
   const lastClose = input.lastClose ?? null;
   const sessionCloses = input.sessionCloses ?? [];
   const flags = flagImplausibleTradePrices({
@@ -252,7 +292,7 @@ export async function reviewTradeJournal(input: {
   const priceStatus = flags.length > 0 ? "implausible" : lastClose != null || sessionCloses.length > 0 ? "ok" : "unchecked";
 
   const raw = await chatJson([
-    { role: "system", content: SYSTEM },
+    { role: "system", content: systemPrompt(language) },
     {
       role: "user",
       content: JSON.stringify({
@@ -283,7 +323,7 @@ export async function reviewTradeJournal(input: {
   if (flags.length > 0) {
     grade = capGrade(grade, flags);
     if (!blurbChallengesPrice(blurb)) {
-      blurb = fallbackBlurb(input.ticker, flags);
+      blurb = fallbackBlurb(input.ticker, flags, language);
     }
   }
 
