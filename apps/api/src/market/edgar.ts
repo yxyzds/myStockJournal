@@ -289,6 +289,7 @@ function quarterlyActualsFromFacts(companyFacts: CompanyFacts): QuarterlyActual[
   const revenue = quarterlySeriesWithQ4(revenueFacts);
   if (revenue.length === 0) return [];
 
+  // Cash-flow 10-Qs are YTD; quarterlySeriesWithQ4 differences that staircase.
   const ocf = quarterlySeriesWithQ4(factsFor(companyFacts, OPERATING_CASH_FLOW_TAGS, "USD"));
   const capex = quarterlySeriesWithQ4(factsFor(companyFacts, CAPEX_TAGS, "USD"));
   const opInc = quarterlySeriesWithQ4(factsFor(companyFacts, OPERATING_INCOME_TAGS, "USD"));

@@ -41,7 +41,7 @@ const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
  * Bump when the cached payload shape or merge rules change so stale rows are
  * refetched instead of serving week-old driver prefills.
  */
-const CACHE_VERSION = 12;
+const CACHE_VERSION = 13;
 
 /** Neutral drivers for G7 tickers we have no estimate for. The user must review them. */
 const FALLBACK_DRIVERS: DcfDrivers = {

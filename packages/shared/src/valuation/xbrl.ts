@@ -85,30 +85,55 @@ export function quarterlyValues(facts: XbrlFact[]): PeriodValue[] {
   ).map((fact) => ({ end: fact.end, value: fact.val }));
 }
 
+const HALF_YEAR_MIN_DAYS = 170;
+const HALF_YEAR_MAX_DAYS = 195;
 const NINE_MONTH_MIN_DAYS = 250;
 const NINE_MONTH_MAX_DAYS = 290;
 
+function isFiscalYtd(fact: DurationFact) {
+  return (
+    spans(fact, QUARTER_MIN_DAYS, QUARTER_MAX_DAYS) ||
+    spans(fact, HALF_YEAR_MIN_DAYS, HALF_YEAR_MAX_DAYS) ||
+    spans(fact, NINE_MONTH_MIN_DAYS, NINE_MONTH_MAX_DAYS) ||
+    spans(fact, ANNUAL_MIN_DAYS, ANNUAL_MAX_DAYS)
+  );
+}
+
 /**
- * Quarterly series with a missing Q4 filled in from the annual figure minus
- * nine-month YTD (10-K never files Q4 on its own).
+ * Quarterly series. Income-statement lines are usually filed as standalone
+ * quarters; cash-flow lines in a 10-Q are usually year-to-date only (Q1 = 90d,
+ * Q2 = 180d YTD, Q3 = 270d YTD, Q4 only inside the 10-K). Missing quarters are
+ * recovered by differencing that YTD staircase. Standalone quarter facts win
+ * when both exist.
  */
 export function quarterlySeriesWithQ4(facts: XbrlFact[]): PeriodValue[] {
   const byEnd = new Map(quarterlyValues(facts).map((row) => [row.end, row]));
-  const durations = facts.filter(isDuration);
-  for (const annual of durations.filter((f) => spans(f, ANNUAL_MIN_DAYS, ANNUAL_MAX_DAYS))) {
-    if (byEnd.has(annual.end)) continue;
-    const ytd = newest(
-      durations.filter(
-        (f) =>
-          f.start === annual.start &&
-          f.end < annual.end &&
-          daySpan(f.start, f.end) >= NINE_MONTH_MIN_DAYS &&
-          daySpan(f.start, f.end) <= NINE_MONTH_MAX_DAYS,
-      ),
-    );
-    if (!ytd) continue;
-    byEnd.set(annual.end, { end: annual.end, value: annual.val - ytd.val });
+  const byStart = new Map<string, DurationFact[]>();
+  for (const fact of facts.filter(isDuration).filter(isFiscalYtd)) {
+    const group = byStart.get(fact.start) ?? [];
+    group.push(fact);
+    byStart.set(fact.start, group);
   }
+
+  for (const [start, group] of byStart) {
+    const newestByEnd = new Map<string, DurationFact>();
+    for (const fact of group) {
+      const seen = newestByEnd.get(fact.end);
+      if (!seen || fact.filed > seen.filed) newestByEnd.set(fact.end, fact);
+    }
+    const points = [...newestByEnd.values()].sort((a, b) => a.end.localeCompare(b.end));
+    let prevEnd = start;
+    let prevVal = 0;
+    for (const fact of points) {
+      const stepDays = daySpan(prevEnd, fact.end);
+      if (stepDays >= QUARTER_MIN_DAYS && stepDays <= QUARTER_MAX_DAYS && !byEnd.has(fact.end)) {
+        byEnd.set(fact.end, { end: fact.end, value: fact.val - prevVal });
+      }
+      prevEnd = fact.end;
+      prevVal = fact.val;
+    }
+  }
+
   return [...byEnd.values()].sort((a, b) => a.end.localeCompare(b.end));
 }
 
