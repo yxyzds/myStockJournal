@@ -18,11 +18,13 @@ import {
   type DcfYearRow,
   type FilingRef,
   type QuarterlyActual,
+  type WaccBuild,
 } from "@mystockjournal/shared";
 import { useI18n, type MessageKey } from "@/i18n";
 import { ApiError, api } from "@/lib/api";
 import type { MethodViewProps } from "./actions";
 import { ActualsStrip } from "./actuals-strip";
+import { WaccDriverButton } from "./wacc-calculator";
 import {
   AnchorRow,
   Card,
@@ -67,6 +69,8 @@ export type DcfViewProps = MethodViewProps & {
   onChange: (assumptions: DcfInputs) => void;
   review: DcfAssumptionReview | null;
   onReview: (review: DcfAssumptionReview) => void;
+  termGrowthFloor: number;
+  onApplyWacc: (wacc: number, build: WaccBuild) => void;
 };
 
 export function DcfView({
@@ -80,6 +84,8 @@ export function DcfView({
   actions,
   review,
   onReview,
+  termGrowthFloor,
+  onApplyWacc,
 }: DcfViewProps) {
   const [scenario, setScenario] = useState<DcfScenario | "custom">("base");
 
@@ -153,6 +159,11 @@ export function DcfView({
         ticker={ticker}
         review={review}
         onReview={onReview}
+        termGrowthFloor={termGrowthFloor}
+        onApplyWacc={(wacc, build) => {
+          setScenario("custom");
+          onApplyWacc(wacc, build);
+        }}
       />
       <BridgeSection
         bridge={bridge}
@@ -332,6 +343,8 @@ function AssumptionsSection({
   ticker,
   review,
   onReview,
+  termGrowthFloor,
+  onApplyWacc,
 }: {
   assumptions: DcfInputs;
   anchorDrivers: DcfDrivers;
@@ -349,6 +362,8 @@ function AssumptionsSection({
   ticker: string;
   review: DcfAssumptionReview | null;
   onReview: (review: DcfAssumptionReview) => void;
+  termGrowthFloor: number;
+  onApplyWacc: (wacc: number, build: WaccBuild) => void;
 }) {
   const { t } = useI18n();
   // Filed figures are facts, so they are only typed in when no filing covered the ticker.
@@ -426,13 +441,16 @@ function AssumptionsSection({
               limits={DRIVER_LIMITS.termGrowth}
               onChange={(v) => onField("termGrowth", v)}
             />
-            <DriverField
+            <WaccDriverButton
               label={t("dcf.wacc")}
               hint={t("dcf.waccHint")}
               value={assumptions.wacc}
-              suffix="%"
-              limits={DRIVER_LIMITS.wacc}
-              onChange={(v) => onField("wacc", v)}
+              ticker={ticker}
+              termGrowth={termGrowthFloor}
+              savedBuild={assumptions.waccBuild}
+              onApply={(wacc, build) => {
+                onApplyWacc(wacc, build);
+              }}
             />
             <DriverField
               label={t("dcf.fcfMarginY1")}

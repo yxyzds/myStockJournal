@@ -9,6 +9,7 @@ import {
   type DcfYearRow,
   type FilingRef,
   type RdcfInputs,
+  type WaccBuild,
 } from "@mystockjournal/shared";
 import { useI18n, type MessageKey } from "@/i18n";
 import type { MethodViewProps } from "./actions";
@@ -24,9 +25,9 @@ import {
   fmtMoneyM,
   fmtPct,
 } from "./primitives";
+import { WaccDriverButton } from "./wacc-calculator";
 
 const HELD_DRIVERS = [
-  { key: "wacc", label: "rdcf.wacc", hint: "rdcf.waccHint" },
   { key: "termGrowth", label: "rdcf.termGrowth", hint: "rdcf.termGrowthHint" },
   { key: "fcfMarginY1", label: "rdcf.fcfMarginY1", hint: "rdcf.fcfMarginY1Hint" },
   { key: "fcfMarginTerm", label: "rdcf.fcfMarginTerm", hint: "rdcf.fcfMarginTermHint" },
@@ -39,9 +40,12 @@ export type RdcfViewProps = MethodViewProps & {
   /** The user's own DCF drivers, so the market's growth can be compared to theirs. */
   dcfBaseline: DcfInputs;
   onOpenDcf: () => void;
+  termGrowthFloor: number;
+  onApplyWacc: (wacc: number, build: WaccBuild) => void;
 };
 
 export function RdcfView({
+  ticker,
   anchors,
   currentPrice,
   assumptions,
@@ -49,6 +53,8 @@ export function RdcfView({
   dcfBaseline,
   onOpenDcf,
   actions,
+  termGrowthFloor,
+  onApplyWacc,
 }: RdcfViewProps) {
   const { t } = useI18n();
   const result = useMemo(() => valueRdcf(assumptions, currentPrice), [assumptions, currentPrice]);
@@ -79,6 +85,7 @@ export function RdcfView({
       />
 
       <HeldConstantsSection
+        ticker={ticker}
         assumptions={assumptions}
         anchorsAvailable={anchors.available}
         fcfMarginY1FromFilings={anchors.fcfMarginY1FromFilings}
@@ -86,7 +93,9 @@ export function RdcfView({
         sourceFilings={anchors.sourceFilings}
         past5YCagr={anchors.past5YCagr}
         currentPrice={currentPrice}
+        termGrowthFloor={termGrowthFloor}
         onField={setField}
+        onApplyWacc={onApplyWacc}
       />
 
       <MarketBridgeSection
@@ -409,6 +418,7 @@ function HeldDriverRow({
 }
 
 function HeldConstantsSection({
+  ticker,
   assumptions,
   anchorsAvailable,
   fcfMarginY1FromFilings,
@@ -416,8 +426,11 @@ function HeldConstantsSection({
   sourceFilings,
   past5YCagr,
   currentPrice,
+  termGrowthFloor,
   onField,
+  onApplyWacc,
 }: {
+  ticker: string;
   assumptions: RdcfInputs;
   anchorsAvailable: boolean;
   fcfMarginY1FromFilings: boolean;
@@ -425,7 +438,9 @@ function HeldConstantsSection({
   sourceFilings: FilingRef[];
   past5YCagr: number | null;
   currentPrice: number;
+  termGrowthFloor: number;
   onField: <K extends keyof RdcfInputs>(key: K, value: RdcfInputs[K]) => void;
+  onApplyWacc: (wacc: number, build: WaccBuild) => void;
 }) {
   const { t } = useI18n();
   // Filed figures are facts, so they are only typed in when no filing covered the ticker.
@@ -517,6 +532,16 @@ function HeldConstantsSection({
             </p>
           </div>
           <div className="flex flex-col gap-2">
+            <WaccDriverButton
+              compact
+              label={t("rdcf.wacc")}
+              hint={t("rdcf.waccHint")}
+              value={assumptions.wacc}
+              ticker={ticker}
+              termGrowth={termGrowthFloor}
+              savedBuild={assumptions.waccBuild}
+              onApply={onApplyWacc}
+            />
             {HELD_DRIVERS.map((driver) => (
               <HeldDriverRow
                 key={driver.key}

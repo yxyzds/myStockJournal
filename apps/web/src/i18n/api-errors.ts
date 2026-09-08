@@ -32,7 +32,7 @@ export const API_ERROR_KEYS: Record<string, MessageKey> = {
   "Save this model before using it in a decision": "errors.saveBeforeDecision",
   "Query too long": "errors.queryTooLong",
   "Search failed": "errors.searchFailed",
-  "A current market price is required to value this stock": "errors.needPrice",
+  "WACC prefill failed": "errors.waccPrefillFailed",
   "EPS 为零或为负，P/E 无定义。": "errors.peUndefined",
   "P/E is undefined when EPS is zero or negative.": "errors.peUndefined",
   "EBITDA 为零或为负，EV/EBITDA 无定义。": "errors.evebitdaUndefined",

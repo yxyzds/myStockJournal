@@ -1,4 +1,5 @@
 import { calcDcfBridge, calcDcfRows, type DcfInputs, type DcfYearRow } from "./dcf";
+import type { WaccBuild } from "./wacc";
 
 /**
  * A reverse DCF holds every driver fixed except Y1–5 revenue growth, then asks
@@ -15,6 +16,8 @@ export type RdcfInputs = {
   fcfMarginTerm: number;
   /** Y6–10 growth is a stated rule here, not the solved variable. */
   growthY6_10: number;
+  /** Last applied WACC calculator snapshot. Discounting uses `wacc` only. */
+  waccBuild?: WaccBuild;
 };
 
 export type RdcfResult = {
@@ -48,6 +51,7 @@ export function rdcfToDcfInputs(inp: RdcfInputs, growthY1_5: number): DcfInputs 
     debt: inp.debt,
     shares: inp.shares,
     mosPercent: 0,
+    waccBuild: inp.waccBuild,
   };
 }
 
