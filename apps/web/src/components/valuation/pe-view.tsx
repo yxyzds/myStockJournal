@@ -740,8 +740,8 @@ function RightRail({
   onField: <K extends keyof PeInputs>(key: K, value: PeInputs[K]) => void;
 }) {
   const { t } = useI18n();
-  const hasFairValue =
-    (assumptions.epsBasis === "fwd" ? hasFwdEps : hasTtmEps) && assumptions.expectedPe > 0;
+  const hasEps = assumptions.epsBasis === "fwd" ? hasFwdEps : hasTtmEps;
+  const hasFairValue = hasEps && assumptions.expectedPe > 0;
   const undervalued = hasFairValue && result.mos >= 0;
 
   return (
@@ -805,7 +805,7 @@ function RightRail({
                 {assumptions.epsBasis === "ttm" ? t("pe.ttmEpsActual") : t("pe.fwdEps")}
               </span>
               <span className="font-mono text-[13px] font-bold text-slate-800 tabular-nums">
-                {hasFairValue ? `$${fmt2(result.eps)}` : "—"}
+                {hasEps ? `$${fmt2(result.eps)}` : "—"}
               </span>
             </div>
             {assumptions.epsBasis === "fwd" && fwdEpsSource ? (
