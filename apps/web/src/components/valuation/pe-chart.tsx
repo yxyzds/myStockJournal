@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { PeSeriesPoint } from "@mystockjournal/shared";
 import { useI18n } from "@/i18n";
 
@@ -14,6 +14,20 @@ export const PEER_COLORS = ["#6366f1", "#f59e0b", "#ec4899", "#10b981", "#8b5cf6
 
 export type PeChartMode = "pe" | "peg" | "evebitda";
 export type PeChartPeriod = "week" | "month" | "year";
+
+type PeChartProps = {
+  mode: PeChartMode;
+  history: PeSeriesPoint[];
+  /** Peer series already aligned conceptually; matched onto subject labels. */
+  peerSeries: { ticker: string; series: PeSeriesPoint[]; color?: string }[];
+  expectedPe: number;
+  expectedEvEbitda?: number;
+  expectedGrowth: number;
+  avg5Y: number | null;
+  avg10Y: number | null;
+  label: string;
+  emptyReason?: string | null;
+};
 
 /** ~6 ticks on the Y-axis so a 3000× outlier cannot paint a wall of labels. */
 function niceAxisStep(ceiling: number) {
@@ -44,7 +58,120 @@ function alignPeer(
   });
 }
 
-export function PeChart({
+function useMedia(query: string) {
+  const [matches, setMatches] = useState(false);
+  useEffect(() => {
+    const media = window.matchMedia(query);
+    const sync = () => setMatches(media.matches);
+    sync();
+    media.addEventListener("change", sync);
+    return () => media.removeEventListener("change", sync);
+  }, [query]);
+  return matches;
+}
+
+export function PeChart(props: PeChartProps) {
+  const { t } = useI18n();
+  const [expanded, setExpanded] = useState(false);
+  const mobile = useMedia("(max-width: 767px)");
+  const landscape = useMedia("(orientation: landscape)");
+
+  useEffect(() => {
+    if (!expanded) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setExpanded(false);
+    };
+    window.addEventListener("keydown", onKey);
+    void (async () => {
+      try {
+        await document.documentElement.requestFullscreen();
+      } catch {
+        /* iOS Safari and some desktop browsers reject this. */
+      }
+      try {
+        await screen.orientation.lock("landscape");
+      } catch {
+        /* Lock is optional; CSS rotation covers portrait. */
+      }
+    })();
+    return () => {
+      document.body.style.overflow = previous;
+      window.removeEventListener("keydown", onKey);
+      if (document.fullscreenElement) {
+        void document.exitFullscreen().catch(() => undefined);
+      }
+      try {
+        screen.orientation.unlock();
+      } catch {
+        /* ignore */
+      }
+    };
+  }, [expanded]);
+
+  if (props.history.length === 0) {
+    return (
+      <div className="flex h-[180px] items-center justify-center px-6 text-center">
+        {props.emptyReason ? (
+          <p className="rounded-lg border border-red-200 bg-red-50 px-3.5 py-2 text-[12px] font-semibold text-red-700">
+            {props.emptyReason}
+          </p>
+        ) : (
+          <p className="text-[12px] text-slate-400">{t("pe.emptyChart")}</p>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <>
+      {mobile ? (
+        <button
+          type="button"
+          aria-label={t("pe.expandChartAria")}
+          onClick={() => setExpanded(true)}
+          className="block w-full cursor-pointer bg-transparent p-0 text-left"
+        >
+          <PeChartCanvas {...props} interactive={false} />
+        </button>
+      ) : (
+        <PeChartCanvas {...props} interactive />
+      )}
+      {mobile ? (
+        <p className="mt-1 px-2 text-center text-[10px] text-slate-400">{t("pe.tapLandscape")}</p>
+      ) : null}
+      {expanded ? (
+        <div className="fixed inset-0 z-50 bg-white">
+          <button
+            type="button"
+            onClick={() => setExpanded(false)}
+            aria-label={t("pe.closeChart")}
+            className="absolute top-[max(0.75rem,env(safe-area-inset-top))] right-[max(0.75rem,env(safe-area-inset-right))] z-10 flex size-9 items-center justify-center rounded-full bg-slate-100 text-[22px] leading-none text-slate-600"
+          >
+            ×
+          </button>
+          {!landscape ? (
+            <p className="absolute top-[max(0.85rem,env(safe-area-inset-top))] left-1/2 z-10 -translate-x-1/2 rounded-full bg-slate-900/80 px-2.5 py-1 text-[11px] font-semibold text-white">
+              {t("pe.rotateHint")}
+            </p>
+          ) : null}
+          <div
+            className={
+              landscape
+                ? "flex h-full w-full items-center px-3 pt-12 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
+                : "absolute top-1/2 left-1/2 flex h-[100vw] w-[100vh] -translate-x-1/2 -translate-y-1/2 rotate-90 items-center px-6"
+            }
+          >
+            <PeChartCanvas {...props} interactive className="h-full w-full" />
+          </div>
+        </div>
+      ) : null}
+    </>
+  );
+}
+
+function PeChartCanvas({
   mode,
   history,
   peerSeries,
@@ -54,20 +181,9 @@ export function PeChart({
   avg5Y,
   avg10Y,
   label,
-  emptyReason,
-}: {
-  mode: PeChartMode;
-  history: PeSeriesPoint[];
-  /** Peer series already aligned conceptually; matched onto subject labels. */
-  peerSeries: { ticker: string; series: PeSeriesPoint[]; color?: string }[];
-  expectedPe: number;
-  expectedEvEbitda?: number;
-  expectedGrowth: number;
-  avg5Y: number | null;
-  avg10Y: number | null;
-  label: string;
-  emptyReason?: string | null;
-}) {
+  interactive,
+  className = "w-full",
+}: PeChartProps & { interactive: boolean; className?: string }) {
   const { t } = useI18n();
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
@@ -146,12 +262,12 @@ export function PeChart({
     };
   }, [mode, history, peerSeries, expectedPe, expectedEvEbitda, expectedGrowth, avg5Y, avg10Y]);
 
-  const handleMouseMove = useCallback(
-    (event: React.MouseEvent<SVGSVGElement>) => {
+  const setIndexFromClientX = useCallback(
+    (clientX: number) => {
       const svg = svgRef.current;
       if (!svg || history.length < 2) return;
       const rect = svg.getBoundingClientRect();
-      const svgX = ((event.clientX - rect.left) / rect.width) * VIEW_W;
+      const svgX = ((clientX - rect.left) / rect.width) * VIEW_W;
       const ratio = (svgX - PAD.left) / PLOT_W;
       const index = Math.round(ratio * (history.length - 1));
       setHoverIndex(Math.min(Math.max(index, 0), history.length - 1));
@@ -159,26 +275,9 @@ export function PeChart({
     [history.length],
   );
 
-  if (history.length === 0) {
-    return (
-      <div className="flex h-[180px] items-center justify-center px-6 text-center">
-        {emptyReason ? (
-          <p className="rounded-lg border border-red-200 bg-red-50 px-3.5 py-2 text-[12px] font-semibold text-red-700">
-            {emptyReason}
-          </p>
-        ) : (
-          <p className="text-[12px] text-slate-400">
-            {t("pe.emptyChart")}
-          </p>
-        )}
-      </div>
-    );
-  }
-
   const mainColor = mode === "peg" ? "#8b5cf6" : mode === "evebitda" ? "#0d9488" : "#3b82f6";
   const expectedY = chart.expected != null ? chart.yPos(chart.expected) : null;
-  const expectedInRange =
-    expectedY != null && expectedY > PAD.top && expectedY < VIEW_H - PAD.bottom;
+  const expectedInRange = expectedY != null && expectedY > PAD.top && expectedY < VIEW_H - PAD.bottom;
   const suffix = mode === "peg" ? "" : "x";
   const labelStep = history.length > 24 ? 4 : history.length > 12 ? 2 : 1;
 
@@ -186,7 +285,7 @@ export function PeChart({
     <svg
       ref={svgRef}
       viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
-      className="w-full"
+      className={className}
       role="img"
       aria-label={
         mode === "peg"
@@ -195,8 +294,17 @@ export function PeChart({
             ? t("pe.historyAriaEvebitda", { ticker: label })
             : t("pe.historyAriaPe", { ticker: label })
       }
-      onMouseMove={handleMouseMove}
-      onMouseLeave={() => setHoverIndex(null)}
+      onPointerDown={
+        interactive
+          ? (event) => {
+              event.preventDefault();
+              setIndexFromClientX(event.clientX);
+            }
+          : undefined
+      }
+      onPointerMove={interactive ? (event) => setIndexFromClientX(event.clientX) : undefined}
+      onPointerLeave={interactive ? () => setHoverIndex(null) : undefined}
+      style={interactive ? { touchAction: "none" } : undefined}
     >
       {chart.gridLines.map((value) => {
         const y = chart.yPos(value);
@@ -321,20 +429,6 @@ export function PeChart({
         strokeLinejoin="round"
       />
 
-      {chart.values.map((value, index) =>
-        value == null ? null : (
-          <circle
-            key={`pt-${history[index].label}-${index}`}
-            cx={chart.xPos(index)}
-            cy={chart.yPos(value)}
-            r={history.length < 2 ? 5 : 3}
-            fill={index === history.length - 1 ? mainColor : "white"}
-            stroke={mainColor}
-            strokeWidth={2}
-          />
-        ),
-      )}
-
       {hoverIndex !== null &&
         (() => {
           const point = history[hoverIndex];
@@ -390,12 +484,7 @@ export function PeChart({
               </text>
               {rows.map((row, index) => (
                 <g key={row.name}>
-                  <circle
-                    cx={boxX + 12}
-                    cy={boxY + 22 + index * rowHeight}
-                    r={3}
-                    fill={row.color}
-                  />
+                  <circle cx={boxX + 12} cy={boxY + 22 + index * rowHeight} r={3} fill={row.color} />
                   <text
                     x={boxX + 20}
                     y={boxY + 25 + index * rowHeight}
@@ -404,8 +493,7 @@ export function PeChart({
                     fontWeight="600"
                     fontFamily="var(--font-jetbrains), monospace"
                   >
-                    {row.name}{" "}
-                    {row.value == null ? "—" : `${row.value.toFixed(1)}${suffix}`}
+                    {row.name} {row.value == null ? "—" : `${row.value.toFixed(1)}${suffix}`}
                   </text>
                 </g>
               ))}
