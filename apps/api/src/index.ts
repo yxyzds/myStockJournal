@@ -16,9 +16,10 @@ try {
 serve(
   {
     fetch: app.fetch,
+    hostname: env.apiHost,
     port: env.apiPort,
   },
   (info) => {
-    console.log(`API listening on http://localhost:${info.port}`);
+    console.log(`API listening on http://${info.address}:${info.port}`);
   },
 );
