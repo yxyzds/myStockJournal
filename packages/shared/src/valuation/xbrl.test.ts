@@ -143,11 +143,39 @@ describe("annualCagr", () => {
   });
 });
 
+/**
+ * Apple's cash-flow tags are YTD in the 10-Q: Q1 is 90 days, Q2/Q3 are 180/270
+ * day cumulatives, Q4 is only inside the 10-K. Same shape as most US 10-Qs.
+ */
+const APPLE_OCF: XbrlFact[] = [
+  duration("2024-09-29", "2024-12-28", 29_930),
+  duration("2024-09-29", "2025-03-29", 53_890),
+  duration("2024-09-29", "2025-06-28", 81_750),
+  duration("2024-09-29", "2025-09-27", 111_480),
+  duration("2025-09-28", "2025-12-27", 53_920),
+  duration("2025-09-28", "2026-03-28", 82_630),
+  duration("2025-09-28", "2026-06-27", 117_000),
+];
+
 describe("quarterlySeriesWithQ4", () => {
   it("fills Apple's missing Q4 from annual minus nine-month YTD", () => {
     const series = quarterlySeriesWithQ4(APPLE_REVENUE);
     const q4 = series.find((row) => row.end === "2025-09-27");
     expect(q4?.value).toBe(102_466);
+  });
+
+  it("unwinds cash-flow YTD into Q2 and Q3, which 10-Qs never file standalone", () => {
+    const series = quarterlySeriesWithQ4(APPLE_OCF);
+    expect(series.find((row) => row.end === "2025-03-29")?.value).toBe(23_960);
+    expect(series.find((row) => row.end === "2025-06-28")?.value).toBe(27_860);
+    expect(series.find((row) => row.end === "2025-09-27")?.value).toBe(29_730);
+    expect(series.find((row) => row.end === "2026-03-28")?.value).toBe(28_710);
+    expect(series.find((row) => row.end === "2026-06-27")?.value).toBe(34_370);
+  });
+
+  it("keeps a standalone income-statement quarter instead of the YTD difference", () => {
+    const series = quarterlySeriesWithQ4(APPLE_REVENUE);
+    expect(series.find((row) => row.end === "2026-06-27")?.value).toBe(109_417);
   });
 });
 
