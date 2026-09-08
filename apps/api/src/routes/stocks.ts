@@ -20,6 +20,7 @@ import { getOrCreateStock, num } from "../lib/stocks";
 import { getQuotes } from "../market/quotes";
 import { fetchTencentKline } from "../market/tencent";
 import { requestLocale } from "../lib/locale";
+import { AI_REVIEW_LIMIT_ERROR, consumeAiReviewSlot, releaseAiReviewSlot } from "../lib/ai-review-quota";
 
 function todayNyDate() {
   return new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
@@ -404,6 +405,9 @@ stockRoutes.post("/:ticker/ai/trade-review", async (c) => {
     return c.json({ error: "Set a fair value before asking for a review" }, 400);
   }
 
+  const allowed = await consumeAiReviewSlot(c.get("userId"));
+  if (!allowed) return c.json({ error: AI_REVIEW_LIMIT_ERROR }, 429);
+
   const [quotes, kline] = await Promise.all([
     getQuotes([stock.ticker]).catch(() => []),
     fetchTencentKline(stock.ticker, "day", 640).catch(() => []),
@@ -427,6 +431,7 @@ stockRoutes.post("/:ticker/ai/trade-review", async (c) => {
       .where(and(eq(stocks.id, stock.id), eq(stocks.userId, stock.userId)));
     return c.json({ review });
   } catch (error) {
+    await releaseAiReviewSlot(c.get("userId"));
     const message = error instanceof Error ? error.message : "Trade review failed";
     return c.json({ error: message }, 502);
   }

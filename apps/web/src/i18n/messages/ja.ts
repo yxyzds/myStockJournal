@@ -584,6 +584,7 @@ export const ja = {
     needJournal: "レビューを求める前に、日記を少なくとも 1 件書いてください",
     needBuySell: "レビューを求める前に、買いと売りをそれぞれ 1 件記録してください",
     needFairValue: "レビューを求める前に公正価値を設定してください",
+    aiReviewLimit: "本日の AI レビュー上限（20 回）に達しました。明日またお試しください。",
     aiDcfOff: "DCF レビューを有効にするには .env に AI_BASE_URL と AI_API_KEY を設定してください",
     unknownMethod: "未知のバリュエーション手法です",
     saveBeforeFv: "公正価値を設定する前にこのモデルを保存してください",

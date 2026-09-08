@@ -571,6 +571,7 @@ export const zhHant = {
     needJournal: "請先至少寫一則日記再請求點評",
     needBuySell: "請先各記錄一筆買入和賣出再請求點評",
     needFairValue: "請先設定公允價值再請求點評",
+    aiReviewLimit: "今日 AI 點評次數已達上限（20 次）。請明天再試。",
     aiDcfOff: "請在 .env 中設定 AI_BASE_URL 和 AI_API_KEY 以啟用 DCF 點評",
     unknownMethod: "未知估值方法",
     saveBeforeFv: "請先儲存該模型再設為公允價值",
