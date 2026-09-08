@@ -350,15 +350,6 @@ export function ValuationWorkbenchPage({ ticker }: { ticker: string }) {
         myFairValue={data.myFairValue}
         myFairValueMethod={myFairValueMethod}
         actions={actions}
-        canAct={
-          isImplementedMethod(method) &&
-          currentPrice > 0 &&
-          (method === "dcf"
-            ? dcfModelReady(drafts.dcf)
-            : method === "rdcf"
-              ? dcfModelReady(drafts.rdcf)
-              : true)
-        }
       />
 
       <div className="mx-auto w-full max-w-[1440px] flex-1 px-4 py-4 md:px-7 md:py-[22px]">
@@ -441,7 +432,6 @@ function TopBar({
   myFairValue,
   myFairValueMethod,
   actions,
-  canAct,
 }: {
   symbol: string;
   name: string;
@@ -450,11 +440,8 @@ function TopBar({
   myFairValue: number | null;
   myFairValueMethod: ValuationMethod | null;
   actions: ValuationActions;
-  canAct: boolean;
 }) {
   const { t } = useI18n();
-  // A reverse DCF outputs the market's implied growth, so it has no fair value to set.
-  const producesFairValue = method !== "rdcf";
 
   return (
     <header className="sticky top-0 z-30 border-b border-slate-100 bg-white">
@@ -495,16 +482,6 @@ function TopBar({
           <span className="min-w-[3.5rem] text-right text-[11px] font-semibold text-slate-400">
             {actions.saved ? t("common.saved") : actions.saving ? t("common.saving") : null}
           </span>
-          {producesFairValue && (
-            <button
-              type="button"
-              onClick={actions.onSetFairValue}
-              disabled={!canAct || actions.saving}
-              className="hidden rounded-[7px] bg-emerald-600 px-3 py-1.5 text-[11px] font-bold text-white hover:bg-emerald-700 disabled:opacity-50 md:block"
-            >
-              {t("valuation.setFairValue")}
-            </button>
-          )}
           <NavLocaleToggle />
           <AccountAvatar />
         </div>

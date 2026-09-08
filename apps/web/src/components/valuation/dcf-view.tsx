@@ -579,7 +579,6 @@ function DcfAssumptionReviewBar({
   onReview: (review: DcfAssumptionReview) => void;
 }) {
   const { t } = useI18n();
-  const ready = dcfModelReady(assumptions);
   const rateMutation = useMutation({
     mutationFn: () =>
       api<{ review: DcfAssumptionReview }>(`/stocks/${ticker}/valuation/dcf/ai-review`, {
@@ -608,7 +607,7 @@ function DcfAssumptionReviewBar({
         </div>
         <button
           type="button"
-          disabled={analyzing || !ready}
+          disabled={analyzing}
           onClick={() => rateMutation.mutate()}
           className="flex shrink-0 items-center gap-2 rounded-[10px] px-4 py-[9px] text-white disabled:opacity-60"
           style={{
@@ -659,7 +658,7 @@ function DcfAssumptionReviewBar({
         <button
           type="button"
           title={t("common.reanalyze")}
-          disabled={analyzing || !ready}
+          disabled={analyzing}
           onClick={() => rateMutation.mutate()}
           className="flex shrink-0 items-center gap-1.5 rounded-[7px] border border-[#e2e8f0] px-2.5 py-1.5 text-[#94a3b8] hover:border-[#93c5fd] hover:bg-[#eff6ff] hover:text-[#2563eb] disabled:opacity-50"
         >

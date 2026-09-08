@@ -470,9 +470,7 @@ export const ja = {
     implied: "（インプライド）",
   },
   pe: {
-    quoteZh: "「マルチプルは単体では意味を持たない。自社の歴史と同業と比べて初めて参考になる。」",
-    quoteEn:
-      "A multiple means little in isolation — it becomes useful only next to a company's own history and its peers.",
+    quote: "マルチプルは単体では意味を持たない。自社の歴史と同業と比べて初めて参考になる。",
     inspiredBy: "— 着想元",
     inspiredBook: "The Five Rules for Successful Stock Investing",
     weekly: "週次",

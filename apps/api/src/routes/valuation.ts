@@ -6,7 +6,8 @@ import {
   fairValueFromOutputs,
   isDcfAssumptionReview,
   isImplementedMethod,
-  parseDcfInputs,
+  parseWaccBuild,
+  type DcfInputs,
   type ImplementedMethod,
   type PeerMultiple,
   type ValuationAnchors,
@@ -293,6 +294,32 @@ valuationRoutes.post("/:ticker/valuation/wacc/ai-prefill", async (c) => {
   }
 });
 
+function finiteOrZero(value: unknown) {
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(n) ? n : 0;
+}
+
+/** Review can run on a half-filled worksheet — unset drivers stay 0 for the model. */
+function dcfAssumptionsForReview(raw: unknown): DcfInputs {
+  const row = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const value: DcfInputs = {
+    ttmRevenue: finiteOrZero(row.ttmRevenue),
+    cash: finiteOrZero(row.cash),
+    debt: finiteOrZero(row.debt),
+    shares: finiteOrZero(row.shares),
+    growthY1_5: finiteOrZero(row.growthY1_5),
+    growthY6_10: finiteOrZero(row.growthY6_10),
+    termGrowth: finiteOrZero(row.termGrowth),
+    wacc: finiteOrZero(row.wacc),
+    fcfMarginY1: finiteOrZero(row.fcfMarginY1),
+    fcfMarginTerm: finiteOrZero(row.fcfMarginTerm),
+    mosPercent: finiteOrZero(row.mosPercent),
+  };
+  const waccBuild = parseWaccBuild(row.waccBuild);
+  if (waccBuild) value.waccBuild = waccBuild;
+  return value;
+}
+
 /**
  * POST /stocks/:ticker/valuation/dcf/ai-review — one-sentence critique of each
  * DCF driver except filing-locked FCF margin Y1.
@@ -312,8 +339,7 @@ valuationRoutes.post("/:ticker/valuation/dcf/ai-review", async (c) => {
   const rawAssumptions =
     body && typeof body === "object" ? (body as { assumptions?: unknown }).assumptions : undefined;
   const merged = withServerAnchors("dcf", rawAssumptions, loaded.anchors);
-  const parsed = parseDcfInputs(merged);
-  if ("error" in parsed) return c.json({ error: parsed.error }, 400);
+  const assumptions = dcfAssumptionsForReview(merged);
 
   const allowed = await consumeAiReviewSlot(c.get("userId"));
   if (!allowed) return c.json({ error: AI_REVIEW_LIMIT_ERROR }, 429);
@@ -322,7 +348,7 @@ valuationRoutes.post("/:ticker/valuation/dcf/ai-review", async (c) => {
     const review = await reviewDcfAssumptions({
       ticker: loaded.stock.ticker,
       name: loaded.quote.name || loaded.stock.name,
-      assumptions: parsed.value,
+      assumptions,
       anchors: loaded.anchors,
       currentPrice: loaded.ctx.currentPrice,
       language: requestLocale(c.req.header("accept-language")),

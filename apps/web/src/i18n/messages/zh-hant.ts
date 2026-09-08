@@ -461,9 +461,7 @@ export const zhHant = {
     implied: "（隱含）",
   },
   pe: {
-    quoteZh: "「倍數單獨看沒有意義；只有和自身歷史、同業對比時，才有參考價值。」",
-    quoteEn:
-      "A multiple means little in isolation — it becomes useful only next to a company's own history and its peers.",
+    quote: "倍數單獨看沒有意義；只有和自身歷史、同業對比時，才有參考價值。",
     inspiredBy: "— 靈感來自",
     inspiredBook: "The Five Rules for Successful Stock Investing",
     weekly: "週",
