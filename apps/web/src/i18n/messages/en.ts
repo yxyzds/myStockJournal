@@ -85,7 +85,6 @@ export const en = {
     pctChange: "% Change",
     myFairValue: "My Fair Value",
     vsFairValue: "vs Fair Value",
-    hintWatch: "vs Fair Value = (fair value − close) ÷ close.",
     hintSearch: "Not in your list — tap Add to track a ticker.",
     loadError: "Couldn’t load quotes. Is the API running?",
     addError: "Couldn’t add that ticker. Try another symbol.",

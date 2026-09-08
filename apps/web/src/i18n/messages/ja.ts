@@ -87,7 +87,6 @@ export const ja = {
     pctChange: "騰落率",
     myFairValue: "自分の公正価値",
     vsFairValue: "対公正価値",
-    hintWatch: "対公正価値 =（公正価値 − 終値）÷ 終値。",
     hintSearch: "リストにありません — 追加をタップして追跡できます。",
     loadError: "相場を読み込めませんでした。API は起動していますか？",
     addError: "そのティッカーを追加できませんでした。別の銘柄を試してください。",

@@ -87,7 +87,6 @@ export const zhHant = {
     pctChange: "漲跌幅",
     myFairValue: "我的公允價值",
     vsFairValue: "相對公允價值",
-    hintWatch: "相對公允價值 =（公允價值 − 收盤價）÷ 收盤價。",
     hintSearch: "不在自選中 — 點新增即可追蹤。",
     loadError: "無法載入行情。API 是否在執行？",
     addError: "無法新增該代碼，請換一個試試。",

@@ -423,9 +423,9 @@ export function WatchList() {
                 </time>
               )}
             </div>
-            <p className="mt-1 text-[12px] text-slate-400 md:text-[13px]">
-              {showingMarketSearch ? t("watchList.hintSearch") : t("watchList.hintWatch")}
-            </p>
+            {showingMarketSearch ? (
+              <p className="mt-1 text-[12px] text-slate-400 md:text-[13px]">{t("watchList.hintSearch")}</p>
+            ) : null}
           </div>
           <div className="relative w-full md:w-[260px]">
             <div className="pointer-events-none absolute top-1/2 left-[11px] -translate-y-1/2">
