@@ -879,15 +879,13 @@ function FairValueControl({ symbol }: { symbol: string }) {
   );
 }
 
-function analyzeHint(input: { hasBuy: boolean; hasSell: boolean; hasFairValue: boolean }, t: Translate) {
+function analyzeHint(input: { hasBuy: boolean; hasSell: boolean }, t: Translate) {
   const missing: string[] = [];
   if (!input.hasBuy) missing.push(t("transaction.needBuy"));
   if (!input.hasSell) missing.push(t("transaction.needSell"));
-  if (!input.hasFairValue) missing.push(t("transaction.needFairValue"));
   if (missing.length === 0) return null;
   if (missing.length === 1) return t("transaction.addOne", { a: missing[0] });
-  if (missing.length === 2) return t("transaction.addTwo", { a: missing[0], b: missing[1] });
-  return t("transaction.addThree", { a: missing[0], b: missing[1], c: missing[2] });
+  return t("transaction.addTwo", { a: missing[0], b: missing[1] });
 }
 
 function RateMyTransactionBar({
@@ -904,15 +902,8 @@ function RateMyTransactionBar({
   onReview: (review: TradeReview) => void;
 }) {
   const { t } = useI18n();
-  const valuationQuery = useQuery({
-    queryKey: ["valuation", ticker],
-    queryFn: () => api<ValuationWorkbench>(`/stocks/${ticker}/valuation`),
-  });
-  const hasFairValue = valuationQuery.data?.myFairValue != null;
-  const hint = valuationQuery.isPending
-    ? null
-    : analyzeHint({ hasBuy, hasSell, hasFairValue }, t);
-  const canAnalyze = !valuationQuery.isPending && hint == null;
+  const hint = analyzeHint({ hasBuy, hasSell }, t);
+  const canAnalyze = hint == null;
 
   const rateMutation = useMutation({
     mutationFn: () =>

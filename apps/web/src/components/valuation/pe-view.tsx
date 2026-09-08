@@ -90,7 +90,7 @@ export function PeView({
   myFairValue,
   actions,
 }: PeViewProps) {
-  const { t, locale } = useI18n();
+  const { t } = useI18n();
   const [view, setView] = useState<MultiplesView>(lens === "evebitda" ? "evebitda" : "pe");
   const [chartPeriod, setChartPeriod] = useState<PeChartPeriod>("year");
   const [peerTickers, setPeerTickers] = useState<string[]>([]);
@@ -263,12 +263,9 @@ export function PeView({
       <div className="order-last flex min-w-0 flex-col gap-3 md:order-first md:flex-1">
         <blockquote className="rounded-[12px] border-l-4 border-blue-200 bg-white px-4 py-3 md:px-5 md:py-3.5">
           <p className="font-heading text-[15px] leading-relaxed text-slate-700 italic">
-            {locale === "en" ? t("pe.quoteEn") : t("pe.quoteZh")}
+            {t("pe.quote")}
           </p>
-          <p className="mt-1.5 text-[11px] text-slate-400">
-            {locale === "en" ? t("pe.quoteZh") : t("pe.quoteEn")}
-          </p>
-          <p className="mt-0.5 text-[10px] text-slate-400">
+          <p className="mt-1.5 text-[10px] text-slate-400">
             {t("pe.inspiredBy")} <span className="italic">{t("pe.inspiredBook")}</span>
           </p>
         </blockquote>

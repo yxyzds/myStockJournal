@@ -468,8 +468,7 @@ export const en = {
     implied: "(implied)",
   },
   pe: {
-    quoteZh: "“倍数单独看没有意义；只有和自身历史、同业对比时，才有参考价值。”",
-    quoteEn:
+    quote:
       "A multiple means little in isolation — it becomes useful only next to a company's own history and its peers.",
     inspiredBy: "— inspired by",
     inspiredBook: "The Five Rules for Successful Stock Investing",

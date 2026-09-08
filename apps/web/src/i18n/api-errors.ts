@@ -23,7 +23,6 @@ export const API_ERROR_KEYS: Record<string, MessageKey> = {
   "Set AI_BASE_URL and AI_API_KEY in .env to enable Trade review": "errors.aiTradeOff",
   "Write at least one journal entry before asking for a review": "errors.needJournal",
   "Record at least one buy and one sell before asking for a review": "errors.needBuySell",
-  "Set a fair value before asking for a review": "errors.needFairValue",
   "Daily AI review limit reached (20). Try again tomorrow.": "errors.aiReviewLimit",
   "Set AI_BASE_URL and AI_API_KEY in .env to enable DCF review": "errors.aiDcfOff",
   "Unknown valuation method": "errors.unknownMethod",

@@ -1,7 +1,6 @@
 import { Hono } from "hono";
 import { and, asc, eq, inArray } from "drizzle-orm";
 import {
-  fairValueFromOutputs,
   isTradeReviewGrade,
   type JournalEntry,
   type JournalSnapshot,
@@ -14,7 +13,7 @@ import { reviewTradeJournal } from "../ai/trade-review";
 import { env } from "../env";
 import type { AppEnv } from "../types";
 import { db } from "../db";
-import { decisions, journalEntries, stocks, valuationModels } from "../db/schema";
+import { decisions, journalEntries, stocks } from "../db/schema";
 import { recordDecision } from "../lib/decisions";
 import { getOrCreateStock, num } from "../lib/stocks";
 import { getQuotes } from "../market/quotes";
@@ -356,7 +355,7 @@ stockRoutes.post("/:ticker/ai/trade-review", async (c) => {
   if ("error" in found) return c.json({ error: found.error }, found.status);
   const { stock } = found;
 
-  const [journalRows, decisionRows, fvRows] = await Promise.all([
+  const [journalRows, decisionRows] = await Promise.all([
     db
       .select()
       .from(journalEntries)
@@ -373,17 +372,6 @@ stockRoutes.post("/:ticker/ai/trade-review", async (c) => {
       .from(decisions)
       .where(and(eq(decisions.userId, stock.userId), eq(decisions.stockId, stock.id)))
       .orderBy(asc(decisions.date), asc(decisions.createdAt)),
-    db
-      .select()
-      .from(valuationModels)
-      .where(
-        and(
-          eq(valuationModels.userId, stock.userId),
-          eq(valuationModels.stockId, stock.id),
-          eq(valuationModels.isMyFairValue, true),
-        ),
-      )
-      .limit(1),
   ]);
 
   const journal = journalRows.map(toJournal);
@@ -398,11 +386,6 @@ stockRoutes.post("/:ticker/ai/trade-review", async (c) => {
   const hasSell = transactions.some((txn) => txn.type === "sell");
   if (!hasBuy || !hasSell) {
     return c.json({ error: "Record at least one buy and one sell before asking for a review" }, 400);
-  }
-
-  const hasFairValue = fairValueFromOutputs(fvRows[0]?.outputs) != null;
-  if (!hasFairValue) {
-    return c.json({ error: "Set a fair value before asking for a review" }, 400);
   }
 
   const allowed = await consumeAiReviewSlot(c.get("userId"));
