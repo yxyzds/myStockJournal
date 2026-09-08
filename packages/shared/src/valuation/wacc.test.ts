@@ -42,8 +42,12 @@ describe("parseWaccBuild", () => {
     expect(parseWaccBuild(SAMPLE)?.erp).toBe(5.5);
   });
 
-  it("drops out-of-range judgment fields instead of failing", () => {
-    expect(parseWaccBuild({ ...SAMPLE, erp: 99 })?.erp).toBeNull();
+  it("drops below-floor judgment fields instead of failing", () => {
+    expect(parseWaccBuild({ ...SAMPLE, erp: 0 })?.erp).toBeNull();
+  });
+
+  it("keeps judgment fields above the old ceiling", () => {
+    expect(parseWaccBuild({ ...SAMPLE, erp: 99 })?.erp).toBe(99);
   });
 
   it("returns undefined for garbage", () => {

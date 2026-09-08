@@ -357,6 +357,7 @@ export const zhHant = {
     apply: "套用",
     loadingFacts: "正在讀取行情與財報…",
     loadingAi: "正在預填判斷項…",
+    prefilling: "正在預填 WACC…",
     loadError: "無法載入 WACC 輸入。",
     needInputs: "請先填好 Rf、Beta 和 ERP（若有債務還需要 Rd 和稅率）再套用。",
     waccTooLow: "WACC 必須高於永續成長（{g}%），否則終值無定義。",
@@ -364,7 +365,6 @@ export const zhHant = {
     fetchedFrom: "取自",
     sourceTnx: "^TNX",
     sourceYahoo: "Yahoo Finance",
-    sourceEdgar: "EDGAR",
     quota: "今日 AI 點評額度已用完（20 次）。仍可自行填寫 ERP 和缺項。",
   },
   actuals: {

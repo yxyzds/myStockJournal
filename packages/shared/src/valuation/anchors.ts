@@ -142,8 +142,8 @@ export const EMPTY_DRIVERS: DcfDrivers = {
 };
 
 function clampDriver(key: keyof DcfDrivers, value: number) {
-  const { min, max } = DRIVER_LIMITS[key];
-  return Math.min(max, Math.max(min, value));
+  const { min } = DRIVER_LIMITS[key];
+  return Math.max(min, value);
 }
 
 /**

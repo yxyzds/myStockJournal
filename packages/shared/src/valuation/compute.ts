@@ -64,8 +64,8 @@ function reader(raw: unknown): Reader {
         error = `${label} is required`;
         return limits.min;
       }
-      if (value < limits.min || value > limits.max) {
-        error = `${label} must be between ${limits.min} and ${limits.max}`;
+      if (value < limits.min) {
+        error = `${label} must be at least ${limits.min}`;
         return limits.min;
       }
       return value;

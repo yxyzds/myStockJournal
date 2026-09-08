@@ -142,7 +142,7 @@ export function computeWacc(build: WaccBuild): WaccComputed {
 function optionalNum(value: unknown, limits: { min: number; max: number }): number | null {
   if (value == null || value === "") return null;
   const n = typeof value === "number" ? value : Number(value);
-  if (!Number.isFinite(n) || n < limits.min || n > limits.max) return null;
+  if (!Number.isFinite(n) || n < limits.min) return null;
   return n;
 }
 

@@ -60,23 +60,25 @@ type Drafts = {
   evebitda: EvEbitdaInputs;
 };
 
+function stampCapmWacc<T extends { wacc: number; waccBuild?: WaccBuild }>(
+  row: T,
+  anchors: ValuationWorkbench["anchors"],
+): T {
+  const build = anchors.waccBuild;
+  const wacc = anchors.drivers.wacc;
+  if (!build || wacc < DRIVER_LIMITS.wacc.min) return row;
+  row.wacc = wacc;
+  row.waccBuild = build;
+  return row;
+}
+
 function draftsFrom(data: ValuationWorkbench): Drafts {
   const saved = (method: ImplementedMethod) =>
     data.models.find((model) => model.method === method)?.assumptions;
   const dcf = (saved("dcf") as DcfInputs | undefined) ?? dcfInputsFromAnchors(data.anchors);
   const rdcf = (saved("rdcf") as RdcfInputs | undefined) ?? rdcfInputsFromAnchors(data.anchors);
-  const prefillWacc = data.anchors.waccBuild;
-  const prefillRate = data.anchors.drivers.wacc;
-  if (prefillWacc && prefillRate >= DRIVER_LIMITS.wacc.min) {
-    if (!dcf.waccBuild) {
-      dcf.wacc = prefillRate;
-      dcf.waccBuild = prefillWacc;
-    }
-    if (!rdcf.waccBuild) {
-      rdcf.wacc = prefillRate;
-      rdcf.waccBuild = prefillWacc;
-    }
-  }
+  stampCapmWacc(dcf, data.anchors);
+  stampCapmWacc(rdcf, data.anchors);
   // Filing-computed Y1 margin always wins over a stale saved worksheet.
   if (data.anchors.fcfMarginY1FromFilings) {
     dcf.fcfMarginY1 = data.anchors.drivers.fcfMarginY1;
@@ -119,6 +121,8 @@ export function ValuationWorkbenchPage({ ticker }: { ticker: string }) {
   const [drafts, setDrafts] = useState<Drafts | null>(null);
   const [saved, setSaved] = useState(false);
   const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const persistTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const persistPending = useRef<Partial<Record<ImplementedMethod, ValuationAssumptions>>>({});
   // Drafts are seeded once per ticker so a background refetch cannot discard edits.
   const seededTicker = useRef<string | null>(null);
 
@@ -132,6 +136,7 @@ export function ValuationWorkbenchPage({ ticker }: { ticker: string }) {
     if (!data) return;
     if (seededTicker.current !== data.stock.ticker) {
       seededTicker.current = data.stock.ticker;
+      persistPending.current = {};
       setDrafts(draftsFrom(data));
       return;
     }
@@ -150,6 +155,17 @@ export function ValuationWorkbenchPage({ ticker }: { ticker: string }) {
           };
         }
       }
+      const capm = data.anchors.waccBuild;
+      const capmWacc = data.anchors.drivers.wacc;
+      // Latest CAPM prefill replaces a leftover bundled WACC. A calculator Apply
+      // already wrote waccBuild, so leave that session edit alone.
+      if (capm && capmWacc >= DRIVER_LIMITS.wacc.min && !next.dcf.waccBuild) {
+        next = {
+          ...next,
+          dcf: { ...next.dcf, wacc: capmWacc, waccBuild: capm },
+          rdcf: { ...next.rdcf, wacc: capmWacc, waccBuild: capm },
+        };
+      }
       // Repair a stale Multiples draft left over from before evebitda seeding existed.
       if (typeof next.evebitda?.shares !== "number") {
         next = { ...next, evebitda: draftsFrom(data).evebitda };
@@ -160,6 +176,7 @@ export function ValuationWorkbenchPage({ ticker }: { ticker: string }) {
 
   useEffect(() => () => {
     if (savedTimer.current) clearTimeout(savedTimer.current);
+    if (persistTimer.current) clearTimeout(persistTimer.current);
   }, []);
 
   function flashSaved() {
@@ -176,6 +193,20 @@ export function ValuationWorkbenchPage({ ticker }: { ticker: string }) {
       queryClient.invalidateQueries({ queryKey: ["stock", symbol] }),
     ]);
   }
+
+  const persistMutation = useMutation({
+    mutationFn: (variables: { method: ImplementedMethod; assumptions: ValuationAssumptions }) =>
+      api<{ model: ValuationModel }>(`/stocks/${symbol}/valuation/${variables.method}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          assumptions: variables.assumptions,
+          setAsMyFairValue: false,
+        }),
+      }),
+    onSuccess: () => {
+      flashSaved();
+    },
+  });
 
   const saveMutation = useMutation({
     mutationFn: (variables: {
@@ -228,43 +259,71 @@ export function ValuationWorkbenchPage({ ticker }: { ticker: string }) {
     return <StatusScreen symbol={symbol} message={message} isError />;
   }
 
+  const sheet = drafts;
   const currentPrice = data.quote?.price ?? 0;
   const priceAsOf = data.quote?.fetchedAt ? formatEntryDate(data.quote.fetchedAt) : null;
   const myFairValueMethod = data.models.find((model) => model.isMyFairValue)?.method ?? null;
-  const termGrowthFloor = Math.max(drafts.dcf.termGrowth, drafts.rdcf.termGrowth);
+  const termGrowthFloor = Math.max(sheet.dcf.termGrowth, sheet.rdcf.termGrowth);
+
+  function assumptionsReady(kind: ImplementedMethod, assumptions: ValuationAssumptions) {
+    if (kind === "dcf" || kind === "rdcf") return dcfModelReady(assumptions as DcfInputs);
+    return true;
+  }
+
+  function schedulePersist(kind: ImplementedMethod, assumptions: ValuationAssumptions) {
+    persistPending.current[kind] = assumptions;
+    if (persistTimer.current) clearTimeout(persistTimer.current);
+    persistTimer.current = setTimeout(() => {
+      const pending = persistPending.current;
+      persistPending.current = {};
+      void (async () => {
+        for (const next of ["dcf", "rdcf", "pe", "evebitda"] as const) {
+          const row = pending[next];
+          if (!row || !assumptionsReady(next, row)) continue;
+          try {
+            await persistMutation.mutateAsync({ method: next, assumptions: row });
+          } catch {
+            break;
+          }
+        }
+      })();
+    }, 350);
+  }
+
+  function applyDrafts(next: Drafts, methods: ImplementedMethod[]) {
+    setDrafts(next);
+    for (const kind of methods) schedulePersist(kind, next[kind]);
+  }
 
   function applyWacc(wacc: number, build: WaccBuild) {
-    setDrafts((current) =>
-      current
-        ? {
-            ...current,
-            dcf: { ...current.dcf, wacc, waccBuild: build },
-            rdcf: { ...current.rdcf, wacc, waccBuild: build },
-          }
-        : current,
+    applyDrafts(
+      {
+        ...sheet,
+        dcf: { ...sheet.dcf, wacc, waccBuild: build },
+        rdcf: { ...sheet.rdcf, wacc, waccBuild: build },
+      },
+      ["dcf", "rdcf"],
     );
   }
 
   const activeAssumptions: ValuationAssumptions | null = isImplementedMethod(method)
-    ? drafts[method]
+    ? sheet[method]
     : null;
 
   const mutationError =
-    saveMutation.error instanceof Error
-      ? saveMutation.error.message
-      : handOffMutation.error instanceof Error
-        ? handOffMutation.error.message
-        : null;
+    persistMutation.error instanceof Error
+      ? persistMutation.error.message
+      : saveMutation.error instanceof Error
+        ? saveMutation.error.message
+        : handOffMutation.error instanceof Error
+          ? handOffMutation.error.message
+          : null;
 
   const actions: ValuationActions = {
-    saving: saveMutation.isPending,
+    saving: persistMutation.isPending || saveMutation.isPending,
     saved,
     handingOff: handOffMutation.isPending,
     error: mutationError,
-    onSave: () => {
-      if (!isImplementedMethod(method) || !activeAssumptions) return;
-      saveMutation.mutate({ method, assumptions: activeAssumptions, setAsMyFairValue: false });
-    },
     onSetFairValue: () => {
       if (!isImplementedMethod(method) || !activeAssumptions) return;
       saveMutation.mutate({ method, assumptions: activeAssumptions, setAsMyFairValue: true });
@@ -326,7 +385,7 @@ export function ValuationWorkbenchPage({ ticker }: { ticker: string }) {
             myFairValueMethod={myFairValueMethod}
             actions={actions}
             assumptions={drafts.dcf}
-            onChange={(assumptions) => setDrafts({ ...drafts, dcf: assumptions })}
+            onChange={(assumptions) => applyDrafts({ ...drafts, dcf: assumptions }, ["dcf"])}
             review={data.dcfAssumptionReview}
             onReview={(review) => {
               queryClient.setQueryData<ValuationWorkbench>(["valuation", symbol], (prev) =>
@@ -346,7 +405,7 @@ export function ValuationWorkbenchPage({ ticker }: { ticker: string }) {
             myFairValueMethod={myFairValueMethod}
             actions={actions}
             assumptions={drafts.rdcf}
-            onChange={(assumptions) => setDrafts({ ...drafts, rdcf: assumptions })}
+            onChange={(assumptions) => applyDrafts({ ...drafts, rdcf: assumptions }, ["rdcf"])}
             dcfBaseline={drafts.dcf}
             onOpenDcf={() => setMethod("dcf")}
             termGrowthFloor={termGrowthFloor}
@@ -364,9 +423,9 @@ export function ValuationWorkbenchPage({ ticker }: { ticker: string }) {
             lens={method === "evebitda" ? "evebitda" : "pe"}
             onLens={(next) => setMethod(next)}
             peAssumptions={drafts.pe}
-            onPeChange={(assumptions) => setDrafts({ ...drafts, pe: assumptions })}
+            onPeChange={(assumptions) => applyDrafts({ ...drafts, pe: assumptions }, ["pe"])}
             evAssumptions={drafts.evebitda}
-            onEvChange={(assumptions) => setDrafts({ ...drafts, evebitda: assumptions })}
+            onEvChange={(assumptions) => applyDrafts({ ...drafts, evebitda: assumptions }, ["evebitda"])}
           />
         ) : null}
       </div>
@@ -433,16 +492,9 @@ function TopBar({
         </div>
         <div className="flex-1" />
         <div className="flex items-center gap-1.5">
-          <button
-            type="button"
-            onClick={actions.onSave}
-            disabled={!canAct || actions.saving}
-            className={`rounded-[7px] px-2.5 py-1.5 text-[11px] font-bold disabled:opacity-50 md:px-3 ${
-              actions.saved ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-            }`}
-          >
-            {actions.saved ? t("common.saved") : actions.saving ? t("common.saving") : t("common.save")}
-          </button>
+          <span className="min-w-[3.5rem] text-right text-[11px] font-semibold text-slate-400">
+            {actions.saved ? t("common.saved") : actions.saving ? t("common.saving") : null}
+          </span>
           {producesFairValue && (
             <button
               type="button"

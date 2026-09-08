@@ -457,6 +457,7 @@ function AssumptionsSection({
               ticker={ticker}
               termGrowth={termGrowthFloor}
               savedBuild={assumptions.waccBuild}
+              sourceFilings={sourceFilings}
               onApply={(wacc, build) => {
                 onApplyWacc(wacc, build);
               }}

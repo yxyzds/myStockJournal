@@ -7,7 +7,6 @@ import {
   isDcfAssumptionReview,
   isImplementedMethod,
   parseDcfInputs,
-  prefillWaccFromFacts,
   type ImplementedMethod,
   type PeerMultiple,
   type ValuationAnchors,
@@ -174,8 +173,7 @@ valuationRoutes.get("/:ticker/valuation", async (c) => {
   const loaded = await loadWorkbenchContext(c.get("userId"), c.req.param("ticker"));
   if ("error" in loaded) return c.json({ error: loaded.error }, loaded.status);
 
-  const { stock, quote } = loaded;
-  const anchors = await withPrefillWacc(stock.ticker, quote.price ?? 0, loaded.anchors);
+  const { stock, quote, anchors } = loaded;
   const models = (await listModels(stock.userId, stock.id)).map(toModel);
   const myFairValue = models.find((model) => model.isMyFairValue);
 
@@ -195,25 +193,6 @@ valuationRoutes.get("/:ticker/valuation", async (c) => {
 
 function moneyM(value: number) {
   return Math.round(value * 10) / 10;
-}
-
-/** CAPM WACC when Rf, beta, and (if levered) Rd/tax are all present. ERP defaults to 5.5%. */
-async function withPrefillWacc(ticker: string, price: number, anchors: ValuationAnchors): Promise<ValuationAnchors> {
-  const [rf, beta] = await Promise.all([fetchTreasury10Y(), fetchYahooBeta(ticker)]);
-  const prefill = prefillWaccFromFacts({
-    rf,
-    beta,
-    equity: moneyM(price * anchors.shares),
-    debt: anchors.debt,
-    preTaxCostOfDebt: anchors.preTaxCostOfDebt,
-    taxRate: anchors.effectiveTaxRate,
-  });
-  if (!prefill) return anchors;
-  return {
-    ...anchors,
-    waccBuild: prefill.build,
-    drivers: { ...anchors.drivers, wacc: prefill.wacc },
-  };
 }
 
 function fieldSource(value: number | null, fetched: WaccFieldSource): WaccFieldSource {

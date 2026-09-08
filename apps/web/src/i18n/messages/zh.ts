@@ -357,6 +357,7 @@ export const zh = {
     apply: "应用",
     loadingFacts: "正在读取行情与财报…",
     loadingAi: "正在预填判断项…",
+    prefilling: "正在预填 WACC…",
     loadError: "无法加载 WACC 输入。",
     needInputs: "请先填好 Rf、Beta 和 ERP（若有债务还需要 Rd 和税率）再应用。",
     waccTooLow: "WACC 必须高于永续增长（{g}%），否则终值无定义。",
@@ -364,7 +365,6 @@ export const zh = {
     fetchedFrom: "取自",
     sourceTnx: "^TNX",
     sourceYahoo: "Yahoo Finance",
-    sourceEdgar: "EDGAR",
     quota: "今日 AI 点评额度已用完（20 次）。仍可自行填写 ERP 和缺项。",
   },
   actuals: {
