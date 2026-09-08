@@ -46,9 +46,10 @@ export type NumberLimits = { min: number; max: number; step: number };
 
 /**
  * Number input that lets a partially typed value stand while it is being edited,
- * then clamps on blur. Clamping on every keystroke makes values like "0.5"
- * impossible to type. A null draft means the prop is authoritative, so external
- * updates (a scenario switch, say) show through without an effect.
+ * then floors on blur. Clamping on every keystroke makes values like "0.5"
+ * impossible to type. There is no upper bound — high figures commit as typed.
+ * A null draft means the prop is authoritative, so external updates (a scenario
+ * switch, say) show through without an effect.
  */
 export function NumberInput({
   value,
@@ -78,17 +79,11 @@ export function NumberInput({
       value={draft ?? (unset ? "" : String(value))}
       step={limits.step}
       min={limits.min}
-      max={limits.max}
       onChange={(event) => {
         if (readOnly) return;
         setDraft(event.target.value);
         const parsed = Number(event.target.value);
-        if (
-          event.target.value !== "" &&
-          Number.isFinite(parsed) &&
-          parsed >= limits.min &&
-          parsed <= limits.max
-        ) {
+        if (event.target.value !== "" && Number.isFinite(parsed) && parsed >= limits.min) {
           onCommit(parsed);
         }
       }}
@@ -108,7 +103,7 @@ export function NumberInput({
           onCommit(0);
           return;
         }
-        onCommit(Math.min(limits.max, Math.max(limits.min, parsed)));
+        onCommit(Math.max(limits.min, parsed));
       }}
       className={`bg-transparent p-0 font-mono tabular-nums outline-none ${
         readOnly ? "cursor-default text-slate-700" : ""

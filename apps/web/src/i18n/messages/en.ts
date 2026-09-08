@@ -361,6 +361,7 @@ export const en = {
     apply: "Apply",
     loadingFacts: "Loading market and filing inputs…",
     loadingAi: "Prefilling judgment inputs…",
+    prefilling: "Prefilling WACC…",
     loadError: "Couldn’t load WACC inputs.",
     needInputs: "Fill Rf, beta, and ERP (and Rd plus tax if the company has debt) before applying.",
     waccTooLow: "WACC must stay above terminal growth ({g}%) or the terminal value is undefined.",
@@ -368,7 +369,6 @@ export const en = {
     fetchedFrom: "Fetched from",
     sourceTnx: "^TNX",
     sourceYahoo: "Yahoo Finance",
-    sourceEdgar: "EDGAR",
     quota: "Daily AI review limit reached (20). You can still fill ERP and missing fields yourself.",
   },
   actuals: {

@@ -94,7 +94,7 @@ export function DcfView({
     [assumptions, currentPrice],
   );
   const ready = dcfModelReady(assumptions);
-  const scenariosEnabled = anchors.drivers.wacc >= DRIVER_LIMITS.wacc.min;
+  const scenariosEnabled = assumptions.wacc >= DRIVER_LIMITS.wacc.min;
 
   const scenarioFairValues = useMemo(() => {
     if (!scenariosEnabled) {
@@ -106,7 +106,11 @@ export function DcfView({
       if (anchors.fcfMarginY1FromFilings) {
         drivers.fcfMarginY1 = anchors.drivers.fcfMarginY1;
       }
-      const { bridge: scenarioBridge } = valueDcf({ ...assumptions, ...drivers }, currentPrice);
+      // One CAPM WACC for every case — scenarios only move growth and margins.
+      const { bridge: scenarioBridge } = valueDcf(
+        { ...assumptions, ...drivers, wacc: assumptions.wacc },
+        currentPrice,
+      );
       return [name, scenarioBridge.fv] as const;
     });
     return Object.fromEntries(entries) as Record<DcfScenario, number>;
@@ -120,12 +124,17 @@ export function DcfView({
   }
 
   function applyScenario(name: DcfScenario) {
-    if (anchors.drivers.wacc < DRIVER_LIMITS.wacc.min) return;
+    if (assumptions.wacc < DRIVER_LIMITS.wacc.min) return;
     const drivers = scenarioDrivers(anchors.drivers, name);
     if (anchors.fcfMarginY1FromFilings) {
       drivers.fcfMarginY1 = anchors.drivers.fcfMarginY1;
     }
-    onChange({ ...assumptions, ...drivers });
+    onChange({
+      ...assumptions,
+      ...drivers,
+      wacc: assumptions.wacc,
+      waccBuild: assumptions.waccBuild,
+    });
     setScenario(name);
   }
 
@@ -448,6 +457,7 @@ function AssumptionsSection({
               ticker={ticker}
               termGrowth={termGrowthFloor}
               savedBuild={assumptions.waccBuild}
+              sourceFilings={sourceFilings}
               onApply={(wacc, build) => {
                 onApplyWacc(wacc, build);
               }}

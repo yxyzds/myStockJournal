@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import {
   EMPTY_DRIVERS,
-  isG7Ticker,
+  isValuationPrefillTicker,
   type AnchorSourceRef,
   type DcfDrivers,
   type EvEbitdaAnnualPoint,
@@ -17,9 +17,9 @@ import { fetchYahooFwdEps, yahooAnalysisUrl, type YahooForecast } from "./yahoo-
 
 /**
  * Valuation anchors, resolved in order: `fundamentals_cache`, then SEC EDGAR,
- * then a small bundled dataset for G7 only. Statement figures come from filings;
- * forward EPS comes only from a live Yahoo earningsTrend fetch — never a curated
- * fallback. P/E history and driver prefills stay G7-only.
+ * then a small bundled dataset for AAPL / NVDA / META. Statement figures come
+ * from filings; forward EPS comes only from a live Yahoo earningsTrend fetch —
+ * never a curated fallback. P/E history and driver prefills stay on that set.
  */
 type BundledAnchors = Omit<
   ValuationAnchors,
@@ -43,14 +43,14 @@ const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
  * Bump when the cached payload shape or merge rules change so stale rows are
  * refetched instead of serving week-old driver prefills.
  */
-const CACHE_VERSION = 14;
+const CACHE_VERSION = 17;
 
-/** Neutral drivers for G7 tickers we have no estimate for. The user must review them. */
+/** Neutral drivers when a prefill ticker has no curated estimate. WACC comes from CAPM. */
 const FALLBACK_DRIVERS: DcfDrivers = {
   growthY1_5: 10,
   growthY6_10: 6,
   termGrowth: 3,
-  wacc: 9,
+  wacc: 0,
   fcfMarginY1: 15,
   fcfMarginTerm: 18,
 };
@@ -68,20 +68,6 @@ const AAPL_PE_HISTORY: PePoint[] = [
   { year: 2023, pe: 28.8, growth: -3 },
   { year: 2024, pe: 29.2, growth: 12 },
   { year: 2025, pe: 26.1, growth: 10 },
-];
-
-const GOOGL_PE_HISTORY: PePoint[] = [
-  { year: 2015, pe: 21.4, growth: 12 },
-  { year: 2016, pe: 21.9, growth: 18 },
-  { year: 2017, pe: 24.6, growth: 26 },
-  { year: 2018, pe: 22.1, growth: 27 },
-  { year: 2019, pe: 24.3, growth: 12 },
-  { year: 2020, pe: 30.2, growth: 19 },
-  { year: 2021, pe: 26.4, growth: 91 },
-  { year: 2022, pe: 17.9, growth: -19 },
-  { year: 2023, pe: 21.6, growth: 27 },
-  { year: 2024, pe: 22.8, growth: 38 },
-  { year: 2025, pe: 20.1, growth: 14 },
 ];
 
 const NVDA_PE_HISTORY: PePoint[] = [
@@ -112,56 +98,9 @@ const BUNDLED: Record<string, BundledAnchors> = {
       growthY1_5: 7,
       growthY6_10: 4,
       termGrowth: 2.5,
-      wacc: 8.5,
+      wacc: 0,
       fcfMarginY1: 27,
       fcfMarginTerm: 29,
-    },
-  },
-  GOOGL: {
-    period: "TTM FY2025",
-    ttmRevenue: 371_000,
-    cash: 98_000,
-    debt: 28_000,
-    shares: 12_200,
-    past5YCagr: 15.4,
-    ttmEps: 9.1,
-    fwdEps: null,
-    peHistory: GOOGL_PE_HISTORY,
-    drivers: {
-      growthY1_5: 11,
-      growthY6_10: 6,
-      termGrowth: 3,
-      wacc: 8.5,
-      fcfMarginY1: 22,
-      fcfMarginTerm: 26,
-    },
-  },
-  MSFT: {
-    period: "TTM FY2026",
-    ttmRevenue: 300_000,
-    cash: 95_000,
-    debt: 60_000,
-    shares: 7450,
-    past5YCagr: 14.2,
-    ttmEps: 13.6,
-    fwdEps: null,
-    peHistory: [
-      { year: 2018, pe: 24.6, growth: 18 },
-      { year: 2019, pe: 26.4, growth: 21 },
-      { year: 2020, pe: 32.1, growth: 14 },
-      { year: 2021, pe: 34.8, growth: 40 },
-      { year: 2022, pe: 26.2, growth: 16 },
-      { year: 2023, pe: 31.4, growth: -1 },
-      { year: 2024, pe: 34.6, growth: 22 },
-      { year: 2025, pe: 30.9, growth: 15 },
-    ],
-    drivers: {
-      growthY1_5: 12,
-      growthY6_10: 7,
-      termGrowth: 3,
-      wacc: 8.5,
-      fcfMarginY1: 25,
-      fcfMarginTerm: 28,
     },
   },
   META: {
@@ -187,7 +126,7 @@ const BUNDLED: Record<string, BundledAnchors> = {
       growthY1_5: 12,
       growthY6_10: 6,
       termGrowth: 3,
-      wacc: 9,
+      wacc: 0,
       fcfMarginY1: 26,
       fcfMarginTerm: 28,
     },
@@ -206,7 +145,7 @@ const BUNDLED: Record<string, BundledAnchors> = {
       growthY1_5: 28,
       growthY6_10: 10,
       termGrowth: 3.5,
-      wacc: 10,
+      wacc: 0,
       fcfMarginY1: 45,
       fcfMarginTerm: 38,
     },
@@ -238,7 +177,7 @@ function unavailableAnchors(
     quarterlyActuals: [],
     effectiveTaxRate: null,
     preTaxCostOfDebt: null,
-    drivers: isG7Ticker(ticker) ? { ...FALLBACK_DRIVERS } : { ...EMPTY_DRIVERS },
+    drivers: isValuationPrefillTicker(ticker) ? { ...FALLBACK_DRIVERS } : { ...EMPTY_DRIVERS },
     fcfMarginY1FromFilings: false,
   };
 }
@@ -429,10 +368,10 @@ async function writeCache(ticker: string, anchors: Omit<ValuationAnchors, "avail
 /**
  * Merge filing figures with the parts EDGAR cannot supply. Forward EPS is only
  * the live Yahoo current-year consensus; P/E history and driver prefills are
- * G7-only.
+ * AAPL / NVDA / META only.
  *
- * G7 driver merge: neutral default → curated judgment → filing-observed.
- * Everyone else: empty drivers, then filing-observed (`fcfMarginY1`, `growthY1_5`).
+ * Prefill driver merge: neutral default → curated judgment → filing-observed.
+ * Everyone else: empty judgment drivers; FCF margin Y1 still comes from filings.
  */
 function anchorsFromEdgar(
   ticker: string,
@@ -440,7 +379,7 @@ function anchorsFromEdgar(
   bundled: BundledAnchors | undefined,
   fwd: { fwdEps: number | null; fwdEpsSource: AnchorSourceRef | null },
 ): ValuationAnchors {
-  const g7 = isG7Ticker(ticker);
+  const prefill = isValuationPrefillTicker(ticker);
   return {
     available: true,
     period: edgar.asOf ? `TTM through ${edgar.asOf}` : (bundled?.period ?? null),
@@ -449,17 +388,17 @@ function anchorsFromEdgar(
     cash: edgar.cash,
     debt: edgar.debt,
     shares: edgar.shares,
-    past5YCagr: edgar.past5YCagr ?? (g7 ? bundled?.past5YCagr ?? null : null),
-    ttmEps: edgar.ttmEps ?? (g7 ? bundled?.ttmEps ?? null : null),
+    past5YCagr: edgar.past5YCagr ?? (prefill ? bundled?.past5YCagr ?? null : null),
+    ttmEps: edgar.ttmEps ?? (prefill ? bundled?.ttmEps ?? null : null),
     fwdEps: fwd.fwdEps,
     fwdEpsSource: fwd.fwdEpsSource,
-    ttmEbitda: edgar.ttmEbitda ?? (g7 ? bundled?.ttmEbitda ?? null : null),
-    ebitdaHistory: edgar.ebitdaHistory.length > 0 ? edgar.ebitdaHistory : g7 ? (bundled?.ebitdaHistory ?? []) : [],
-    peHistory: g7 ? (bundled?.peHistory ?? []) : [],
+    ttmEbitda: edgar.ttmEbitda ?? (prefill ? bundled?.ttmEbitda ?? null : null),
+    ebitdaHistory: edgar.ebitdaHistory.length > 0 ? edgar.ebitdaHistory : prefill ? (bundled?.ebitdaHistory ?? []) : [],
+    peHistory: prefill ? (bundled?.peHistory ?? []) : [],
     quarterlyActuals: edgar.quarterlyActuals,
     effectiveTaxRate: edgar.effectiveTaxRate,
     preTaxCostOfDebt: edgar.preTaxCostOfDebt,
-    drivers: g7
+    drivers: prefill
       ? {
           ...FALLBACK_DRIVERS,
           ...bundled?.drivers,
@@ -467,14 +406,16 @@ function anchorsFromEdgar(
         }
       : {
           ...EMPTY_DRIVERS,
-          ...edgar.observedDrivers,
+          ...(edgar.observedDrivers.fcfMarginY1 != null
+            ? { fcfMarginY1: edgar.observedDrivers.fcfMarginY1 }
+            : {}),
         },
     fcfMarginY1FromFilings: edgar.observedDrivers.fcfMarginY1 != null,
   };
 }
 
 /**
- * Anchors for a ticker. Returns `available: false` when no filing or G7 bundled
+ * Anchors for a ticker. Returns `available: false` when no filing or bundled
  * figures exist, which tells the valuation page to accept manual entry instead.
  */
 export async function getAnchors(rawTicker: string): Promise<ValuationAnchors> {
@@ -483,7 +424,7 @@ export async function getAnchors(rawTicker: string): Promise<ValuationAnchors> {
   const cached = await readCache(ticker);
   if (cached?.fresh && cached.anchors.fwdEps != null) return cached.anchors;
 
-  const bundled = isG7Ticker(ticker) ? BUNDLED[ticker] : undefined;
+  const bundled = isValuationPrefillTicker(ticker) ? BUNDLED[ticker] : undefined;
   const [edgar, forecast] = await Promise.all([
     cached?.fresh ? Promise.resolve(null) : fetchEdgarFundamentals(ticker),
     fetchYahooFwdEps(ticker),

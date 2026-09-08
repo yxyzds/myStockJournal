@@ -76,6 +76,36 @@ function round2(value: number) {
   return Math.round(value * 100) / 100;
 }
 
+/** Default ERP when facts are complete and the user has not applied a judgment. */
+export const DEFAULT_EQUITY_RISK_PREMIUM = 5.5;
+
+/**
+ * Build a WACC from fetched CAPM facts plus the default ERP. Returns null when
+ * Rf/beta (and Rd/tax if there is debt) are missing or the result is out of range.
+ */
+export function prefillWaccFromFacts(facts: {
+  rf: number | null;
+  beta: number | null;
+  equity: number;
+  debt: number;
+  preTaxCostOfDebt: number | null;
+  taxRate: number | null;
+  erp?: number;
+}): { wacc: number; build: WaccBuild } | null {
+  const build: WaccBuild = {
+    rf: facts.rf,
+    beta: facts.beta,
+    erp: facts.erp ?? DEFAULT_EQUITY_RISK_PREMIUM,
+    preTaxCostOfDebt: facts.preTaxCostOfDebt,
+    taxRate: facts.taxRate,
+    equity: Math.max(0, facts.equity),
+    debt: Math.max(0, facts.debt),
+  };
+  const { wacc } = computeWacc(build);
+  if (wacc == null || wacc < 4 || wacc > 20) return null;
+  return { wacc, build };
+}
+
 /**
  * CAPM cost of equity and after-tax cost of debt, then market-value WACC.
  * Zero debt means WACC equals Re — no need for Rd.
@@ -112,7 +142,7 @@ export function computeWacc(build: WaccBuild): WaccComputed {
 function optionalNum(value: unknown, limits: { min: number; max: number }): number | null {
   if (value == null || value === "") return null;
   const n = typeof value === "number" ? value : Number(value);
-  if (!Number.isFinite(n) || n < limits.min || n > limits.max) return null;
+  if (!Number.isFinite(n) || n < limits.min) return null;
   return n;
 }
 

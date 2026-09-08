@@ -52,7 +52,6 @@ export function RdcfView({
   onChange,
   dcfBaseline,
   onOpenDcf,
-  actions,
   termGrowthFloor,
   onApplyWacc,
 }: RdcfViewProps) {
@@ -117,14 +116,6 @@ export function RdcfView({
           className="rounded-[9px] bg-slate-100 px-3.5 py-2 text-[12px] font-bold text-slate-700 hover:bg-slate-200"
         >
           {t("rdcf.openInDcf")}
-        </button>
-        <button
-          type="button"
-          onClick={actions.onSave}
-          disabled={actions.saving || !ready}
-          className="rounded-[9px] bg-slate-900 px-3.5 py-2 text-[12px] font-bold text-white hover:bg-slate-800 disabled:opacity-60"
-        >
-          {actions.saved ? t("common.saved") : actions.saving ? t("common.saving") : t("valuation.saveModel")}
         </button>
       </div>
     </div>
@@ -540,6 +531,7 @@ function HeldConstantsSection({
               ticker={ticker}
               termGrowth={termGrowthFloor}
               savedBuild={assumptions.waccBuild}
+              sourceFilings={sourceFilings}
               onApply={onApplyWacc}
             />
             {HELD_DRIVERS.map((driver) => (

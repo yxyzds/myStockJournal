@@ -6,7 +6,6 @@ export type ValuationActions = {
   saved: boolean;
   handingOff: boolean;
   error: string | null;
-  onSave: () => void;
   onSetFairValue: () => void;
   onUseInDecision: () => void;
 };

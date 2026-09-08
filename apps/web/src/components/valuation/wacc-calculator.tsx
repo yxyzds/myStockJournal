@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
+  DEFAULT_EQUITY_RISK_PREMIUM,
   DRIVER_LIMITS,
   WACC_BUILD_LIMITS,
   computeWacc,
+  type FilingRef,
   type WaccBuild,
   type WaccFieldSource,
   type WaccInputsResponse,
@@ -18,10 +20,6 @@ function yahooQuoteUrl(symbol: string) {
   return `https://finance.yahoo.com/quote/${encodeURIComponent(symbol)}`;
 }
 
-function secCompanyUrl(ticker: string) {
-  return `https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=${encodeURIComponent(ticker)}&type=10-&owner=exclude&count=40`;
-}
-
 function locked(source: WaccFieldSource) {
   return source === "filing" || source === "yahoo";
 }
@@ -31,6 +29,75 @@ function pct(value: number | null | undefined, digits = 2) {
   return `${value.toFixed(digits)}%`;
 }
 
+function clampWacc(wacc: number) {
+  return Math.max(DRIVER_LIMITS.wacc.min, wacc);
+}
+
+function outerWaccReady(value: number, savedBuild?: WaccBuild) {
+  return value >= DRIVER_LIMITS.wacc.min && savedBuild != null;
+}
+
+function reportFiling(filings: FilingRef[] | undefined) {
+  if (!filings?.length) return undefined;
+  return filings.find((filing) => filing.form === "10-K" || filing.form === "10-Q") ?? filings[0];
+}
+
+function filingSourceLink(
+  source: WaccFieldSource,
+  filings: FilingRef[] | undefined,
+): { label: string; url: string; title?: string } | undefined {
+  if (source !== "filing") return undefined;
+  const filing = reportFiling(filings);
+  if (!filing) return undefined;
+  const period = filing.reportDate || filing.filingDate;
+  return {
+    label: filing.form,
+    url: filing.url,
+    title: period ? `${filing.form} · ${period}` : filing.form,
+  };
+}
+
+function buildFromFacts(data: WaccInputsResponse, savedBuild?: WaccBuild): WaccBuild {
+  return {
+    equity: data.equity,
+    debt: data.debt,
+    rf: data.rf ?? savedBuild?.rf ?? null,
+    beta: data.beta ?? savedBuild?.beta ?? null,
+    erp: savedBuild?.erp ?? DEFAULT_EQUITY_RISK_PREMIUM,
+    preTaxCostOfDebt: data.preTaxCostOfDebt ?? savedBuild?.preTaxCostOfDebt ?? null,
+    taxRate: data.taxRate ?? savedBuild?.taxRate ?? null,
+  };
+}
+
+function mergeAiPrefill(build: WaccBuild, prefill: WaccPrefillResponse): WaccBuild {
+  return {
+    ...build,
+    erp: prefill.erp,
+    rf: build.rf ?? prefill.rf ?? null,
+    beta: build.beta ?? prefill.beta ?? null,
+    preTaxCostOfDebt: build.preTaxCostOfDebt ?? prefill.preTaxCostOfDebt ?? null,
+    taxRate: build.taxRate ?? prefill.taxRate ?? null,
+  };
+}
+
+async function fetchAiPrefill(ticker: string, data: WaccInputsResponse) {
+  const payload = await api<{ prefill: WaccPrefillResponse }>(
+    `/stocks/${ticker}/valuation/wacc/ai-prefill`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        rf: data.rf,
+        beta: data.beta,
+        preTaxCostOfDebt: data.preTaxCostOfDebt,
+        taxRate: data.taxRate,
+        equity: data.equity,
+        debt: data.debt,
+      }),
+    },
+  );
+  return payload.prefill;
+}
+
 export function WaccDriverButton({
   label,
   hint,
@@ -38,6 +105,7 @@ export function WaccDriverButton({
   ticker,
   termGrowth,
   savedBuild,
+  sourceFilings,
   onApply,
   compact = false,
 }: {
@@ -47,13 +115,74 @@ export function WaccDriverButton({
   ticker: string;
   termGrowth: number;
   savedBuild?: WaccBuild;
+  sourceFilings?: FilingRef[];
   onApply: (wacc: number, build: WaccBuild) => void;
   compact?: boolean;
 }) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [hintOpen, setHintOpen] = useState(false);
+  const [prefillHint, setPrefillHint] = useState(false);
+  const [failedTicker, setFailedTicker] = useState<string | null>(null);
+  const alreadyReady = outerWaccReady(value, savedBuild);
+  const onApplyRef = useRef(onApply);
   const unset = value < DRIVER_LIMITS.wacc.min;
+  const showLoading = !alreadyReady && failedTicker !== ticker;
+
+  useEffect(() => {
+    onApplyRef.current = onApply;
+  }, [onApply]);
+
+  useEffect(() => {
+    if (alreadyReady) return;
+    let cancelled = false;
+    async function prefillOuter() {
+      try {
+        const data = await api<WaccInputsResponse>(`/stocks/${ticker}/valuation/wacc-inputs`);
+        if (cancelled) return;
+        let build = buildFromFacts(data);
+        if (computeWacc(build).wacc == null) {
+          try {
+            build = mergeAiPrefill(build, await fetchAiPrefill(ticker, data));
+          } catch {
+            // Quota or network — leave the outer field empty; the modal can retry.
+          }
+        }
+        if (cancelled) return;
+        const wacc = computeWacc(build).wacc;
+        if (wacc != null) {
+          onApplyRef.current(clampWacc(wacc), build);
+        } else if (!cancelled) {
+          setFailedTicker(ticker);
+        }
+      } catch {
+        if (!cancelled) setFailedTicker(ticker);
+      } finally {
+        if (!cancelled) setPrefillHint(false);
+      }
+    }
+    void prefillOuter();
+    return () => {
+      cancelled = true;
+    };
+  }, [alreadyReady, ticker]);
+
+  function handleOpen() {
+    if (showLoading) {
+      setPrefillHint(true);
+      return;
+    }
+    setOpen(true);
+  }
+
+  const valueLabel = showLoading ? (
+    <span
+      className={`block animate-pulse rounded bg-blue-200/80 ${compact ? "h-3.5 w-12" : "h-4 w-full"}`}
+      aria-hidden
+    />
+  ) : (
+    <span className={compact ? "w-12 text-right" : "w-full"}>{unset ? "—" : value.toFixed(1)}</span>
+  );
 
   return (
     <>
@@ -66,13 +195,12 @@ export function WaccDriverButton({
             </span>
             <button
               type="button"
-              aria-label={t("waccCalc.openAria")}
-              onClick={() => setOpen(true)}
+              aria-label={showLoading ? t("waccCalc.prefilling") : t("waccCalc.openAria")}
+              aria-busy={showLoading}
+              onClick={handleOpen}
               className="flex items-center gap-1 rounded-[7px] border border-blue-200 bg-blue-50 px-2 py-1 text-left hover:border-blue-400 hover:bg-blue-100"
             >
-              <span className="w-12 text-right font-mono text-[12px] font-bold text-blue-900 tabular-nums">
-                {unset ? "—" : value.toFixed(1)}
-              </span>
+              <span className="font-mono text-[12px] font-bold text-blue-900 tabular-nums">{valueLabel}</span>
               <span className="text-[10px] text-blue-500">%</span>
               <ChevronRight />
             </button>
@@ -85,19 +213,24 @@ export function WaccDriverButton({
             </div>
             <button
               type="button"
-              aria-label={t("waccCalc.openAria")}
-              onClick={() => setOpen(true)}
+              aria-label={showLoading ? t("waccCalc.prefilling") : t("waccCalc.openAria")}
+              aria-busy={showLoading}
+              onClick={handleOpen}
               className="flex items-center gap-1 rounded-[7px] border border-blue-200 bg-blue-50 px-2.5 py-[7px] text-left transition-colors hover:border-blue-400 hover:bg-blue-100"
             >
               <span className="w-full font-mono text-[14px] font-bold text-blue-900 tabular-nums">
-                {unset ? "—" : value.toFixed(1)}
+                {valueLabel}
               </span>
               <span className="shrink-0 text-[11px] text-blue-500">%</span>
               <ChevronRight />
             </button>
           </>
         )}
-        {hintOpen ? (
+        {prefillHint ? (
+          <p className="rounded-md border border-blue-100 bg-blue-50 px-2 py-1.5 text-[10px] leading-snug text-blue-700">
+            {t("waccCalc.prefilling")}
+          </p>
+        ) : hintOpen ? (
           <p
             className={`rounded-md px-2 py-1.5 text-[10px] leading-snug text-slate-600 ${
               compact
@@ -114,6 +247,7 @@ export function WaccDriverButton({
           ticker={ticker}
           termGrowth={termGrowth}
           savedBuild={savedBuild}
+          sourceFilings={sourceFilings}
           onClose={() => setOpen(false)}
           onApply={(wacc, build) => {
             onApply(wacc, build);
@@ -129,12 +263,14 @@ function WaccCalculatorModal({
   ticker,
   termGrowth,
   savedBuild,
+  sourceFilings,
   onClose,
   onApply,
 }: {
   ticker: string;
   termGrowth: number;
   savedBuild?: WaccBuild;
+  sourceFilings?: FilingRef[];
   onClose: () => void;
   onApply: (wacc: number, build: WaccBuild) => void;
 }) {
@@ -156,15 +292,9 @@ function WaccCalculatorModal({
         const data = await api<WaccInputsResponse>(`/stocks/${ticker}/valuation/wacc-inputs`);
         if (cancelled) return;
         setFacts(data);
-        const next: WaccBuild = {
-          equity: data.equity,
-          debt: data.debt,
-          rf: data.rf ?? savedBuild?.rf ?? null,
-          beta: data.beta ?? savedBuild?.beta ?? null,
-          erp: savedBuild?.erp ?? null,
-          preTaxCostOfDebt: data.preTaxCostOfDebt ?? savedBuild?.preTaxCostOfDebt ?? null,
-          taxRate: data.taxRate ?? savedBuild?.taxRate ?? null,
-        };
+        const next = buildFromFacts(data, savedBuild);
+        // Default ERP is only for the outer auto-prefill. The modal waits for AI unless the user already applied.
+        if (savedBuild?.erp == null) next.erp = null;
         const nextSources = { ...data.sources };
         if (data.rf == null && next.rf != null) nextSources.rf = savedBuild ? "user" : "ai";
         if (data.beta == null && next.beta != null) nextSources.beta = savedBuild ? "user" : "ai";
@@ -182,34 +312,10 @@ function WaccCalculatorModal({
 
         setLoadingAi(true);
         try {
-          const payload = await api<{ prefill: WaccPrefillResponse }>(
-            `/stocks/${ticker}/valuation/wacc/ai-prefill`,
-            {
-              method: "POST",
-              body: JSON.stringify({
-                rf: data.rf,
-                beta: data.beta,
-                preTaxCostOfDebt: data.preTaxCostOfDebt,
-                taxRate: data.taxRate,
-                equity: data.equity,
-                debt: data.debt,
-              }),
-            },
-          );
+          const prefill = await fetchAiPrefill(ticker, data);
           if (cancelled) return;
-          const prefill = payload.prefill;
           setNote(prefill.note);
-          setBuild((current) => {
-            if (!current) return current;
-            return {
-              ...current,
-              erp: prefill.erp,
-              rf: current.rf ?? prefill.rf ?? null,
-              beta: current.beta ?? prefill.beta ?? null,
-              preTaxCostOfDebt: current.preTaxCostOfDebt ?? prefill.preTaxCostOfDebt ?? null,
-              taxRate: current.taxRate ?? prefill.taxRate ?? null,
-            };
-          });
+          setBuild((current) => (current ? mergeAiPrefill(current, prefill) : current));
           setSources((current) => {
             if (!current) return current;
             return {
@@ -253,8 +359,7 @@ function WaccCalculatorModal({
   const canApply =
     computed?.wacc != null &&
     !waccTooLow &&
-    computed.wacc >= DRIVER_LIMITS.wacc.min &&
-    computed.wacc <= DRIVER_LIMITS.wacc.max;
+    computed.wacc >= DRIVER_LIMITS.wacc.min;
 
   function patch(partial: Partial<WaccBuild>, sourceKey?: keyof WaccInputsResponse["sources"]) {
     setBuild((current) => (current ? { ...current, ...partial } : current));
@@ -352,7 +457,7 @@ function WaccCalculatorModal({
                   limits={WACC_BUILD_LIMITS.preTaxCostOfDebt}
                   readOnly={locked(sources.preTaxCostOfDebt)}
                   loading={loadingAi && build.preTaxCostOfDebt == null}
-                  source={{ label: t("waccCalc.sourceEdgar"), url: secCompanyUrl(ticker) }}
+                  source={filingSourceLink(sources.preTaxCostOfDebt, sourceFilings)}
                   onChange={(v) => patch({ preTaxCostOfDebt: v || null }, "preTaxCostOfDebt")}
                 />
                 <CalcRow
@@ -364,7 +469,7 @@ function WaccCalculatorModal({
                   limits={WACC_BUILD_LIMITS.taxRate}
                   readOnly={locked(sources.taxRate)}
                   loading={loadingAi && build.taxRate == null}
-                  source={{ label: t("waccCalc.sourceEdgar"), url: secCompanyUrl(ticker) }}
+                  source={filingSourceLink(sources.taxRate, sourceFilings)}
                   onChange={(v) => patch({ taxRate: v }, "taxRate")}
                 />
                 <ResultBar label={t("waccCalc.afterTaxDebt")} value={pct(computed?.afterTaxCostOfDebt)} />
@@ -401,10 +506,7 @@ function WaccCalculatorModal({
                 disabled={!canApply || !facts || loadingAi}
                 onClick={() => {
                   if (!canApply || computed?.wacc == null || !build) return;
-                  const wacc = Math.min(
-                    DRIVER_LIMITS.wacc.max,
-                    Math.max(DRIVER_LIMITS.wacc.min, computed.wacc),
-                  );
+                  const wacc = clampWacc(computed.wacc);
                   onApply(wacc, build);
                 }}
                 className="w-full rounded-[10px] bg-blue-600 py-2.5 text-[13px] font-bold text-white hover:bg-blue-700 disabled:opacity-40"
@@ -459,7 +561,7 @@ function CalcRow({
   limits: { min: number; max: number; step: number };
   readOnly: boolean;
   loading?: boolean;
-  source?: { label: string; url: string };
+  source?: { label: string; url: string; title?: string };
   onChange: (value: number) => void;
 }) {
   const { t } = useI18n();
@@ -501,6 +603,7 @@ function CalcRow({
               href={source.url}
               target="_blank"
               rel="noopener noreferrer"
+              title={source.title ?? source.label}
               className="inline-flex items-center gap-0.5 font-semibold text-slate-500 underline decoration-slate-300 underline-offset-2 hover:text-blue-600 hover:decoration-blue-300"
             >
               {source.label}

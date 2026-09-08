@@ -2,6 +2,7 @@ import type { DcfInputs } from "./dcf";
 import type { EvEbitdaAnnualPoint, EvEbitdaInputs } from "./evebitda";
 import type { PeInputs, PePoint } from "./pe";
 import type { RdcfInputs } from "./rdcf";
+import type { WaccBuild } from "./wacc";
 
 /** The six drivers the user edits. Everything else in a DCF is an anchor. */
 export type DcfDrivers = Pick<
@@ -68,6 +69,8 @@ export type ValuationAnchors = {
   effectiveTaxRate: number | null;
   /** TTM interest expense ÷ total debt, as a percent. Null when debt or interest is missing. */
   preTaxCostOfDebt: number | null;
+  /** CAPM snapshot used to prefill `drivers.wacc` when facts are complete. */
+  waccBuild?: WaccBuild;
   /** Starting point for the editable drivers, from the vendor or an AI estimate. */
   drivers: DcfDrivers;
   /**
@@ -83,13 +86,14 @@ export type DcfScenario = "bear" | "base" | "bull";
 /**
  * Scenario multipliers applied to the base drivers. These reproduce the bear and
  * bull cases in the design spec when the base case is (20, 12, 4, 9, 25, 33).
+ * WACC is not scaled — one CAPM rate is shared across cases.
  */
 const SCENARIO_FACTORS: Record<DcfScenario, DcfDrivers> = {
-  bear: {
+    bear: {
     growthY1_5: 0.6,
     growthY6_10: 0.583,
     termGrowth: 0.75,
-    wacc: 1.222,
+    wacc: 1,
     fcfMarginY1: 0.84,
     fcfMarginTerm: 0.818,
   },
@@ -105,7 +109,7 @@ const SCENARIO_FACTORS: Record<DcfScenario, DcfDrivers> = {
     growthY1_5: 1.4,
     growthY6_10: 1.333,
     termGrowth: 1.25,
-    wacc: 0.833,
+    wacc: 1,
     fcfMarginY1: 1.12,
     fcfMarginTerm: 1.182,
   },
@@ -138,8 +142,8 @@ export const EMPTY_DRIVERS: DcfDrivers = {
 };
 
 function clampDriver(key: keyof DcfDrivers, value: number) {
-  const { min, max } = DRIVER_LIMITS[key];
-  return Math.min(max, Math.max(min, value));
+  const { min } = DRIVER_LIMITS[key];
+  return Math.max(min, value);
 }
 
 /**
@@ -175,11 +179,13 @@ export function dcfInputsFromAnchors(anchors: ValuationAnchors, drivers?: DcfDri
     fcfMarginY1: d.fcfMarginY1,
     fcfMarginTerm: d.fcfMarginTerm,
     mosPercent: 0,
+    waccBuild: anchors.waccBuild,
   };
 }
 
 /**
- * Scale the base drivers into a bear/base/bull case. Terminal growth is kept
+ * Scale the base drivers into a bear/base/bull case. WACC stays the CAPM
+ * number — scenarios only move growth and margins. Terminal growth is kept
  * below WACC so the Gordon-growth terminal value stays finite.
  */
 export function scenarioDrivers(base: DcfDrivers, scenario: DcfScenario): DcfDrivers {
@@ -189,7 +195,7 @@ export function scenarioDrivers(base: DcfDrivers, scenario: DcfScenario): DcfDri
     growthY1_5: clampDriver("growthY1_5", round1(base.growthY1_5 * factors.growthY1_5)),
     growthY6_10: clampDriver("growthY6_10", round1(base.growthY6_10 * factors.growthY6_10)),
     termGrowth: clampDriver("termGrowth", round1(base.termGrowth * factors.termGrowth)),
-    wacc: waccUnset ? base.wacc : clampDriver("wacc", round1(base.wacc * factors.wacc)),
+    wacc: base.wacc,
     fcfMarginY1: clampDriver("fcfMarginY1", round1(base.fcfMarginY1 * factors.fcfMarginY1)),
     fcfMarginTerm: clampDriver("fcfMarginTerm", round1(base.fcfMarginTerm * factors.fcfMarginTerm)),
   };
@@ -214,6 +220,7 @@ export function rdcfInputsFromAnchors(
     fcfMarginY1: d.fcfMarginY1,
     fcfMarginTerm: d.fcfMarginTerm,
     growthY6_10: d.growthY6_10,
+    waccBuild: anchors.waccBuild,
   };
 }
 

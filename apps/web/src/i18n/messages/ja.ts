@@ -363,6 +363,7 @@ export const ja = {
     apply: "適用",
     loadingFacts: "相場と開示を読み込み中…",
     loadingAi: "判断項目を事前入力中…",
+    prefilling: "WACC を事前入力中…",
     loadError: "WACC 入力を読み込めませんでした。",
     needInputs: "適用前に Rf・ベータ・ERP を入れてください（負債がある場合は Rd と税率も）。",
     waccTooLow: "WACC はターミナル成長率（{g}%）を上回る必要があります。",
@@ -370,7 +371,6 @@ export const ja = {
     fetchedFrom: "取得元",
     sourceTnx: "^TNX",
     sourceYahoo: "Yahoo Finance",
-    sourceEdgar: "EDGAR",
     quota: "本日の AI レビュー上限（20 回）に達しました。ERP と不足項目は手入力できます。",
   },
   actuals: {

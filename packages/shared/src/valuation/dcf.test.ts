@@ -45,4 +45,11 @@ describe("dcfModelReady", () => {
     expect(scenarioDrivers(EMPTY_DRIVERS, "base").wacc).toBe(0);
     expect(scenarioDrivers(EMPTY_DRIVERS, "bear").wacc).toBe(0);
   });
+
+  it("keeps the same WACC in bear, base, and bull", () => {
+    const base = { ...EMPTY_DRIVERS, wacc: 9, termGrowth: 3, growthY1_5: 20 };
+    expect(scenarioDrivers(base, "bear").wacc).toBe(9);
+    expect(scenarioDrivers(base, "base").wacc).toBe(9);
+    expect(scenarioDrivers(base, "bull").wacc).toBe(9);
+  });
 });

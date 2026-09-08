@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computeWacc, parseWaccBuild, type WaccBuild } from "./wacc";
+import { computeWacc, parseWaccBuild, prefillWaccFromFacts, type WaccBuild } from "./wacc";
 
 const SAMPLE: WaccBuild = {
   rf: 4.3,
@@ -42,12 +42,44 @@ describe("parseWaccBuild", () => {
     expect(parseWaccBuild(SAMPLE)?.erp).toBe(5.5);
   });
 
-  it("drops out-of-range judgment fields instead of failing", () => {
-    expect(parseWaccBuild({ ...SAMPLE, erp: 99 })?.erp).toBeNull();
+  it("drops below-floor judgment fields instead of failing", () => {
+    expect(parseWaccBuild({ ...SAMPLE, erp: 0 })?.erp).toBeNull();
+  });
+
+  it("keeps judgment fields above the old ceiling", () => {
+    expect(parseWaccBuild({ ...SAMPLE, erp: 99 })?.erp).toBe(99);
   });
 
   it("returns undefined for garbage", () => {
     expect(parseWaccBuild(null)).toBeUndefined();
     expect(parseWaccBuild("nope")).toBeUndefined();
+  });
+});
+
+describe("prefillWaccFromFacts", () => {
+  it("fills WACC with the default ERP when Rf, beta, and debt cost are present", () => {
+    const out = prefillWaccFromFacts({
+      rf: 4.3,
+      beta: 0.82,
+      equity: 3_000_000,
+      debt: 98_000,
+      preTaxCostOfDebt: 5.5,
+      taxRate: 21,
+    });
+    expect(out?.build.erp).toBe(5.5);
+    expect(out?.wacc).toBeGreaterThanOrEqual(4);
+  });
+
+  it("stays empty when beta is missing", () => {
+    expect(
+      prefillWaccFromFacts({
+        rf: 4.3,
+        beta: null,
+        equity: 3_000_000,
+        debt: 0,
+        preTaxCostOfDebt: null,
+        taxRate: null,
+      }),
+    ).toBeNull();
   });
 });
