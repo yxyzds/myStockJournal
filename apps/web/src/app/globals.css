@@ -137,3 +137,16 @@ body {
     @apply font-sans;
   }
 }
+
+/*
+ * iOS Safari zooms the page when a focused control’s font-size is below 16px.
+ * Unlayered so this beats Tailwind utilities like text-[12px] / text-[13px]
+ * on the phone; md+ keeps the designed sizes.
+ */
+@media (max-width: 767px) {
+  input,
+  textarea,
+  select {
+    font-size: 16px;
+  }
+}
