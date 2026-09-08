@@ -28,6 +28,7 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
         variables: {
           colorPrimary: "#0f172a",
           borderRadius: "0.6rem",
+          fontSize: "16px",
         },
       }}
     >
