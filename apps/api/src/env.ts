@@ -51,6 +51,11 @@ export const env = {
   aiApiKey: process.env.AI_API_KEY ?? "",
   aiModel: process.env.AI_MODEL ?? "claude-sonnet-5",
   /**
+   * Vision model for screenshot import. Never fall back to `aiModel` — the
+   * daily text model (e.g. deepseek-v4-flash-0731) cannot see images.
+   */
+  aiVisionModel: (process.env.AI_VISION_MODEL ?? "deepseek-v4-flash-vision-exp").trim(),
+  /**
    * Send `response_format: json_object`. Off by default — many Claude relays
    * reject it; the prompt already asks for JSON.
    */
