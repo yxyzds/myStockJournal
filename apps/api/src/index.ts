@@ -2,10 +2,10 @@ import { serve } from "@hono/node-server";
 import { app } from "./app";
 import { seedLocalUser } from "./db/seed-local-user";
 import { seedWatchlist } from "./db/seed-watchlist";
-import { env } from "./env";
+import { allowDevUser, env } from "./env";
 
 try {
-  if (!env.clerkSecretKey) {
+  if (allowDevUser) {
     await seedLocalUser();
     await seedWatchlist(env.localUserId);
   }

@@ -26,7 +26,8 @@ pnpm install
 
 # 2. 环境变量
 cp .env.example .env
-# 按需编辑 .env（见下方说明）
+cp .env.development.example .env.development
+# 按需编辑：`.env` 为共用配置；`.env.development` 为本地代理 / DEV_USER
 
 # 3. 启动数据库
 pnpm db:up
@@ -55,19 +56,18 @@ curl http://localhost:3001/health
 
 ## 环境变量
 
-根目录 `.env`（勿提交；模板见 `.env.example`）：
+根目录环境文件（勿提交）。`pnpm dev` 会加载 `.env` + `.env.development`；`pnpm start` / 生产只加载 `.env`（或托管平台注入的变量），并忽略本地代理。
 
-| 变量 | 说明 |
-|------|------|
-| `DATABASE_URL` | Postgres 连接串 |
-| `API_PORT` | API 端口，默认 `3001` |
-| `DEV_USER_ID` / `DEV_USER_EMAIL` / `DEV_USER_NAME` | 未配置 Clerk 时的本地开发用户 |
-| `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` / `CLERK_SECRET_KEY` | Clerk 登录（Google / Facebook / 邮箱）。配好后首页头像进入 `/settings` |
-| `SEC_USER_AGENT` | 访问 SEC EDGAR 时的 User-Agent（建议带联系邮箱） |
-| `AI_BASE_URL` | AI 中转站 Base，例如 `https://www.micuapi.ai/v1`（实际请求 `${AI_BASE_URL}/chat/completions`） |
-| `AI_API_KEY` | 中转站 Bearer Token |
-| `AI_MODEL` | 模型名，默认 `claude-sonnet-5` |
-| `AI_JSON_MODE` | 设为 `1` 时发送 `response_format: json_object`（多数 Claude 中转可不设） |
+| 变量 | 放哪 | 说明 |
+|------|------|------|
+| `DATABASE_URL` | `.env` / 平台 | Postgres 连接串 |
+| `API_PORT` | `.env` / 平台 | API 端口，默认 `3001` |
+| `API_ORIGIN` | 平台（可选） | Next 把 `/api` 转到该地址；本地默认 `http://localhost:3001` |
+| `DEV_USER_ID` / `DEV_USER_EMAIL` / `DEV_USER_NAME` | `.env.development` | 仅本地、且未配 Clerk 时的开发用户。生产禁止 |
+| `HTTP_PROXY` / `HTTPS_PROXY` / `NO_PROXY` | `.env.development` | 仅 `pnpm dev`（`NODE_USE_ENV_PROXY=1`）。生产默认忽略 |
+| `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` / `CLERK_SECRET_KEY` | `.env` / 平台 | Clerk 登录。**生产必须配置** |
+| `SEC_USER_AGENT` | `.env` / 平台 | 访问 SEC EDGAR 时的 User-Agent（建议带联系邮箱） |
+| `AI_BASE_URL` / `AI_API_KEY` / `AI_MODEL` | `.env` / 平台 | AI 中转站。未配置时估值与日记仍可用 |
 
 AI 相关变量仅影响 Trade review；未配置时估值与日记仍可正常使用。
 
@@ -92,6 +92,6 @@ pnpm test         # packages/shared 单测
 
 ## 开发提示
 
-- API 使用 `tsx watch`，改代码会热重载；**改 `.env` 后需重启 API** 才会生效。
-- 未配置 Clerk 时，本地用户由 `DEV_USER_*` 注入，所有数据挂在该用户下。
+- API 使用 `tsx watch`，改代码会热重载；**改 `.env` / `.env.development` 后需重启** 才会生效。
+- 本地未配置 Clerk 时，用户由 `.env.development` 的 `DEV_USER_*` 注入。生产必须配置 Clerk，不会走开发用户，也不会走本地 HTTP 代理。
 - 配好 Clerk 后：未登录会进 `/sign-in`；已登录点头像进入 `/settings`（Account 可改姓名/邮箱，没有换头像）。

@@ -10,6 +10,7 @@ import {
   pgTable,
   text,
   timestamp,
+  primaryKey,
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
@@ -205,3 +206,16 @@ export const fundamentalsCache = pgTable("fundamentals_cache", {
   period: text("period"),
   fetchedAt: timestamp("fetched_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+/** Per-user daily AI review count (Trade + DCF share the same 20/day quota). Day is UTC. */
+export const aiReviewUsage = pgTable(
+  "ai_review_usage",
+  {
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id),
+    day: date("day").notNull(),
+    count: integer("count").notNull().default(0),
+  },
+  (table) => [primaryKey({ columns: [table.userId, table.day] })],
+);

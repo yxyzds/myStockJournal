@@ -1,12 +1,12 @@
 import { verifyToken } from "@clerk/backend";
 import type { MiddlewareHandler } from "hono";
-import { env } from "./env";
+import { allowDevUser, env } from "./env";
 import { ensureAppUser } from "./lib/users";
 import type { AppEnv } from "./types";
 
 export const resolveUser: MiddlewareHandler<AppEnv> = async (c, next) => {
   if (c.req.path === "/health") {
-    if (!env.clerkSecretKey && env.localUserId) {
+    if (allowDevUser) {
       c.set("userId", env.localUserId);
       c.set("clerkUserId", null);
     }
@@ -14,14 +14,15 @@ export const resolveUser: MiddlewareHandler<AppEnv> = async (c, next) => {
     return;
   }
 
-  if (!env.clerkSecretKey) {
-    if (!env.localUserId) {
-      return c.json({ error: "Unauthorized" }, 401);
-    }
+  if (allowDevUser) {
     c.set("userId", env.localUserId);
     c.set("clerkUserId", null);
     await next();
     return;
+  }
+
+  if (!env.clerkSecretKey) {
+    return c.json({ error: "Unauthorized" }, 401);
   }
 
   const header = c.req.header("authorization") ?? "";

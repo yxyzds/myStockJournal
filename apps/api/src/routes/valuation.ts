@@ -22,6 +22,7 @@ import { reviewDcfAssumptions } from "../ai/dcf-review";
 import { env } from "../env";
 import type { AppEnv } from "../types";
 import { requestLocale } from "../lib/locale";
+import { AI_REVIEW_LIMIT_ERROR, consumeAiReviewSlot, releaseAiReviewSlot } from "../lib/ai-review-quota";
 import { db } from "../db";
 import { stocks, valuationModels, valuationSnapshots } from "../db/schema";
 import { recordDecision } from "../lib/decisions";
@@ -208,6 +209,9 @@ valuationRoutes.post("/:ticker/valuation/dcf/ai-review", async (c) => {
   const parsed = parseDcfInputs(merged);
   if ("error" in parsed) return c.json({ error: parsed.error }, 400);
 
+  const allowed = await consumeAiReviewSlot(c.get("userId"));
+  if (!allowed) return c.json({ error: AI_REVIEW_LIMIT_ERROR }, 429);
+
   try {
     const review = await reviewDcfAssumptions({
       ticker: loaded.stock.ticker,
@@ -223,6 +227,7 @@ valuationRoutes.post("/:ticker/valuation/dcf/ai-review", async (c) => {
       .where(and(eq(stocks.id, loaded.stock.id), eq(stocks.userId, loaded.stock.userId)));
     return c.json({ review });
   } catch (error) {
+    await releaseAiReviewSlot(c.get("userId"));
     const message = error instanceof Error ? error.message : "DCF review failed";
     return c.json({ error: message }, 502);
   }

@@ -12,6 +12,7 @@ const TABLE_COMMENTS: Record<string, string> = {
   judgment_items: "首页「Needs your judgment」待处理事项，用户可关闭。",
   quote_cache: "外部行情缓存，按 ticker 全局共享，不含 user_id。",
   fundamentals_cache: "外部基本面 / 财报缓存，按 ticker 全局共享，不含 user_id。",
+  ai_review_usage: "用户每日 AI 点评次数（交易点评与 DCF 点评共用，UTC 自然日 20 次）。",
 };
 
 export async function applyTableComments() {

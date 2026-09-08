@@ -1,10 +1,4 @@
-import { config } from "dotenv";
-import { resolve } from "node:path";
-
-// Also loaded via `node --env-file` in package.json so NODE_USE_ENV_PROXY
-// sees HTTP(S)_PROXY at process start. dotenv here is for anything imported
-// after that (and does not override vars already in the environment).
-config({ path: resolve(import.meta.dirname, "../../../.env") });
+import "../../../scripts/load-root-env.mjs";
 
 function required(name: string): string {
   const value = process.env[name];
@@ -12,11 +6,19 @@ function required(name: string): string {
   return value;
 }
 
+export const isProduction = process.env.NODE_ENV === "production";
+
 const clerkSecretKey = process.env.CLERK_SECRET_KEY ?? "";
-const localUserId = process.env.DEV_USER_ID ?? "";
-if (!clerkSecretKey && !localUserId) {
-  throw new Error("Missing CLERK_SECRET_KEY or DEV_USER_ID");
+const localUserId = isProduction ? "" : (process.env.DEV_USER_ID ?? "");
+
+if (isProduction) {
+  if (!clerkSecretKey) throw new Error("Production requires CLERK_SECRET_KEY");
+} else if (!clerkSecretKey && !localUserId) {
+  throw new Error("Missing CLERK_SECRET_KEY or DEV_USER_ID (set DEV_USER_* in .env.development)");
 }
+
+/** True only for local `pnpm dev` without Clerk — never in production. */
+export const allowDevUser = Boolean(!isProduction && !clerkSecretKey && localUserId);
 
 export const env = {
   databaseUrl: required("DATABASE_URL"),
