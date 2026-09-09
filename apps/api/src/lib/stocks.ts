@@ -42,6 +42,8 @@ export async function getOrCreateStock(userId: string, rawTicker: string): Promi
 
   if (existing[0]) return { stock: existing[0], quote };
 
+  // Opening a new ticker fires several API calls at once; two inserts would
+  // trip stocks_user_ticker_uidx. Ignore the loser and read the winner's row.
   const inserted = await db
     .insert(stocks)
     .values({
@@ -50,7 +52,17 @@ export async function getOrCreateStock(userId: string, rawTicker: string): Promi
       name: quote.name,
       watched: false,
     })
+    .onConflictDoNothing({ target: [stocks.userId, stocks.ticker] })
     .returning();
 
-  return { stock: inserted[0], quote };
+  if (inserted[0]) return { stock: inserted[0], quote };
+
+  const [created] = await db
+    .select()
+    .from(stocks)
+    .where(and(eq(stocks.userId, userId), eq(stocks.ticker, ticker)))
+    .limit(1);
+
+  if (created) return { stock: created, quote };
+  return { error: "Ticker not found", status: 404 };
 }
