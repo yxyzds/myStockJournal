@@ -3,7 +3,7 @@ import { and, asc, eq, inArray } from "drizzle-orm";
 import {
   TXN_IMAGE_MAX_DECODED_BYTES,
   dataUrlDecodedBytes,
-  isTradeReviewGrade,
+  parseTradeReview,
   parseTxnImageDataUrl,
   txnImageErrorMessage,
   validateTxnImageMeta,
@@ -12,7 +12,6 @@ import {
   type Quote,
   type StockDetail,
   type StockTransaction,
-  type TradeReview,
 } from "@mystockjournal/shared";
 import { extractTradesFromImage, filterExtractedTrades } from "../ai/txn-extract";
 import { reviewTradeJournal } from "../ai/trade-review";
@@ -47,15 +46,6 @@ function asSnapshot(value: unknown): JournalSnapshot | null {
     currency: typeof row.currency === "string" ? row.currency : "USD",
     pe: typeof row.pe === "string" ? row.pe : null,
   };
-}
-
-function asTradeReview(value: unknown): TradeReview | null {
-  if (!value || typeof value !== "object") return null;
-  const row = value as { grade?: unknown; blurb?: unknown; reviewedAt?: unknown };
-  if (!isTradeReviewGrade(row.grade)) return null;
-  if (typeof row.blurb !== "string" || !row.blurb.trim()) return null;
-  if (typeof row.reviewedAt !== "string" || !row.reviewedAt) return null;
-  return { grade: row.grade, blurb: row.blurb, reviewedAt: row.reviewedAt };
 }
 
 function snapshotFromQuote(quote: Quote | null): JournalSnapshot | null {
@@ -163,7 +153,7 @@ stockRoutes.get("/:ticker", async (c) => {
     quote,
     journal: journalRows.map(toJournal),
     transactions: decisionRows.map(toTransaction).filter((row): row is StockTransaction => row != null),
-    tradeReview: asTradeReview(stock.tradeReview),
+    tradeReview: parseTradeReview(stock.tradeReview),
   };
 
   return c.json(payload);
@@ -403,7 +393,7 @@ stockRoutes.delete("/:ticker/transactions/:id", async (c) => {
 
 /**
  * POST /stocks/:ticker/ai/trade-review — grade the journal (and trades) with a
- * five-tier slang label + short English blurb.
+ * five-tier slang label, structured tags, and a short blurb.
  */
 stockRoutes.post("/:ticker/ai/trade-review", async (c) => {
   if (!env.aiApiKey || !env.aiBaseUrl) {
