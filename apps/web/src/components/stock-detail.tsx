@@ -1083,6 +1083,71 @@ function analyzeHint(input: { hasBuy: boolean; hasSell: boolean }, t: Translate)
   return t("transaction.addTwo", { a: missing[0], b: missing[1] });
 }
 
+type ReviewTagTone = "rose" | "amber" | "emerald" | "slate" | "dash";
+
+function ReviewTag({ label, tone }: { label: string; tone: ReviewTagTone }) {
+  const cls: Record<ReviewTagTone, string> = {
+    rose: "bg-rose-50 text-rose-700",
+    amber: "bg-amber-50 text-amber-800",
+    emerald: "bg-emerald-50 text-emerald-700",
+    slate: "bg-slate-50 text-slate-600",
+    dash: "border border-dashed border-slate-300 bg-white text-slate-500",
+  };
+  return (
+    <span
+      className={`inline-flex items-center rounded px-[7px] py-[2px] text-[10px] leading-tight font-semibold ${cls[tone]}`}
+    >
+      {label}
+    </span>
+  );
+}
+
+function reviewTags(review: TradeReview, t: Translate) {
+  const tags: { id: string; label: string; tone: ReviewTagTone }[] = [];
+  if (review.thesis === "weak") {
+    tags.push({ id: "thesis", label: t("transaction.tagThesisWeak"), tone: "rose" });
+  } else if (review.thesis === "ok") {
+    tags.push({ id: "thesis", label: t("transaction.tagThesisOk"), tone: "slate" });
+  } else if (review.thesis === "strong") {
+    tags.push({ id: "thesis", label: t("transaction.tagThesisStrong"), tone: "emerald" });
+  }
+
+  if (review.execution === "per_plan") {
+    tags.push({ id: "exec", label: t("transaction.tagExecPerPlan"), tone: "emerald" });
+  } else if (review.execution === "early_exit") {
+    tags.push({ id: "exec", label: t("transaction.tagExecEarlyExit"), tone: "amber" });
+  } else if (review.execution === "delayed_stop") {
+    tags.push({ id: "exec", label: t("transaction.tagExecDelayedStop"), tone: "rose" });
+  } else if (review.execution === "impulse") {
+    tags.push({ id: "exec", label: t("transaction.tagExecImpulse"), tone: "rose" });
+  } else if (review.execution === "unplanned_add") {
+    tags.push({ id: "exec", label: t("transaction.tagExecUnplannedAdd"), tone: "amber" });
+  }
+
+  if (review.processVsOutcome === "good_process_good_result") {
+    tags.push({ id: "pvo", label: t("transaction.tagProcessGoodWin"), tone: "emerald" });
+  } else if (review.processVsOutcome === "good_process_bad_result") {
+    tags.push({ id: "pvo", label: t("transaction.tagProcessGoodLoss"), tone: "emerald" });
+  } else if (review.processVsOutcome === "lucky_win") {
+    tags.push({ id: "pvo", label: t("transaction.tagProcessLuckyWin"), tone: "amber" });
+  } else if (review.processVsOutcome === "deserved_loss") {
+    tags.push({ id: "pvo", label: t("transaction.tagProcessDeservedLoss"), tone: "rose" });
+  }
+
+  for (const gap of review.missing ?? []) {
+    if (gap === "invalidation") {
+      tags.push({ id: "miss-invalidation", label: t("transaction.tagMissingInvalidation"), tone: "dash" });
+    } else if (gap === "evidence") {
+      tags.push({ id: "miss-evidence", label: t("transaction.tagMissingEvidence"), tone: "dash" });
+    } else if (gap === "plan") {
+      tags.push({ id: "miss-plan", label: t("transaction.tagMissingPlan"), tone: "dash" });
+    } else if (gap === "sizing") {
+      tags.push({ id: "miss-sizing", label: t("transaction.tagMissingSizing"), tone: "dash" });
+    }
+  }
+  return tags;
+}
+
 function RateMyTransactionBar({
   ticker,
   hasBuy,
@@ -1144,9 +1209,11 @@ function RateMyTransactionBar({
     );
   }
 
+  const tags = reviewTags(review, t);
+
   return (
     <div className="w-full border-t border-[#ebf0f5] px-4 py-[18px] md:px-6">
-      <div className="flex items-center gap-3.5">
+      <div className="flex items-start gap-3.5">
         <div
           className="flex h-[54px] min-w-[54px] shrink-0 items-center justify-center rounded-xl px-2"
           style={{
@@ -1164,6 +1231,13 @@ function RateMyTransactionBar({
             <span className="text-[9px] font-bold tracking-widest uppercase">{t("transaction.aiVerdict")}</span>
           </div>
           <p className="text-[12px] leading-[1.5] font-medium text-[#334155]">{review.blurb}</p>
+          {tags.length > 0 && (
+            <div className="flex flex-wrap gap-1 pt-0.5">
+              {tags.map((tag) => (
+                <ReviewTag key={tag.id} label={tag.label} tone={tag.tone} />
+              ))}
+            </div>
+          )}
           {hint && <p className="text-[11px] text-[#94a3b8]">{hint}</p>}
           {errorMessage && <p className="text-[11px] font-medium text-red-500">{errorMessage}</p>}
         </div>

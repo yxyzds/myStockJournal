@@ -284,6 +284,14 @@ function WaccCalculatorModal({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, []);
+
+  useEffect(() => {
     let cancelled = false;
     async function load() {
       setLoadingFacts(true);
@@ -370,34 +378,34 @@ function WaccCalculatorModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 p-3 sm:items-center"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 sm:items-center sm:p-4"
       onClick={onClose}
     >
       <div
         role="dialog"
         aria-labelledby="wacc-calc-title"
         aria-busy={loadingFacts || loadingAi}
-        className="max-h-[92vh] w-full max-w-[420px] overflow-y-auto rounded-[18px] border border-slate-200 bg-white shadow-xl"
+        className="flex max-h-[100dvh] w-full max-w-[420px] flex-col overflow-hidden rounded-t-[18px] border border-slate-200 bg-white shadow-xl sm:max-h-[min(92dvh,40rem)] sm:rounded-[18px]"
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="flex items-start justify-between gap-3 rounded-t-[18px] bg-sky-50 px-4 py-3">
-          <div>
+        <div className="flex shrink-0 items-start justify-between gap-3 bg-sky-50 px-4 py-3">
+          <div className="min-w-0">
             <h2 id="wacc-calc-title" className="text-[16px] font-bold text-slate-900">
               {t("waccCalc.title")}
             </h2>
-            <p className="mt-0.5 font-mono text-[10px] text-sky-700">{t("waccCalc.formula")}</p>
+            <p className="mt-0.5 break-words font-mono text-[10px] text-sky-700">{t("waccCalc.formula")}</p>
           </div>
           <button
             type="button"
             aria-label={t("waccCalc.closeAria")}
             onClick={onClose}
-            className="rounded-md p-1 text-slate-400 hover:bg-white hover:text-slate-700"
+            className="shrink-0 rounded-md p-1 text-slate-400 hover:bg-white hover:text-slate-700"
           >
             ×
           </button>
         </div>
 
-        <div className="space-y-4 px-4 py-4">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-4 py-4">
           {error ? <p className="text-[12px] font-medium text-red-500">{error}</p> : null}
 
           {loadingFacts ? (
@@ -488,33 +496,34 @@ function WaccCalculatorModal({
                   value={computed?.debtWeight == null ? "—" : fmtPct(computed.debtWeight * 100)}
                 />
               </Section>
-
-              <div className="flex items-center justify-between rounded-[10px] bg-slate-900 px-3.5 py-3 text-white">
-                <span className="text-[11px] font-bold tracking-wide uppercase">{t("waccCalc.result")}</span>
-                <span className="font-mono text-[22px] font-bold tabular-nums">{pct(computed?.wacc, 1)}</span>
-              </div>
-              {waccTooLow ? (
-                <p className="text-[11px] font-medium text-red-500">
-                  {t("waccCalc.waccTooLow", { g: termGrowth.toFixed(1) })}
-                </p>
-              ) : computed?.wacc == null ? (
-                <p className="text-[11px] text-slate-500">{t("waccCalc.needInputs")}</p>
-              ) : null}
-
-              <button
-                type="button"
-                disabled={!canApply || !facts || loadingAi}
-                onClick={() => {
-                  if (!canApply || computed?.wacc == null || !build) return;
-                  const wacc = clampWacc(computed.wacc);
-                  onApply(wacc, build);
-                }}
-                className="w-full rounded-[10px] bg-blue-600 py-2.5 text-[13px] font-bold text-white hover:bg-blue-700 disabled:opacity-40"
-              >
-                {t("waccCalc.apply")}
-              </button>
             </>
           ) : null}
+        </div>
+
+        <div className="shrink-0 space-y-2 border-t border-slate-100 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+          <div className="flex items-center justify-between rounded-[10px] bg-slate-900 px-3.5 py-2.5 text-white">
+            <span className="text-[11px] font-bold tracking-wide uppercase">{t("waccCalc.result")}</span>
+            <span className="font-mono text-[22px] font-bold tabular-nums">{pct(computed?.wacc, 1)}</span>
+          </div>
+          {waccTooLow ? (
+            <p className="text-[11px] font-medium text-red-500">
+              {t("waccCalc.waccTooLow", { g: termGrowth.toFixed(1) })}
+            </p>
+          ) : !loadingFacts && computed?.wacc == null ? (
+            <p className="text-[11px] text-slate-500">{t("waccCalc.needInputs")}</p>
+          ) : null}
+          <button
+            type="button"
+            disabled={!canApply || !facts || loadingAi}
+            onClick={() => {
+              if (!canApply || computed?.wacc == null || !build) return;
+              const wacc = clampWacc(computed.wacc);
+              onApply(wacc, build);
+            }}
+            className="w-full rounded-[10px] bg-blue-600 py-2.5 text-[13px] font-bold text-white hover:bg-blue-700 disabled:opacity-40"
+          >
+            {t("waccCalc.apply")}
+          </button>
         </div>
       </div>
     </div>

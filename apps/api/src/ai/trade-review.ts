@@ -1,5 +1,7 @@
 import {
   isTradeReviewGrade,
+  parseTradeReviewTags,
+  PRICE_SANITY_REVIEW_TAGS,
   TRADE_REVIEW_GRADES,
   type JournalEntry,
   type StockTransaction,
@@ -44,7 +46,7 @@ export type PriceSanityFlag = {
 function systemPrompt(language: AppLocale) {
   const blurbLang = reviewLanguageName(language);
   return `You are a witty, slightly roasting trading coach for a personal stock journal app.
-Read the investor's journal notes (and any recorded buys/sells). Grade the overall quality of their thinking.
+Read the investor's journal notes (and any recorded buys/sells). Grade the quality of their thinking AND how they executed.
 
 Pick exactly ONE grade from this list (worst → best):
 ${TRADE_REVIEW_GRADES.map((g, i) => `${i + 1}. ${g}`).join("\n")}
@@ -56,13 +58,36 @@ Meanings:
 - Based: clear thesis, evidence-aware
 - Oracle: unusually sharp, falsifiable, disciplined
 
+Also score the process, independently of P&L:
+
+thesis: weak | ok | strong
+  — written thesis quality (falsifiable? evidence? or vibes)
+
+execution: per_plan | early_exit | delayed_stop | impulse | unplanned_add | unclear
+  — did they follow a plan, or scramble? Use unclear if the notes do not say.
+
+processVsOutcome: good_process_good_result | good_process_bad_result | lucky_win | deserved_loss | unknown
+  — separate process from P&L. A lucky win is not Based. A disciplined loss is not Clownery.
+
+missing: subset of ["invalidation","evidence","plan","sizing"]
+  — what the notes lack. Empty array if nothing obvious.
+
 Respond with JSON only:
-{ "grade": "<one of the five grades>", "blurb": "<one punchy sentence, max ~140 chars, dry humor OK>" }
+{
+  "grade": "<one of the five grades>",
+  "blurb": "<one punchy sentence, max ~140 chars, dry humor OK>",
+  "thesis": "weak | ok | strong",
+  "execution": "per_plan | early_exit | delayed_stop | impulse | unplanned_add | unclear",
+  "processVsOutcome": "good_process_good_result | good_process_bad_result | lucky_win | deserved_loss | unknown",
+  "missing": []
+}
 
 Rules:
-- FIRST check priceSanity. If status is "implausible", the blurb MUST challenge the recorded fill (typo, extra/missing zeros, wrong decimal, missing price). Do not treat that number as a real trade. Grade Clownery or Copeium. Do not praise the thesis until the price is believable.
+- FIRST check priceSanity. If status is "implausible", the blurb MUST challenge the recorded fill (typo, extra/missing zeros, wrong decimal, missing price). Do not treat that number as a real trade. Grade Clownery or Copeium. Set thesis=weak, execution=unclear, processVsOutcome=unknown, missing=[]. Do not praise the thesis until the price is believable.
 - If priceSanity.status is "ok", ignore that section and judge the writing and reasoning — not whether the stock went up.
 - If priceSanity.status is "unchecked", skip the price question.
+- Grade is the overall slang verdict; tags must be consistent with it (do not tag thesis=strong on Clownery).
+- Do not let a green P&L upgrade a sloppy process.
 - blurb must be ${blurbLang}. No markdown. No emoji.
 - Do not invent facts that are not in the notes or priceSanity payload.`;
 }
@@ -320,6 +345,7 @@ export async function reviewTradeJournal(input: {
   if (!blurb) throw new Error("AI returned an empty blurb");
 
   let grade: TradeReviewGrade = rawGrade;
+  const tags = flags.length > 0 ? PRICE_SANITY_REVIEW_TAGS : parseTradeReviewTags(row);
   if (flags.length > 0) {
     grade = capGrade(grade, flags);
     if (!blurbChallengesPrice(blurb)) {
@@ -331,5 +357,6 @@ export async function reviewTradeJournal(input: {
     grade,
     blurb: blurb.slice(0, 280),
     reviewedAt: new Date().toISOString(),
+    ...tags,
   };
 }
