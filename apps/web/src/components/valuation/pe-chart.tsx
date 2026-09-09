@@ -15,16 +15,6 @@ export const PEER_COLORS = ["#6366f1", "#f59e0b", "#ec4899", "#10b981", "#8b5cf6
 export type PeChartMode = "pe" | "peg" | "evebitda";
 export type PeChartPeriod = "week" | "month" | "year";
 
-/** `lock` / `unlock` are missing from the DOM lib's `ScreenOrientation`. */
-type OrientationWithLock = ScreenOrientation & {
-  lock?: (orientation: string) => Promise<void>;
-  unlock?: () => void;
-};
-
-function screenOrientation(): OrientationWithLock | null {
-  return typeof screen === "undefined" ? null : (screen.orientation as OrientationWithLock | undefined) ?? null;
-}
-
 type PeChartProps = {
   mode: PeChartMode;
   history: PeSeriesPoint[];
@@ -84,7 +74,6 @@ export function PeChart(props: PeChartProps) {
   const { t } = useI18n();
   const [expanded, setExpanded] = useState(false);
   const mobile = useMedia("(max-width: 767px)");
-  const landscape = useMedia("(orientation: landscape)");
 
   useEffect(() => {
     if (!expanded) return;
@@ -94,29 +83,9 @@ export function PeChart(props: PeChartProps) {
       if (event.key === "Escape") setExpanded(false);
     };
     window.addEventListener("keydown", onKey);
-    void (async () => {
-      try {
-        await document.documentElement.requestFullscreen();
-      } catch {
-        /* iOS Safari and some desktop browsers reject this. */
-      }
-      try {
-        await screenOrientation()?.lock?.("landscape");
-      } catch {
-        /* Lock is optional; CSS rotation covers portrait. */
-      }
-    })();
     return () => {
       document.body.style.overflow = previous;
       window.removeEventListener("keydown", onKey);
-      if (document.fullscreenElement) {
-        void document.exitFullscreen().catch(() => undefined);
-      }
-      try {
-        screenOrientation()?.unlock?.();
-      } catch {
-        /* ignore */
-      }
     };
   }, [expanded]);
 
@@ -152,28 +121,23 @@ export function PeChart(props: PeChartProps) {
         <p className="mt-1 px-2 text-center text-[10px] text-slate-400">{t("pe.tapLandscape")}</p>
       ) : null}
       {expanded ? (
-        <div className="fixed inset-0 z-50 bg-white">
-          <button
-            type="button"
-            onClick={() => setExpanded(false)}
-            aria-label={t("pe.closeChart")}
-            className="absolute top-[max(0.75rem,env(safe-area-inset-top))] right-[max(0.75rem,env(safe-area-inset-right))] z-10 flex size-9 items-center justify-center rounded-full bg-slate-100 text-[22px] leading-none text-slate-600"
-          >
-            ×
-          </button>
-          {!landscape ? (
-            <p className="absolute top-[max(0.85rem,env(safe-area-inset-top))] left-1/2 z-10 -translate-x-1/2 rounded-full bg-slate-900/80 px-2.5 py-1 text-[11px] font-semibold text-white">
-              {t("pe.rotateHint")}
-            </p>
-          ) : null}
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/45 px-5 py-10"
+          onClick={() => setExpanded(false)}
+        >
           <div
-            className={
-              landscape
-                ? "flex h-full w-full items-center px-3 pt-12 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
-                : "absolute top-1/2 left-1/2 flex h-[100vw] w-[100vh] -translate-x-1/2 -translate-y-1/2 rotate-90 items-center px-6"
-            }
+            className="relative w-full max-w-[34rem] rounded-2xl bg-white px-3.5 pt-11 pb-4 shadow-xl"
+            onClick={(event) => event.stopPropagation()}
           >
-            <PeChartCanvas {...props} interactive className="h-full w-full" />
+            <button
+              type="button"
+              onClick={() => setExpanded(false)}
+              aria-label={t("pe.closeChart")}
+              className="absolute top-2.5 right-2.5 flex size-8 items-center justify-center rounded-full bg-slate-100 text-[20px] leading-none text-slate-600"
+            >
+              ×
+            </button>
+            <PeChartCanvas {...props} interactive className="h-auto w-full" />
           </div>
         </div>
       ) : null}
