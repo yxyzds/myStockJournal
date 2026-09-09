@@ -20,7 +20,7 @@ import type { AppEnv } from "../types";
 import { db } from "../db";
 import { decisions, journalEntries, stocks } from "../db/schema";
 import { recordDecision } from "../lib/decisions";
-import { getOrCreateStock, num } from "../lib/stocks";
+import { getOrCreateStock, getOrCreateStockRow, num } from "../lib/stocks";
 import { getQuotes } from "../market/quotes";
 import { fetchTencentKline } from "../market/tencent";
 import { requestLocale } from "../lib/locale";
@@ -290,11 +290,13 @@ stockRoutes.post("/:ticker/transactions/extract-from-image", async (c) => {
     return c.json({ error: "Set AI_VISION_MODEL in .env to enable screenshot import" }, 503);
   }
 
-  const found = await getOrCreateStock(c.get("userId"), c.req.param("ticker"));
+  const [found, body] = await Promise.all([
+    getOrCreateStockRow(c.get("userId"), c.req.param("ticker")),
+    c.req.json().catch(() => null),
+  ]);
   if ("error" in found) return c.json({ error: found.error }, found.status);
 
-  const body = (await c.req.json().catch(() => null)) as Record<string, unknown> | null;
-  if (!body || typeof body.image !== "string" || typeof body.filename !== "string") {
+  if (!body || typeof body !== "object" || typeof body.image !== "string" || typeof body.filename !== "string") {
     return c.json({ error: "Invalid body" }, 400);
   }
 

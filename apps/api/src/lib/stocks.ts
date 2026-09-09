@@ -22,6 +22,35 @@ export type StockLookup =
   | { stock: typeof stocks.$inferSelect; quote: Quote }
   | { error: "Invalid ticker" | "Ticker not found"; status: 400 | 404 };
 
+export type StockRowLookup =
+  | { stock: typeof stocks.$inferSelect }
+  | { error: "Invalid ticker" | "Ticker not found"; status: 400 | 404 };
+
+async function selectUserStock(userId: string, ticker: string) {
+  const rows = await db
+    .select()
+    .from(stocks)
+    .where(and(eq(stocks.userId, userId), eq(stocks.ticker, ticker)))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+/**
+ * Screenshot import only needs the ticker row. Skip the live quote when the
+ * stock already exists — that fetch was delaying vision by a second or more.
+ */
+export async function getOrCreateStockRow(userId: string, rawTicker: string): Promise<StockRowLookup> {
+  const ticker = parseTicker(rawTicker);
+  if (!TICKER_RE.test(ticker)) return { error: "Invalid ticker", status: 400 };
+
+  const existing = await selectUserStock(userId, ticker);
+  if (existing) return { stock: existing };
+
+  const created = await getOrCreateStock(userId, ticker);
+  if ("error" in created) return created;
+  return { stock: created.stock };
+}
+
 /**
  * Resolve a ticker to the user's stock row, creating an unwatched row the first
  * time they open it. Journaling or valuing a stock should not require adding it
@@ -34,13 +63,8 @@ export async function getOrCreateStock(userId: string, rawTicker: string): Promi
   const [quote] = await getQuotes([ticker]);
   if (!quote) return { error: "Ticker not found", status: 404 };
 
-  const existing = await db
-    .select()
-    .from(stocks)
-    .where(and(eq(stocks.userId, userId), eq(stocks.ticker, ticker)))
-    .limit(1);
-
-  if (existing[0]) return { stock: existing[0], quote };
+  const existing = await selectUserStock(userId, ticker);
+  if (existing) return { stock: existing, quote };
 
   // Opening a new ticker fires several API calls at once; two inserts would
   // trip stocks_user_ticker_uidx. Ignore the loser and read the winner's row.
@@ -57,11 +81,7 @@ export async function getOrCreateStock(userId: string, rawTicker: string): Promi
 
   if (inserted[0]) return { stock: inserted[0], quote };
 
-  const [created] = await db
-    .select()
-    .from(stocks)
-    .where(and(eq(stocks.userId, userId), eq(stocks.ticker, ticker)))
-    .limit(1);
+  const created = await selectUserStock(userId, ticker);
 
   if (created) return { stock: created, quote };
   return { error: "Ticker not found", status: 404 };

@@ -37,6 +37,7 @@ export const API_ERROR_KEYS: Record<string, MessageKey> = {
   "Image type is not allowed": "errors.imageBadType",
   "Set AI_BASE_URL and AI_API_KEY in .env to enable screenshot import": "errors.aiImportOff",
   "Set AI_VISION_MODEL in .env to enable screenshot import": "errors.aiVisionOff",
+  "AI request timed out": "errors.aiTimeout",
   "EPS 为零或为负，P/E 无定义。": "errors.peUndefined",
   "P/E is undefined when EPS is zero or negative.": "errors.peUndefined",
   "EBITDA 为零或为负，EV/EBITDA 无定义。": "errors.evebitdaUndefined",

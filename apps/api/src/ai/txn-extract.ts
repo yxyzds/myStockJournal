@@ -76,19 +76,9 @@ export function filterExtractedTrades(
   return { kept, skippedCount };
 }
 
-const SYSTEM = `You extract stock trades from a brokerage screenshot for a personal journal.
-Return JSON only:
-{ "trades": [ { "ticker": "AAPL", "type": "buy"|"sell", "price": 150.25, "qty": 10, "date": "2026-03-15", "currency": "USD" } ], "skippedNote": null }
-
-Rules:
-- Only use numbers and sides written on the image. Do not invent fills.
-- type is buy or sell. Map 买入/買入/Bought to buy, 卖出/賣出/Sold to sell.
-- date must be YYYY-MM-DD. If the year is missing, use the most recent year that makes the date not in the future.
-- price is per-share USD (or the labeled currency). qty is share count, not notional.
-- currency is ISO 4217 (USD, HKD, JPY). If unlabeled on a US broker screen, use USD.
-- Ignore watchlists, quotes, P&L totals, and cancelled orders.
-- At most ${TXN_IMAGE_MAX_TRADES} trades. If nothing is a fill, return { "trades": [], "skippedNote": "no trades found" }.
-- skippedNote is a short English note or null. No markdown.`;
+const SYSTEM = `Extract completed stock fills from the screenshot. JSON only:
+{"trades":[{"ticker":"AAPL","type":"buy","price":150.25,"qty":10,"date":"2026-03-15","currency":"USD"}],"skippedNote":null}
+Rules: do not invent numbers. buy/sell from 买入/買入/Bought or 卖出/賣出/Sold. date YYYY-MM-DD (infer year if missing, not future). price per share, qty is shares. currency ISO-4217, USD if unlabeled US broker. Ignore quotes, P&L, cancelled. Max ${TXN_IMAGE_MAX_TRADES} trades. Empty: {"trades":[],"skippedNote":"no trades found"}.`;
 
 export async function extractTradesFromImage(imageDataUrl: string): Promise<{
   trades: ExtractedTrade[];
@@ -104,12 +94,17 @@ export async function extractTradesFromImage(imageDataUrl: string): Promise<{
       {
         role: "user",
         content: [
-          { type: "text", text: "Extract every completed buy or sell from this screenshot." },
+          { type: "text", text: "Extract every completed buy or sell." },
           { type: "image_url", image_url: { url: imageDataUrl } },
         ],
       },
     ],
-    { model: env.aiVisionModel },
+    {
+      model: env.aiVisionModel,
+      timeoutMs: 90_000,
+      temperature: 0,
+      maxTokens: 1024,
+    },
   );
 
   const body = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};

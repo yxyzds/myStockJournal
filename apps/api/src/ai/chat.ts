@@ -46,13 +46,17 @@ function messageContent(content: unknown): string | null {
   return texts.join("\n").trim() || null;
 }
 
+function isAbortTimeout(error: unknown) {
+  return error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError");
+}
+
 /**
  * Plain `fetch` to an OpenAI-compatible relay (中转站). No SDK.
  * POST `${AI_BASE_URL}/chat/completions`
  */
 export async function chatJson(
   messages: ChatMessage[],
-  options?: { model?: string },
+  options?: { model?: string; timeoutMs?: number; temperature?: number; maxTokens?: number },
 ): Promise<unknown> {
   if (!env.aiApiKey) {
     throw new Error("AI_API_KEY is not configured");
@@ -64,22 +68,30 @@ export async function chatJson(
   const model = options?.model?.trim() || env.aiModel;
   const body: Record<string, unknown> = {
     model,
-    temperature: 0.8,
+    temperature: options?.temperature ?? 0.8,
     messages,
   };
+  if (options?.maxTokens != null) body.max_tokens = options.maxTokens;
   // Some relays reject this; prompt already asks for JSON when off.
   if (env.aiJsonMode) {
     body.response_format = { type: "json_object" };
   }
 
-  const res = await fetch(chatCompletionsUrl(), {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${env.aiApiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(body),
-  });
+  let res: Response;
+  try {
+    res = await fetch(chatCompletionsUrl(), {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${env.aiApiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(options?.timeoutMs ?? 60_000),
+    });
+  } catch (error) {
+    if (isAbortTimeout(error)) throw new Error("AI request timed out");
+    throw error;
+  }
 
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
