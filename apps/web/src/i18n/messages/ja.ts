@@ -676,5 +676,6 @@ export const ja = {
     imageBadType: "この画像形式は使えません",
     aiImportOff: "スクリーンショット取り込みを有効にするには .env に AI_BASE_URL と AI_API_KEY を設定してください",
     aiVisionOff: "スクリーンショット取り込みを有効にするには .env に AI_VISION_MODEL を設定してください",
+    aiTimeout: "AI の応答が時間切れです。もう一度試してください。",
   },
 } satisfies Messages;

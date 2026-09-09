@@ -15,6 +15,11 @@ export const app = new Hono<AppEnv>();
 app.use("*", cors());
 app.use("*", resolveUser);
 
+app.onError((err, c) => {
+  console.error(err);
+  return c.json({ error: "Something went wrong" }, 500);
+});
+
 app.get("/health", (c) =>
   c.json({
     ok: true,

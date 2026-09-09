@@ -8,7 +8,9 @@ import {
   type TxnImageReject,
 } from "@mystockjournal/shared";
 
-const MAX_EDGE = 1280;
+const MAX_EDGE = 896;
+/** Aim well below the 4 MB hard cap so the vision call stays cheap. */
+const TARGET_DECODED_BYTES = 280_000;
 
 export type PreparedTxnImage = {
   filename: string;
@@ -65,12 +67,18 @@ export async function prepareTxnImage(file: File): Promise<PreparedTxnImage> {
   canvas.height = height;
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error(txnImageErrorMessage("bad_type"));
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
   ctx.drawImage(image, 0, 0, width, height);
 
-  let quality = 0.82;
+  let quality = 0.72;
   let dataUrl = canvas.toDataURL("image/jpeg", quality);
-  while ((dataUrlDecodedBytes(dataUrl) ?? Infinity) > TXN_IMAGE_MAX_DECODED_BYTES && quality > 0.45) {
-    quality -= 0.12;
+  while ((dataUrlDecodedBytes(dataUrl) ?? Infinity) > TARGET_DECODED_BYTES && quality > 0.5) {
+    quality -= 0.08;
+    dataUrl = canvas.toDataURL("image/jpeg", quality);
+  }
+  if ((dataUrlDecodedBytes(dataUrl) ?? Infinity) > TXN_IMAGE_MAX_DECODED_BYTES && quality > 0.4) {
+    quality = 0.45;
     dataUrl = canvas.toDataURL("image/jpeg", quality);
   }
   const decoded = dataUrlDecodedBytes(dataUrl);
