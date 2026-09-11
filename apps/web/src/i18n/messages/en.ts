@@ -676,5 +676,6 @@ export const en = {
     aiImportOff: "Set AI_BASE_URL and AI_API_KEY in .env to enable screenshot import",
     aiVisionOff: "Set AI_VISION_MODEL in .env to enable screenshot import",
     aiTimeout: "The AI request timed out. Try again.",
+    aiImportLimit: "Daily screenshot import limit reached (10). Try again tomorrow.",
   },
 } as const;

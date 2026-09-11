@@ -677,5 +677,6 @@ export const ja = {
     aiImportOff: "スクリーンショット取り込みを有効にするには .env に AI_BASE_URL と AI_API_KEY を設定してください",
     aiVisionOff: "スクリーンショット取り込みを有効にするには .env に AI_VISION_MODEL を設定してください",
     aiTimeout: "AI の応答が時間切れです。もう一度試してください。",
+    aiImportLimit: "本日のスクリーンショット取り込み上限（10 回）に達しました。明日またお試しください。",
   },
 } satisfies Messages;

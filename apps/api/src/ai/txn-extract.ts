@@ -103,7 +103,7 @@ export async function extractTradesFromImage(imageDataUrl: string): Promise<{
       model: env.aiVisionModel,
       timeoutMs: 90_000,
       temperature: 0,
-      maxTokens: 1024,
+      thinking: "disabled",
     },
   );
 

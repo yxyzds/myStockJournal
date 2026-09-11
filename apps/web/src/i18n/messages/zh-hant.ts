@@ -664,5 +664,6 @@ export const zhHant = {
     aiImportOff: "請在 .env 中設定 AI_BASE_URL 和 AI_API_KEY 以啟用截圖匯入",
     aiVisionOff: "請在 .env 中設定 AI_VISION_MODEL 以啟用截圖匯入",
     aiTimeout: "AI 請求逾時，請再試一次。",
+    aiImportLimit: "今日截圖匯入次數已達上限（10 次）。請明天再試。",
   },
 } satisfies Messages;

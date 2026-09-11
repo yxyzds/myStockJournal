@@ -219,3 +219,16 @@ export const aiReviewUsage = pgTable(
   },
   (table) => [primaryKey({ columns: [table.userId, table.day] })],
 );
+
+/** Per-user daily screenshot-import count. Separate from review quota. Day is UTC. */
+export const aiImportUsage = pgTable(
+  "ai_import_usage",
+  {
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id),
+    day: date("day").notNull(),
+    count: integer("count").notNull().default(0),
+  },
+  (table) => [primaryKey({ columns: [table.userId, table.day] })],
+);

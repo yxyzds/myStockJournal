@@ -38,6 +38,7 @@ export const API_ERROR_KEYS: Record<string, MessageKey> = {
   "Set AI_BASE_URL and AI_API_KEY in .env to enable screenshot import": "errors.aiImportOff",
   "Set AI_VISION_MODEL in .env to enable screenshot import": "errors.aiVisionOff",
   "AI request timed out": "errors.aiTimeout",
+  "Daily screenshot import limit reached (10). Try again tomorrow.": "errors.aiImportLimit",
   "EPS 为零或为负，P/E 无定义。": "errors.peUndefined",
   "P/E is undefined when EPS is zero or negative.": "errors.peUndefined",
   "EBITDA 为零或为负，EV/EBITDA 无定义。": "errors.evebitdaUndefined",

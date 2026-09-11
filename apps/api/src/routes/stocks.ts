@@ -24,7 +24,14 @@ import { getOrCreateStock, getOrCreateStockRow, num } from "../lib/stocks";
 import { getQuotes } from "../market/quotes";
 import { fetchTencentKline } from "../market/tencent";
 import { requestLocale } from "../lib/locale";
-import { AI_REVIEW_LIMIT_ERROR, consumeAiReviewSlot, releaseAiReviewSlot } from "../lib/ai-review-quota";
+import {
+  AI_IMPORT_LIMIT_ERROR,
+  AI_REVIEW_LIMIT_ERROR,
+  consumeAiImportSlot,
+  consumeAiReviewSlot,
+  releaseAiImportSlot,
+  releaseAiReviewSlot,
+} from "../lib/ai-review-quota";
 
 function todayNyDate() {
   return new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
@@ -318,8 +325,8 @@ stockRoutes.post("/:ticker/transactions/extract-from-image", async (c) => {
   });
   if (rejected) return c.json({ error: txnImageErrorMessage(rejected) }, 400);
 
-  const allowed = await consumeAiReviewSlot(c.get("userId"));
-  if (!allowed) return c.json({ error: AI_REVIEW_LIMIT_ERROR }, 429);
+  const allowed = await consumeAiImportSlot(c.get("userId"));
+  if (!allowed) return c.json({ error: AI_IMPORT_LIMIT_ERROR }, 429);
 
   try {
     const extracted = await extractTradesFromImage(parsed.dataUrl);
@@ -330,7 +337,7 @@ stockRoutes.post("/:ticker/transactions/extract-from-image", async (c) => {
         : extracted.skippedNote;
     return c.json({ trades: kept, skippedCount, skippedNote });
   } catch (error) {
-    await releaseAiReviewSlot(c.get("userId"));
+    await releaseAiImportSlot(c.get("userId"));
     const message = error instanceof Error ? error.message : "Screenshot import failed";
     return c.json({ error: message }, 502);
   }

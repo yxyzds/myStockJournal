@@ -56,7 +56,13 @@ function isAbortTimeout(error: unknown) {
  */
 export async function chatJson(
   messages: ChatMessage[],
-  options?: { model?: string; timeoutMs?: number; temperature?: number; maxTokens?: number },
+  options?: {
+    model?: string;
+    timeoutMs?: number;
+    temperature?: number;
+    maxTokens?: number;
+    thinking?: "enabled" | "disabled";
+  },
 ): Promise<unknown> {
   if (!env.aiApiKey) {
     throw new Error("AI_API_KEY is not configured");
@@ -72,6 +78,9 @@ export async function chatJson(
     messages,
   };
   if (options?.maxTokens != null) body.max_tokens = options.maxTokens;
+  // DeepSeek V4 thinking is on by default. Reasoning tokens share max_tokens
+  // with the final answer — a small cap returns HTTP 200 and empty content.
+  if (options?.thinking) body.thinking = { type: options.thinking };
   // Some relays reject this; prompt already asks for JSON when off.
   if (env.aiJsonMode) {
     body.response_format = { type: "json_object" };
@@ -99,10 +108,17 @@ export async function chatJson(
   }
 
   const payload = (await res.json()) as {
-    choices?: { message?: { content?: unknown } }[];
+    choices?: { finish_reason?: unknown; message?: { content?: unknown } }[];
   };
-  const content = messageContent(payload.choices?.[0]?.message?.content);
-  if (!content) throw new Error("AI returned an empty response");
+  const choice = payload.choices?.[0];
+  const content = messageContent(choice?.message?.content);
+  if (!content) {
+    const finish = typeof choice?.finish_reason === "string" ? choice.finish_reason : "";
+    if (finish === "length") {
+      throw new Error("AI returned an empty response (output truncated)");
+    }
+    throw new Error("AI returned an empty response");
+  }
 
   return parseJsonContent(content);
 }

@@ -664,5 +664,6 @@ export const zh = {
     aiImportOff: "请在 .env 中设置 AI_BASE_URL 和 AI_API_KEY 以启用截图导入",
     aiVisionOff: "请在 .env 中设置 AI_VISION_MODEL 以启用截图导入",
     aiTimeout: "AI 请求超时，请再试一次。",
+    aiImportLimit: "今日截图导入次数已达上限（10 次）。请明天再试。",
   },
 } satisfies Messages;

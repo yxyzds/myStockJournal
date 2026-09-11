@@ -13,6 +13,7 @@ const TABLE_COMMENTS: Record<string, string> = {
   quote_cache: "外部行情缓存，按 ticker 全局共享，不含 user_id。",
   fundamentals_cache: "外部基本面 / 财报缓存，按 ticker 全局共享，不含 user_id。",
   ai_review_usage: "用户每日 AI 点评次数（交易点评与 DCF 点评共用，UTC 自然日 20 次）。",
+  ai_import_usage: "用户每日截图导入次数（UTC 自然日 10 次，与点评配额分开）。",
 };
 
 export async function applyTableComments() {
